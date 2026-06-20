@@ -289,9 +289,33 @@ function createMainUserPresenceTracker({ config, logger, clock = () => new Date(
   };
 }
 
+/**
+ * Inject a "current speaker IS the configured user" context section so the
+ * model knows to speak TO [userName] directly rather than referencing them in
+ * the third person (as the system-prompt persona description does).
+ *
+ * Returns null when the speaker is not the configured user, so the section is
+ * never injected for other speakers.
+ */
+function buildMainUserSpeakerIdentitySection({ config = {}, userId = "" } = {}) {
+  if (!isConfiguredMainUser(config, userId)) return null;
+  const userName = String(config.chat?.promptBlocks?.userName || "").trim();
+  if (!userName) return null;
+  return {
+    label: "Current Speaker Identity",
+    content: [
+      `The person speaking to you right now is ${userName}.`,
+      `Speak to them directly and personally — not about them in the third person.`,
+      `Do not refer to ${userName} as if they are absent or being described to someone else.`,
+    ].join("\n"),
+    private: true,
+  };
+}
+
 module.exports = {
   buildMainUserPresenceContextSection,
   buildMainUserPresenceSnapshot,
+  buildMainUserSpeakerIdentitySection,
   createMainUserPresenceTracker,
   isConfiguredMainUser,
   isMainUserPresenceContextEnabled,
