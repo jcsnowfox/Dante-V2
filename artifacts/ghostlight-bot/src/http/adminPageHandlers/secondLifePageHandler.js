@@ -25,6 +25,7 @@ async function handleSecondLifePageRequest({ url, innerRes, innerContext, helper
   let status = null;
   let summary = null;
   let relationships = [];
+  let objectRelationships = [];
   let commands = [];
   let outfits = [];
   let landmarks = [];
@@ -75,6 +76,11 @@ async function handleSecondLifePageRequest({ url, innerRes, innerContext, helper
       relationships = await store.listRelationships({ companionId });
     } catch {
       relationships = [];
+    }
+    try {
+      objectRelationships = await store.listObjectRelationships({ companionId });
+    } catch {
+      objectRelationships = [];
     }
     try {
       commands = await store.listCommandDefinitions({ companionId });
@@ -177,6 +183,7 @@ async function handleSecondLifePageRequest({ url, innerRes, innerContext, helper
       status,
       summary,
       relationships,
+      objectRelationships,
       commands,
       outfits,
       landmarks,

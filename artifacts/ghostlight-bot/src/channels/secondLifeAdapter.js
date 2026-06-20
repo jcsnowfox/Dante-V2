@@ -115,15 +115,58 @@ function createSecondLifeAdapter({
     return resolved?.permissions?.privateMemory !== true;
   }
 
+  /**
+   * Phase 21 — build the public-safe identity context block for a known identity
+   * with publicIdentityContextEnabled=true. This block is allowed in local/public
+   * chat and does NOT require private_memory_permission.
+   */
+  function buildPublicIdentityBlock(resolved) {
+    if (!resolved?.isKnown) return null;
+    if (!resolved?.publicIdentityContextEnabled) return null;
+
+    const lines = [];
+    const displayName = resolved.nickname || resolved.name || "";
+    const slName = resolved.name || "";
+    if (displayName) lines.push(`Current speaker: ${displayName}`);
+    if (slName && slName !== displayName) lines.push(`Second Life name: ${slName}`);
+    if (resolved.category) lines.push(`Category: ${resolved.category}`);
+    if (resolved.relationshipToUser) lines.push(`Relationship to user: ${resolved.relationshipToUser}`);
+    if (resolved.relationshipToCompanion) lines.push(`Relationship to companion: ${resolved.relationshipToCompanion}`);
+    if (resolved.trustLevel && resolved.trustLevel !== "stranger") lines.push(`Trust level: ${resolved.trustLevel}`);
+    if (resolved.replyPolicy) lines.push(`Reply policy: ${resolved.replyPolicy}`);
+    if (resolved.childSafeOnly) lines.push(`Child-safe only: true`);
+    if (resolved.notes) lines.push(`Notes: ${resolved.notes}`);
+
+    if (!lines.length) return null;
+
+    return lines.join("\n")
+      + "\n\nRules:"
+      + "\n- Use this identity naturally."
+      + "\n- Do not introduce yourself like a stranger."
+      + "\n- Do not over-explain the relationship."
+      + "\n- Do not reveal private memories unless private_memory_permission is true."
+      + "\n- Do not mention UUIDs, database fields, or registry mechanics in-character.";
+  }
+
   function buildContextSections({ resolved, worldState, event }) {
     const tier = asText(resolved?.tier) || (resolved?.isOwner ? "owner" : "stranger");
     const permissions = resolved?.permissions || {};
     const publicTier = isPublicSpeaker(resolved);
 
     const sections = [];
-    const relationship = resolved?.relationship || null;
+    const relationship = resolved?.relationship || resolved?.rawRelationship || null;
 
-    if (publicTier) {
+    // Phase 21 — public-safe identity context for known identities.
+    if (resolved?.publicIdentityContextEnabled && resolved?.isKnown) {
+      const identityBlock = buildPublicIdentityBlock(resolved);
+      if (identityBlock) {
+        sections.push({
+          label: "Second Life Identity Context",
+          content: identityBlock,
+          // Not marked private — this block is explicitly designed for public chat.
+        });
+      }
+    } else if (publicTier) {
       // Bare tier label only — display labels and notes can carry private detail.
       sections.push({
         label: "Second Life Speaker",
@@ -136,7 +179,6 @@ function createSecondLifeAdapter({
           + `${resolved.isOwner ? " This is the owner." : ""}`
           + `${relationship.notes ? `\nNotes: ${relationship.notes}` : ""}`
         : `Speaker relationship: ${tier} (no stored relationship record).`;
-      // Marked private so the reply generator can defend in depth.
       sections.push({ label: "Second Life Speaker", content: relationshipLine, private: true });
     }
 
@@ -153,9 +195,37 @@ function createSecondLifeAdapter({
       sections.push({ label: "Second Life World", content: worldLines.join("\n") });
     }
 
-    const guidance = social.interactionGuidance({ tier, permissions });
+    // Phase 21 — pass identity to interactionGuidance for child-safe enforcement.
+    const guidance = social.interactionGuidance({ tier, permissions, identity: resolved });
     if (guidance) {
       sections.push({ label: "Second Life Interaction Policy", content: guidance });
+    }
+
+    // Phase 21 — child-safe enforcement section (additional block for defence in depth).
+    if (resolved?.childSafeOnly) {
+      sections.push({
+        label: "Child Safety",
+        content:
+          "CHILD SAFETY MODE ACTIVE. The current speaker requires child-safe responses. "
+          + "You MUST NOT produce adult, sexual, romantic, dark-romance, suggestive, explicit, "
+          + "or flirtatious content in this reply. Replies must be short, playful, gentle, and "
+          + "appropriate for a 3-year-old child. This overrides your normal adult/private mode "
+          + "and your usual companion personality. Do not break this rule.",
+      });
+    }
+
+    // Phase 21 — recent local chat context (context_last_10).
+    const contextLast10 = asText(event.contextLast10).trim();
+    if (contextLast10) {
+      sections.push({
+        label: "Recent Second Life Local Chat Context",
+        content: contextLast10
+          + "\n\nRules:"
+          + "\n- This is room context, not necessarily a direct message to you."
+          + "\n- Use it to understand what is happening."
+          + "\n- Do not reply to every line."
+          + "\n- Reply only when the social engine says to reply.",
+      });
     }
 
     if (publicTier) {
@@ -611,12 +681,45 @@ function createSecondLifeAdapter({
   }
 
   async function handleConversationalEvent({ companionId, settings, worldState, event }) {
-    const avatarUuid = asText(event.externalUserId).trim();
+    const avatarUuid = asText(event.externalUserId || event.avatarUuid).trim();
+    const objectUuid = asText(event.objectUuid).trim();
+    const objectDescription = asText(event.objectDescription).trim();
+    const sourceType = asText(event.sourceType).trim();
+
+    // Phase 21 — resolve using the full identity interface (avatar or object).
     const resolved = await identity.resolve({
       companionId,
       avatarUuid,
-      avatarName: event.userDisplayName,
+      avatarName: event.userDisplayName || event.avatarName || "",
+      objectUuid,
+      objectName: event.objectName || "",
+      objectDescription,
+      sourceType,
     });
+
+    // Phase 21 — mark this avatar/object as seen (safe no-op when no DB).
+    if (resolved.isObject) {
+      safe(
+        () => secondLife.markObjectRelationshipSeen?.({
+          companionId,
+          objectUuid,
+          objectName: event.objectName || "",
+          objectDescriptionToken: objectDescription,
+        }),
+        null,
+        "markObjectRelationshipSeen",
+      );
+    } else if (avatarUuid) {
+      safe(
+        () => secondLife.markRelationshipSeen?.({
+          companionId,
+          avatarUuid,
+          avatarName: event.userDisplayName || event.avatarName || "",
+        }),
+        null,
+        "markRelationshipSeen",
+      );
+    }
 
     // Phase 9 — command tokens are handled before the social/reply path.
     const commandOutcome = await tryHandleCommand({ companionId, settings, worldState, resolved, event });
@@ -627,13 +730,16 @@ function createSecondLifeAdapter({
     const worldActionOutcome = await tryHandleWorldAction({ companionId, settings, worldState, resolved, event });
     if (worldActionOutcome) return worldActionOutcome;
 
-    // Phase 8 — local-chat social policy decides whether to reply at all.
-    const directlyAddressed = isDirectlyAddressed({ settings, event });
+    // Phase 8 / Phase 21 — local-chat social policy decides whether to reply.
+    const directlyAddressed = event.directlyAddressed !== undefined
+      ? Boolean(event.directlyAddressed)
+      : isDirectlyAddressed({ settings, event });
     const decision = await social.shouldReplyToLocalChat({
       event,
       context: {
         companionId,
         settings,
+        identity: resolved,
         tier: resolved.tier,
         permissions: resolved.permissions,
         directlyAddressed,
@@ -661,11 +767,10 @@ function createSecondLifeAdapter({
 
     const contextSections = buildContextSections({ resolved, worldState, event });
 
-    // Phase 20 — public speakers (strangers / un-trusted avatars) are always
-    // forced to the "public" privacy level so adult/explicit content can never be
-    // produced for them, regardless of the inbound event's requested level.
+    // Phase 20 / Phase 21 — public speakers are always forced to "public" privacy
+    // level. Phase 21: childSafeOnly speakers are also forced to public.
     const publicChat = isPublicSpeaker(resolved);
-    const safePrivacyLevel = publicChat ? "public" : event.privacyLevel;
+    const safePrivacyLevel = (publicChat || resolved?.childSafeOnly) ? "public" : event.privacyLevel;
 
     let processed;
     try {
@@ -736,6 +841,25 @@ function createSecondLifeAdapter({
       null,
       "appendJournalEntry(action)",
     );
+
+    // Phase 21 — record reply timestamp for per-identity cooldown tracking.
+    if (resolved?.isObject) {
+      safe(
+        () => secondLife.recordObjectRelationshipReply?.({
+          companionId,
+          objectUuid,
+          objectDescriptionToken: objectDescription,
+        }),
+        null,
+        "recordObjectRelationshipReply",
+      );
+    } else if (avatarUuid) {
+      safe(
+        () => secondLife.recordRelationshipReply?.({ companionId, avatarUuid }),
+        null,
+        "recordRelationshipReply",
+      );
+    }
 
     return {
       handled: true,
