@@ -283,7 +283,7 @@ function createHealthServer({
             redirect(res, sanitizeNext(url.searchParams.get("next")));
             return;
           }
-          const error = hasCreds ? getError(url.searchParams.get("error")) : "Admin credentials are not configured on the server yet.";
+          const error = hasCreds ? getError(url) : "Admin credentials are not configured on the server yet.";
           res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
           res.end(renderLoginPage({ error, next: url.searchParams.get("next") || "/admin" }));
           return;
