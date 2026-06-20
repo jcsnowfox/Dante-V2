@@ -549,7 +549,6 @@ async function callModel({
   toolContext = {},
   overrideSystemPrompt = null,
   systemPromptPrefix = null,
-  promptProfile = null,
   channelType = "discord",
   privacyLevel = "public",
 }) {
@@ -606,7 +605,6 @@ async function callModel({
       toolsEnabled: enableTools,
       overrideSystemPrompt,
       systemPromptPrefix,
-      promptProfile,
       channelType,
       privacyLevel,
     });

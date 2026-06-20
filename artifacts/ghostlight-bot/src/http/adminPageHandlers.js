@@ -32,7 +32,6 @@ const {
 } = require("./adminPageHandlers/proactivePageHandler");
 const { handleFeedbackLearningPageRequest } = require("./adminPageHandlers/feedbackLearningPageHandler");
 const { handleRelationalStatePageRequest } = require("./adminPageHandlers/relationalStatePageHandler");
-const { handlePromptProfilesPageRequest } = require("./adminPageHandlers/promptProfilesPageHandler");
 const { handleSecondLifePageRequest } = require("./adminPageHandlers/secondLifePageHandler");
 const { handleInnerLifePageRequest } = require("./adminPageHandlers/innerLifePageHandler");
 const { handleContinuityPageRequest } = require("./adminPageHandlers/continuityPageHandler");
@@ -323,11 +322,6 @@ async function handleAdminPageRequest({
 
   if (route.section === "relationalState") {
     await handleRelationalStatePageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });
-    return;
-  }
-
-  if (route.section === "promptProfiles") {
-    await handlePromptProfilesPageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });
     return;
   }
 

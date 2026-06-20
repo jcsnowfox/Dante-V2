@@ -43,8 +43,7 @@ const { createFeedbackLearningEngine } = require("./companionSystems/feedbackLea
 const { createRelationalStateEngine } = require("./companionSystems/relationalState");
 const { createInnerLifeEngine } = require("./innerLife/innerLifeEngine");
 const { createContinuityEngine } = require("./continuity/continuityEngine");
-const { createPromptProfileStore } = require("./storage/promptProfiles");
-const { createPromptProfileService, resolveCompanionId } = require("./companion/promptProfileService");
+const { resolveCompanionId } = require("./companion/resolveCompanionId");
 const { createSecondLifeStore } = require("./storage/secondLife");
 const { createSecondLifeReplyGenerator } = require("./companion/secondLifeReplyGenerator");
 const { createSecondLifeAdapter } = require("./channels/secondLifeAdapter");
@@ -175,8 +174,6 @@ async function startApp() {
   });
   const innerLife = createInnerLifeEngine({ config, logger });
   const continuity = createContinuityEngine({ config, logger });
-  const promptProfileStore = createPromptProfileStore({ config, logger });
-  const promptProfiles = createPromptProfileService({ store: promptProfileStore, config, logger });
   const secondLife = createSecondLifeStore({ config, logger });
   const chatPipeline = createChatPipeline({
     config,
@@ -194,12 +191,10 @@ async function startApp() {
     relationalState,
     innerLife,
     continuity,
-    promptProfiles,
   });
   const secondLifeReplyGenerator = createSecondLifeReplyGenerator({
     config,
     logger,
-    promptProfiles,
     // Tools are intentionally omitted: the Discord tool registry assumes a raw
     // Discord message in its tool context, so the Second Life surface runs with
     // no tools (least privilege) until an SL-safe tool subset exists.
@@ -303,7 +298,6 @@ async function startApp() {
     relationalState,
     innerLife,
     continuity,
-    promptProfiles,
     secondLife,
     secondLifeAdapter,
     secondLifeIdentityResolver,
@@ -389,7 +383,6 @@ async function startApp() {
   await runStartupStep("relationalState.init", logger, () => relationalState.init());
   await runStartupStep("innerLife.init", logger, () => innerLife.init());
   await runStartupStep("continuity.init", logger, () => continuity.init());
-  await runStartupStep("promptProfiles.init", logger, () => promptProfileStore.init());
   await runStartupStep("secondLife.init", logger, () => secondLife.init());
   await runStartupStep("secondLife.seedCommands", logger, async () => {
     if (!secondLife || secondLife.available !== true) return;

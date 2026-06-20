@@ -30,7 +30,6 @@ const { handleChannelModeActions } = require("./actions/channelModeActions");
 const { handleEmotionalArcActions } = require("./actions/emotionalArcActions");
 const { handleFeedbackLearningActions } = require("./actions/feedbackLearningActions");
 const { handleRelationalStateActions } = require("./actions/relationalStateActions");
-const { handlePromptProfilesActions } = require("./actions/promptProfilesActions");
 const { handleInnerLifeActions } = require("./actions/innerLifeActions");
 const { handleContinuityActions } = require("./actions/continuityActions");
 const { handleCompanionAvatarActions } = require("./actions/companionAvatarActions");
@@ -392,7 +391,6 @@ function createHealthServer({
         url.pathname === "/admin/emotional-arc" ||
         url.pathname === "/admin/feedback-learning" ||
         url.pathname === "/admin/relational-state" ||
-        url.pathname === "/admin/prompt-profiles" ||
         url.pathname === "/admin/second-life" ||
         url.pathname === "/admin/gallery" ||
         url.pathname === "/admin/gallery/images" ||
@@ -591,19 +589,6 @@ function createHealthServer({
 
       {
         const handled = await handleRelationalStateActions({
-          req,
-          res,
-          url,
-          context,
-          withAdmin,
-        });
-        if (handled !== false) {
-          return handled;
-        }
-      }
-
-      {
-        const handled = await handlePromptProfilesActions({
           req,
           res,
           url,

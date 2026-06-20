@@ -6,10 +6,10 @@
  * The Discord path delegates to the full chat pipeline (which is built around a
  * raw Discord.js message). Second Life has no Discord message, but the model
  * call itself (`callModel`) is NOT coupled to Discord — it only needs config,
- * mode, a normalized input, history, memories, tools, context sections, the
- * active prompt profile, and the channel type. This generator assembles those
- * pieces so the SL channel reuses the exact same persona/prompt-builder/model
- * routing as Discord. Personality never forks per channel.
+ * mode, a normalized input, history, memories, tools, context sections, and the
+ * channel type. This generator assembles those pieces so the SL channel reuses
+ * the exact same persona/prompt-builder/model routing as Discord. Personality
+ * never forks per channel — both speak and behave from the Companion tab.
  *
  * Tools are disabled by default for the SL surface (the Discord tool registry
  * assumes a Discord message in its tool context). The reply is plain text that
@@ -21,7 +21,7 @@ const { callModel } = require("../chat/pipeline/callModel");
 
 const EMPTY_TOOLS = { list: () => [] };
 
-function createSecondLifeReplyGenerator({ config, logger, promptProfiles = null, tools = null }) {
+function createSecondLifeReplyGenerator({ config, logger, tools = null }) {
   const toolRegistry = tools || EMPTY_TOOLS;
 
   async function generateReply({ event = {}, contextSections = [], privacyLevel = "public", publicChat = false }) {
@@ -34,18 +34,6 @@ function createSecondLifeReplyGenerator({ config, logger, promptProfiles = null,
     const safeSections = (Array.isArray(contextSections) ? contextSections : [])
       .filter((section) => section && !(publicChat && section.private === true));
     const safePrivacyLevel = publicChat ? "public" : privacyLevel;
-
-    let promptProfile = null;
-    if (promptProfiles && typeof promptProfiles.getActiveProfile === "function") {
-      try {
-        promptProfile = await promptProfiles.getActiveProfile();
-      } catch (error) {
-        logger?.warn?.("[second-life] Failed to load active prompt profile; using legacy persona.", {
-          error: error.message,
-        });
-        promptProfile = null;
-      }
-    }
 
     const messageText = String(event.messageText || "").trim();
     const input = {
@@ -70,7 +58,6 @@ function createSecondLifeReplyGenerator({ config, logger, promptProfiles = null,
         surface: "second_life",
         userScope: config?.memory?.userScope,
       },
-      promptProfile,
       channelType: "second_life",
       privacyLevel: safePrivacyLevel,
     });

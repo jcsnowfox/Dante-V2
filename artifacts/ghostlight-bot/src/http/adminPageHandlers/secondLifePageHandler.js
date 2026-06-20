@@ -6,7 +6,7 @@
  * load is guarded so the page still renders when no DB is configured.
  */
 
-const { resolveCompanionId } = require("../../companion/promptProfileService");
+const { resolveCompanionId } = require("../../companion/resolveCompanionId");
 
 async function handleSecondLifePageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks }) {
   const { getMessage, getError, renderAdminShell, renderSecondLifePage } = helpers;

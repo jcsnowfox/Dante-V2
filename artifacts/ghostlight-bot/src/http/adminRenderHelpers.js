@@ -46,7 +46,6 @@ const {
   renderEmotionalArcPage: renderEmotionalArcPageTemplate,
   renderFeedbackLearningPage: renderFeedbackLearningPageTemplate,
   renderRelationalStatePage: renderRelationalStatePageTemplate,
-  renderPromptProfilesPage: renderPromptProfilesPageTemplate,
   renderSecondLifePage: renderSecondLifePageTemplate,
 } = require("./renderAdminPages");
 const {
@@ -503,17 +502,6 @@ function renderRelationalStatePage(params) {
   });
 }
 
-function renderPromptProfilesPage(params) {
-  return renderPromptProfilesPageTemplate({
-    ...params,
-    helpers: {
-      escapeHtml,
-      withThemeField,
-      buildAdminLocation,
-    },
-  });
-}
-
 function renderSecondLifePage(params) {
   return renderSecondLifePageTemplate({
     ...params,
@@ -593,7 +581,6 @@ function buildAdminPageHelpers({ sortMemories, config = {} }) {
     renderEmotionalArcPage,
     renderFeedbackLearningPage,
     renderRelationalStatePage,
-    renderPromptProfilesPage,
     renderSecondLifePage,
     escapeHtml,
     formatDateValue,

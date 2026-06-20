@@ -1,26 +1,29 @@
 ---
 name: Ghostlight personality single-source
-description: Where companion personality lives vs. what Prompt Profiles are for, and how adult mode is wired
+description: Where companion personality lives (the Companion tab), why Prompt Profiles were removed, and how adult mode is wired
 ---
 
-- Companion personality is single-sourced from `config.chat.promptBlocks`. The
-  one prompt builder (`assembleCompanionPrompt`) reads persona/user/tone/etc from
-  promptBlocks and is always used by `buildSystemPrompt` (no profile-replaces-persona branch).
+- Companion personality is single-sourced from `config.chat.promptBlocks` (the
+  admin **Companion** tab). The one prompt builder (`assembleCompanionPrompt`)
+  reads persona/user/tone/etc from promptBlocks and is always used by
+  `buildSystemPrompt`. Discord and Second Life build the **identical** persona —
+  there is no per-channel persona fork. `assembleCompanionPrompt({config, channelType})`
+  ignores any legacy `profile` argument; `channelType` does not change the persona.
 
-- Prompt Profiles are a **Second-Life-only OVERLAY**, not a personality store:
-  only `secondLifeBehaviorPrompt` + `secondLifeLocalChatPrompt`, appended only when
-  `channelType === "second_life"`. The Prompt Profiles admin page lives UNDER the
-  Second Life tab (nav entry `child: true` after the Second Life entry).
+- **Prompt Profiles are fully removed.** They previously existed as a
+  Second-Life-only OVERLAY (only `secondLifeBehaviorPrompt` + `secondLifeLocalChatPrompt`,
+  appended when `channelType === "second_life"`). That overlay, its admin page/nav,
+  routes, actions, storage, and the `promptProfileService` module are all deleted.
+  `resolveCompanionId` now lives in its own neutral module `src/companion/resolveCompanionId.js`.
 
-**Why:** profiles used to duplicate the whole persona (and carried adult fields),
-which let two sources of truth drift. Personality must come from one place.
+**Why:** the SL overlay was the only thing prompt profiles carried, and the
+Companion tab already drives the base persona for both channels. Keeping a separate
+profile fork risked two sources of truth drifting apart; Second Life should speak
+and behave exactly like Discord.
 
-**How to apply:** never reintroduce persona fields (coreIdentity/voice/etc) or
-adult fields onto Prompt Profiles. Adult behaviour is a separate Discord feature:
+**How to apply:** never reintroduce a per-channel persona fork or a "prompt profile"
+store/overlay. All persona/behaviour edits go through the Companion tab
+(`config.chat.promptBlocks`). Adult behaviour remains a separate Discord feature:
 `config.chat.adultPrivateMode` (channel-bound model/system-prompt/safeword override,
-toggled in-channel via the `ln` command in `messageCreate.js`). Removed helpers
-`profileHasContent` and `isAdultPrivacyLevel` are gone — do not re-add privacy-level
-adult gating to the prompt builder.
-
-- Storage (`storage/promptProfiles/index.js`) deliberately keeps the legacy
-  columns for non-breaking migration even though only the 2 SL fields are written.
+toggled in-channel via the `ln` command in `messageCreate.js`) — do not re-add
+privacy-level adult gating to the prompt builder.

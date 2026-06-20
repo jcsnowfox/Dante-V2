@@ -35,7 +35,6 @@ function createChatPipeline({
   relationalState = null,
   innerLife = null,
   continuity = null,
-  promptProfiles = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
@@ -326,23 +325,6 @@ function createChatPipeline({
         }
       }
 
-      // Load the active companion prompt profile (if one has been activated by
-      // an owner). Returns null when there is no DB or no active profile, in
-      // which case the persona falls back to the legacy config blocks. Dev mode
-      // uses an override prompt, so the profile is irrelevant there.
-      let promptProfile = null;
-      if (promptProfiles && !inDevMode) {
-        try {
-          promptProfile = await promptProfiles.getActiveProfile();
-        } catch (error) {
-          logger.warn("[chat] Failed to load active prompt profile; using legacy persona", {
-            messageId: message.id,
-            error: error.message,
-          });
-          promptProfile = null;
-        }
-      }
-
       const adultMode = config.chat?.adultPrivateMode;
       const adultModeActive = !inDevMode
         && Boolean(adultMode?.enabled)
@@ -432,7 +414,6 @@ function createChatPipeline({
         recentHistory,
         memories,
         contextSections,
-        promptProfile,
         channelType: "discord",
         overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
         systemPromptPrefix: adultSystemPromptPrefix,

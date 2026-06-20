@@ -25,7 +25,7 @@
  * path is not a Second Life API path so the caller can continue routing.
  */
 
-const { resolveCompanionId } = require("../companion/promptProfileService");
+const { resolveCompanionId } = require("../companion/resolveCompanionId");
 
 const API_PREFIX = "/api/second-life";
 const MAX_BODY_BYTES = 256 * 1024;

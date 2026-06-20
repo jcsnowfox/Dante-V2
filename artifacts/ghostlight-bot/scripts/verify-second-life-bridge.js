@@ -3,12 +3,12 @@
  * Second Life Bridge (Stage 1) — Verification
  *
  * Proves the Phase 1/2/4 foundation without a real database:
- *   1. The shared prompt assembler uses the active profile and gates the
- *      Second Life sections to channelType === "second_life".
+ *   1. The shared prompt assembler builds persona from config.chat.promptBlocks
+ *      (the admin Companion tab) — identical for Discord and Second Life.
  *   2. The companion event contract + processCompanionEvent normalize shapes
  *      and keep Discord behaviour identical (delegates to chatPipeline.run).
- *   3. The generic default prompts are name-free (no customer-specific content).
- *   4. The prompt-profile admin editor is wired (nav, route, handler, actions).
+ *   3. The shared persona builder bakes in no customer-specific content.
+ *   4. Prompt Profiles are fully removed from the admin UI + codebase.
  *
  * Run from artifacts/ghostlight-bot:  node scripts/verify-second-life-bridge.js
  */
@@ -70,11 +70,8 @@ const {
   assembleCompanionPrompt,
 } = require(path.join(ROOT, "src/companion/assembleCompanionPrompt.js"));
 const {
-  GENERIC_DEFAULT_PROMPTS,
-  PROMPT_FIELDS,
-  getPromptProfileDefaults,
   resolveCompanionId,
-} = require(path.join(ROOT, "src/companion/promptProfileService.js"));
+} = require(path.join(ROOT, "src/companion/resolveCompanionId.js"));
 const {
   normalizeInboundEvent,
   normalizeOutboundResult,
@@ -84,15 +81,8 @@ const {
   createCompanionEventProcessor,
 } = require(path.join(ROOT, "src/companion/processCompanionEvent.js"));
 
-// A prompt profile is now a Second-Life-only OVERLAY. Legacy persona fields are
-// kept here purely to prove they are IGNORED by the assembler (no leakage).
-const SAMPLE_PROFILE = {
-  coreIdentityPrompt: "CORE_IDENTITY_MARKER",
-  adultPrivatePrompt: "ADULT_MARKER",
-  secondLifeBehaviorPrompt: "SL_BEHAVIOR_MARKER",
-  secondLifeLocalChatPrompt: "SL_LOCALCHAT_MARKER",
-};
-// Personality is the single source of truth in config.chat.promptBlocks.
+// Personality is the single source of truth in config.chat.promptBlocks (the
+// admin Companion tab), shared identically by Discord and Second Life.
 const SAMPLE_CONFIG = {
   chat: {
     promptBlocks: {
@@ -108,11 +98,11 @@ const SAMPLE_CONFIG = {
 };
 
 (async () => {
-  // ─── 1. Prompt assembler uses the active profile + gates SL sections ──────
-  section("1. Prompt assembler (one builder, SL gated by channel)");
+  // ─── 1. Prompt assembler (one shared builder, no per-channel fork) ─────────
+  section("1. Prompt assembler (one shared builder, Discord + Second Life)");
 
   check("persona comes from config.chat.promptBlocks (single source of truth)", () => {
-    const out = assembleCompanionPrompt({ config: SAMPLE_CONFIG, profile: SAMPLE_PROFILE, channelType: "discord" });
+    const out = assembleCompanionPrompt({ config: SAMPLE_CONFIG, channelType: "discord" });
     assert(out.includes("PERSONA_DETAILS_MARKER"), "persona details missing");
     assert(out.includes("PURPOSE_MARKER"), "companion purpose missing");
     assert(out.includes("TONE_MARKER"), "tone guidance missing");
@@ -121,35 +111,27 @@ const SAMPLE_CONFIG = {
   });
 
   check("persona header uses config names (not hardcoded)", () => {
-    const out = assembleCompanionPrompt({ config: SAMPLE_CONFIG, profile: SAMPLE_PROFILE, channelType: "discord" });
+    const out = assembleCompanionPrompt({ config: SAMPLE_CONFIG, channelType: "discord" });
     assert(out.includes("Aria") && out.includes("Sam"), "persona/user names not threaded from config");
   });
 
-  check("prompt-profile persona fields do NOT leak (profiles are SL overlay only)", () => {
-    const discordOut = assembleCompanionPrompt({ config: SAMPLE_CONFIG, profile: SAMPLE_PROFILE, channelType: "discord" });
-    const slOut = assembleCompanionPrompt({ config: SAMPLE_CONFIG, profile: SAMPLE_PROFILE, channelType: "second_life" });
-    assert(!discordOut.includes("CORE_IDENTITY_MARKER"), "legacy core identity leaked from profile into Discord");
-    assert(!slOut.includes("CORE_IDENTITY_MARKER"), "legacy core identity leaked from profile into Second Life");
-    assert(!discordOut.includes("ADULT_MARKER") && !slOut.includes("ADULT_MARKER"), "adult field leaked from profile");
+  check("Discord and Second Life build the EXACT same persona (shared Companion tab)", () => {
+    const discordOut = assembleCompanionPrompt({ config: SAMPLE_CONFIG, channelType: "discord" });
+    const slOut = assembleCompanionPrompt({ config: SAMPLE_CONFIG, channelType: "second_life" });
+    assert(discordOut === slOut, "Discord and Second Life personas diverge — they must share the Companion tab");
+    assert(slOut.includes("PERSONA_DETAILS_MARKER"), "Second Life dropped the shared persona");
   });
 
-  check("Discord channel does NOT include Second Life sections", () => {
-    const out = assembleCompanionPrompt({ config: SAMPLE_CONFIG, profile: SAMPLE_PROFILE, channelType: "discord" });
-    assert(!out.includes("SL_BEHAVIOR_MARKER"), "SL behaviour leaked into Discord");
-    assert(!out.includes("SL_LOCALCHAT_MARKER"), "SL local chat leaked into Discord");
-  });
-
-  check("Second Life channel adds the profile SL overlay on top of the persona", () => {
-    const out = assembleCompanionPrompt({ config: SAMPLE_CONFIG, profile: SAMPLE_PROFILE, channelType: "second_life" });
-    assert(out.includes("PERSONA_DETAILS_MARKER"), "SL channel dropped the shared persona");
-    assert(out.includes("SL_BEHAVIOR_MARKER"), "SL behaviour missing in second_life");
-    assert(out.includes("SL_LOCALCHAT_MARKER"), "SL local chat missing in second_life");
-  });
-
-  check("SL overlay is skipped when there is no active profile", () => {
-    const out = assembleCompanionPrompt({ config: SAMPLE_CONFIG, profile: null, channelType: "second_life" });
-    assert(out.includes("PERSONA_DETAILS_MARKER"), "persona missing with no profile");
-    assert(!out.includes("SL_BEHAVIOR_MARKER"), "SL overlay should be absent with no profile");
+  check("assembler ignores any legacy profile/overlay argument (no SL fork)", () => {
+    const legacy = {
+      secondLifeBehaviorPrompt: "SL_BEHAVIOR_MARKER",
+      secondLifeLocalChatPrompt: "SL_LOCALCHAT_MARKER",
+      coreIdentityPrompt: "CORE_IDENTITY_MARKER",
+    };
+    const out = assembleCompanionPrompt({ config: SAMPLE_CONFIG, profile: legacy, channelType: "second_life" });
+    assert(!out.includes("SL_BEHAVIOR_MARKER"), "legacy SL behaviour overlay still applied");
+    assert(!out.includes("SL_LOCALCHAT_MARKER"), "legacy SL local-chat overlay still applied");
+    assert(!out.includes("CORE_IDENTITY_MARKER"), "legacy profile field leaked into the persona");
   });
 
   // ─── 2. Companion event contract + processCompanionEvent ──────────────────
@@ -212,32 +194,14 @@ const SAMPLE_CONFIG = {
     }
   })();
 
-  // ─── 3. Generic defaults are name-free ────────────────────────────────────
-  section("3. Generic defaults contain nothing customer-specific");
+  // ─── 3. No customer-specific data in the shared persona builder ───────────
+  section("3. Shared persona builder bakes in nothing customer-specific");
 
-  check("prompt profiles are the two Second-Life overlay fields only", () => {
-    assert(PROMPT_FIELDS.length === 2, `expected 2 prompt fields (SL overlay only), got ${PROMPT_FIELDS.length}`);
-    assert(PROMPT_FIELDS.includes("secondLifeBehaviorPrompt"), "missing secondLifeBehaviorPrompt field");
-    assert(PROMPT_FIELDS.includes("secondLifeLocalChatPrompt"), "missing secondLifeLocalChatPrompt field");
-    const defaults = getPromptProfileDefaults();
-    for (const field of PROMPT_FIELDS) {
-      assert(field in defaults, `default missing field ${field}`);
-    }
-  });
-
-  check("prompt profiles carry no persona/adult fields (de-duplicated)", () => {
-    const fields = new Set(PROMPT_FIELDS);
-    for (const legacy of ["coreIdentityPrompt", "voiceTonePrompt", "relationshipPrompt", "adultPrivatePrompt"]) {
-      assert(!fields.has(legacy), `prompt profiles still expose legacy persona/adult field "${legacy}"`);
-    }
-    assert(!("adultPrivatePrompt" in GENERIC_DEFAULT_PROMPTS), "adult default should no longer exist on prompt profiles");
-  });
-
-  check("defaults are name-free (no hardcoded persona/user/region/UUID)", () => {
-    const blob = Object.values(GENERIC_DEFAULT_PROMPTS).join("\n").toLowerCase();
-    const forbidden = ["ghostlight", "aria", "cadence", "second life region", "@", "http", "uuid"];
+  check("assembler default persona is generic (no customer terms)", () => {
+    const out = assembleCompanionPrompt({ config: {}, channelType: "discord" }).toLowerCase();
+    const forbidden = ["aria", "cadence", "second life region", "uuid"];
     for (const term of forbidden) {
-      assert(!blob.includes(term), `default prompts contain forbidden term "${term}"`);
+      assert(!out.includes(term), `assembler output contains forbidden term "${term}"`);
     }
   });
 
@@ -246,55 +210,44 @@ const SAMPLE_CONFIG = {
     assert(resolveCompanionId({}) === "companion", "fallback id incorrect");
   });
 
-  // ─── 4. Admin editor wiring ───────────────────────────────────────────────
-  section("4. Prompt editor admin UI wiring");
+  // ─── 4. Prompt Profiles fully removed from the admin UI ───────────────────
+  section("4. Prompt Profiles removed (Discord + Second Life share the Companion tab)");
   {
-    if (fileHas("src/http/renderAdminPages/shared.js", "/admin/prompt-profiles")) pass("nav link added");
-    else fail("nav link missing");
+    if (!fileHas("src/http/renderAdminPages/shared.js", "/admin/prompt-profiles")) pass("nav link removed");
+    else fail("nav link still present");
 
-    if (fileHas("src/http/adminPageHandlers/shared.js", "promptProfiles")) pass("route state mapping added");
-    else fail("route state mapping missing");
+    if (!fileHas("src/http/adminPageHandlers/shared.js", "/admin/prompt-profiles")) pass("route state mapping removed");
+    else fail("route state mapping still present");
 
-    if (fileHas("src/http/createHealthServer.js", "/admin/prompt-profiles")) pass("GET route allowlisted");
-    else fail("GET route not allowlisted");
+    if (!fileHas("src/http/createHealthServer.js", "/admin/prompt-profiles")) pass("GET route de-allowlisted");
+    else fail("GET route still allowlisted");
 
-    if (fileHas("src/http/adminPageHandlers.js", "handlePromptProfilesPageRequest")) pass("page handler dispatched");
-    else fail("page handler not dispatched");
+    if (!fileHas("src/http/adminPageHandlers.js", "handlePromptProfilesPageRequest")) pass("page handler dispatch removed");
+    else fail("page handler still dispatched");
 
-    if (fileHas("src/http/createHealthServer.js", "handlePromptProfilesActions")) pass("actions registered");
-    else fail("actions not registered");
+    if (!fileHas("src/http/createHealthServer.js", "handlePromptProfilesActions")) pass("actions unregistered");
+    else fail("actions still registered");
 
-    if (fileHas("src/http/actions/promptProfilesActions.js", "prompt-profiles-save")
-      && fileHas("src/http/actions/promptProfilesActions.js", "prompt-profiles-reset")) pass("save + reset actions present");
-    else fail("save/reset actions missing");
+    const removedFiles = [
+      "src/http/actions/promptProfilesActions.js",
+      "src/http/adminPageHandlers/promptProfilesPageHandler.js",
+      "src/http/renderAdminPages/promptProfilesPage.js",
+      "src/storage/promptProfiles/index.js",
+      "src/companion/promptProfileService.js",
+    ];
+    const stillThere = removedFiles.filter((rel) => fs.existsSync(path.join(ROOT, rel)));
+    if (stillThere.length === 0) pass("all prompt-profile modules deleted");
+    else fail(`prompt-profile modules still exist: ${stillThere.join(", ")}`);
   }
 
-  // ─── 5. Render the editor end-to-end ──────────────────────────────────────
-  section("5. Editor page renders valid HTML");
-  check("renderPromptProfilesPage produces an editable form + preview", () => {
-    const { buildAdminPageHelpers } = require(path.join(ROOT, "src/http/adminRenderHelpers.js"));
-    const helpers = buildAdminPageHelpers({ sortMemories: (x) => x, config: {} });
-    const previews = {
-      discord: assembleCompanionPrompt({ config: SAMPLE_CONFIG, profile: SAMPLE_PROFILE, channelType: "discord" }),
-      secondLife: assembleCompanionPrompt({ config: SAMPLE_CONFIG, profile: SAMPLE_PROFILE, channelType: "second_life" }),
-    };
-    const html = helpers.renderPromptProfilesPage({
-      companionId: "aria",
-      storeAvailable: true,
-      profiles: [{ id: "1", profileName: "Default" }],
-      activeProfile: { id: "1", profileName: "Default" },
-      editing: { id: "1", profileName: "Default", ...SAMPLE_PROFILE },
-      defaults: getPromptProfileDefaults(),
-      previews,
-      theme: "light",
-    });
-    assert(html.includes("prompt-profiles-save"), "save form action missing");
-    assert(html.includes("secondLifeBehaviorPrompt"), "Second Life behaviour field missing");
-    assert(html.includes("secondLifeLocalChatPrompt"), "Second Life local chat field missing");
-    assert(!html.includes("coreIdentityPrompt"), "legacy persona field still rendered on prompt profiles");
-    assert(!html.includes("adultPrivatePrompt"), "legacy adult field still rendered on prompt profiles");
-    assert(html.includes("Assembled Prompt Preview"), "preview block missing");
-    assert(html.includes("SL_BEHAVIOR_MARKER"), "SL preview content missing");
+  // ─── 5. Companion tab is the shared source for both channels ──────────────
+  section("5. Companion tab drives Discord + Second Life identically");
+  check("assembled persona is identical for both channels and carries Companion fields", () => {
+    const discord = assembleCompanionPrompt({ config: SAMPLE_CONFIG, channelType: "discord" });
+    const secondLife = assembleCompanionPrompt({ config: SAMPLE_CONFIG, channelType: "second_life" });
+    assert(discord === secondLife, "Discord and Second Life personas diverge");
+    assert(discord.includes("PERSONA_DETAILS_MARKER"), "Companion persona details missing");
+    assert(discord.includes("BOUNDARY_MARKER"), "Companion boundary rules missing");
   });
 
   // ─── 6. Second Life data model wiring ─────────────────────────────────────
@@ -698,52 +651,21 @@ const SAMPLE_CONFIG = {
     assert(html.includes("second-life-command-test"), "command test form missing");
   });
 
-  // ─── 15. Adult config is NOT on prompt profiles (moved to Discord) ────────
-  section("15. Adult config removed from prompt profiles (now Discord adultPrivateMode)");
+  // ─── 15. No prompt-profile threading left in the brain ────────────────────
+  section("15. Brain builds persona from the Companion tab only (no profile threading)");
   {
-    const LEGACY_ADULT_FIELDS = [
-      "adultPreferencesPrompt", "adultWantsPrompt", "adultNeedsPrompt",
-      "adultSoftLimitsPrompt", "adultHardLimitsPrompt", "adultPrivatePrompt",
-    ];
-
-    check("legacy adult fields are gone from prompt-profile defaults + PROMPT_FIELDS", () => {
-      const defaults = getPromptProfileDefaults();
-      for (const f of LEGACY_ADULT_FIELDS) {
-        assert(!(f in defaults), `prompt-profile defaults still expose adult field ${f}`);
-        assert(!PROMPT_FIELDS.includes(f), `${f} still wired into PROMPT_FIELDS`);
-      }
+    check("chat pipeline + SL reply generator no longer load a prompt profile", () => {
+      assert(!fileHas("src/chat/createChatPipeline.js", "getActiveProfile"), "chat pipeline still loads an active prompt profile");
+      assert(!fileHas("src/companion/secondLifeReplyGenerator.js", "getActiveProfile"), "SL reply generator still loads an active prompt profile");
+      assert(!fileHas("src/chat/createChatPipeline.js", "promptProfiles"), "chat pipeline still depends on promptProfiles");
+      assert(!fileHas("src/companion/secondLifeReplyGenerator.js", "promptProfiles"), "SL reply generator still depends on promptProfiles");
     });
 
-    check("adult markers never appear in the assembled prompt (no privacy gating left)", () => {
-      const profile = {
-        ...SAMPLE_PROFILE,
-        adultPreferencesPrompt: "PREF_MARKER",
-        adultHardLimitsPrompt: "HARD_MARKER",
-      };
-      const discordOut = assembleCompanionPrompt({ config: SAMPLE_CONFIG, profile, channelType: "discord" });
-      const slOut = assembleCompanionPrompt({ config: SAMPLE_CONFIG, profile, channelType: "second_life" });
-      for (const m of ["PREF_MARKER", "HARD_MARKER"]) {
-        assert(!discordOut.includes(m), `${m} leaked into Discord output`);
-        assert(!slOut.includes(m), `${m} leaked into Second Life output`);
-      }
-    });
-
-    check("admin prompt-profile form renders no adult textareas", () => {
-      const { buildAdminPageHelpers } = require(path.join(ROOT, "src/http/adminRenderHelpers.js"));
-      const helpers = buildAdminPageHelpers({ sortMemories: (x) => x, config: {} });
-      const html = helpers.renderPromptProfilesPage({
-        companionId: "aria",
-        storeAvailable: true,
-        profiles: [{ id: "1", profileName: "Default" }],
-        activeProfile: { id: "1", profileName: "Default" },
-        editing: { id: "1", profileName: "Default", ...getPromptProfileDefaults() },
-        defaults: getPromptProfileDefaults(),
-        previews: { discord: "", secondLife: "" },
-        theme: "light",
-      });
-      for (const f of LEGACY_ADULT_FIELDS) {
-        assert(!html.includes(`name="${f}"`), `prompt-profile form still renders adult textarea ${f}`);
-      }
+    check("prompt builder no longer threads a profile/overlay", () => {
+      assert(!fileHas("src/companion/assembleCompanionPrompt.js", "secondLifeBehaviorPrompt"), "assembler still references SL overlay fields");
+      assert(!fileHas("src/chat/prompt/buildSystemPrompt.js", "promptProfile"), "buildSystemPrompt still threads promptProfile");
+      assert(!fileHas("src/chat/pipeline/callModel.js", "promptProfile"), "callModel still threads promptProfile");
+      assert(!fileHas("src/chat/pipeline/buildChatRequest.js", "promptProfile"), "buildChatRequest still threads promptProfile");
     });
   }
 
@@ -1469,26 +1391,21 @@ const SAMPLE_CONFIG = {
     else fail("adultPrivateMode channel toggle command missing");
   }
 
-  // ─── 28. Prompt Profiles is a Second Life child + SL-overlay only ─────────
-  section("28. Prompt Profiles nested under Second Life (overlay only)");
+  // ─── 28. Prompt Profiles fully removed from nav + codebase ────────────────
+  section("28. Prompt Profiles fully removed");
   {
     const nav = readFile("src/http/renderAdminPages/shared.js");
-    const slIdx = nav.indexOf("/admin/second-life");
-    const ppIdx = nav.indexOf("/admin/prompt-profiles");
-    if (slIdx !== -1 && ppIdx !== -1 && slIdx < ppIdx) pass("Prompt Profiles nav follows Second Life");
-    else fail("Prompt Profiles nav not ordered under Second Life");
+    if (nav.indexOf("/admin/prompt-profiles") === -1) pass("Prompt Profiles nav entry removed");
+    else fail("Prompt Profiles nav entry still present");
 
-    // The Prompt Profiles nav entry must be marked as a child (indented subnav).
-    const ppLineStart = nav.lastIndexOf("{", ppIdx);
-    const ppLineEnd = nav.indexOf("}", ppIdx);
-    const ppEntry = ppLineStart !== -1 && ppLineEnd !== -1 ? nav.slice(ppLineStart, ppLineEnd) : "";
-    if (ppEntry.includes("child")) pass("Prompt Profiles nav entry is a Second Life child");
-    else fail("Prompt Profiles nav entry not marked as a child");
+    if (!fs.existsSync(path.join(ROOT, "src/companion/promptProfileService.js"))) pass("prompt profile service deleted");
+    else fail("prompt profile service still exists");
 
-    if (fileHas("src/companion/promptProfileService.js", "secondLifeBehaviorPrompt")
-      && fileHas("src/companion/promptProfileService.js", "secondLifeLocalChatPrompt"))
-      pass("prompt profile service defaults are the SL overlay fields");
-    else fail("prompt profile service missing SL overlay defaults");
+    if (fileHas("src/companion/resolveCompanionId.js", "resolveCompanionId")) pass("resolveCompanionId relocated to its own neutral module");
+    else fail("resolveCompanionId module missing");
+
+    if (!fileHas("src/http/renderAdminPages/secondLifePage.js", "Prompt Profiles")) pass("Second Life admin page copy no longer mentions Prompt Profiles");
+    else fail("Second Life admin page still references Prompt Profiles in user-facing copy");
   }
 
   // ─── 29. Phase 20 — Privacy & Safety + emergency commands ─────────────────

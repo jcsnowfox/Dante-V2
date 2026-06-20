@@ -77,9 +77,6 @@ function getAdminRouteState(pathname) {
   if (pathname === "/admin/relational-state") {
     return { section: "relationalState" };
   }
-  if (pathname === "/admin/prompt-profiles") {
-    return { section: "promptProfiles" };
-  }
   if (pathname === "/admin/second-life") {
     return { section: "secondLife" };
   }

@@ -11,7 +11,6 @@ const musicPagesModule = require("./renderAdminPages/musicPages");
 const emotionalArcPageModule = require("./renderAdminPages/emotionalArcPage");
 const feedbackLearningPageModule = require("./renderAdminPages/feedbackLearningPage");
 const relationalStatePageModule = require("./renderAdminPages/relationalStatePage");
-const promptProfilesPageModule = require("./renderAdminPages/promptProfilesPage");
 const secondLifePageModule = require("./renderAdminPages/secondLifePage");
 
 module.exports = {
@@ -45,6 +44,5 @@ module.exports = {
   renderEmotionalArcPage: emotionalArcPageModule.renderEmotionalArcPage,
   renderFeedbackLearningPage: feedbackLearningPageModule.renderFeedbackLearningPage,
   renderRelationalStatePage: relationalStatePageModule.renderRelationalStatePage,
-  renderPromptProfilesPage: promptProfilesPageModule.renderPromptProfilesPage,
   renderSecondLifePage: secondLifePageModule.renderSecondLifePage,
 };

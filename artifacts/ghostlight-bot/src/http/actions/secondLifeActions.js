@@ -1,7 +1,7 @@
 const { parseRequestForm } = require("../adminRequestUtils");
 const { normalizeTheme, buildReturnLocation } = require("../adminUiHelpers");
 const { applyRuntimeSettings } = require("../../config/runtimeSettings");
-const { resolveCompanionId } = require("../../companion/promptProfileService");
+const { resolveCompanionId } = require("../../companion/resolveCompanionId");
 const {
   BOOLEAN_SETTINGS,
   TEXT_SETTINGS,

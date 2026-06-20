@@ -409,7 +409,6 @@ function buildSystemPrompt({
   automation = null,
   webSearchUsed = false,
   availableToolNames = null,
-  promptProfile = null,
   channelType = "discord",
   privacyLevel = "public",
 }) {
@@ -417,10 +416,10 @@ function buildSystemPrompt({
   const personaName = promptBlocks.personaName || "Ghostlight";
   const userName = promptBlocks.userName || "the user";
 
-  // config.chat.promptBlocks is the single source of truth for personality on
-  // every channel. The active prompt profile only contributes a Second Life
-  // overlay, applied by assembleCompanionPrompt when channelType is second_life.
-  const sections = [assembleCompanionPrompt({ config, profile: promptProfile, channelType })];
+  // config.chat.promptBlocks (the admin Companion tab) is the single source of
+  // truth for personality on every channel. Discord and Second Life share it —
+  // the persona never forks per channel.
+  const sections = [assembleCompanionPrompt({ config, channelType })];
 
   sections.push(
     `${userName} is fully aware that ${personaName} is a fictional AI persona and they understand the limitations of LLMs. Mental-health context exists to reduce repetitive explanations and to ease friction in the space, not to replace professional care.`,

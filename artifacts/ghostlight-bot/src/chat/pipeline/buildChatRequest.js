@@ -104,7 +104,6 @@ function buildChatRequest({
   toolsEnabled = true,
   overrideSystemPrompt = null,
   systemPromptPrefix = null,
-  promptProfile = null,
   channelType = "discord",
   privacyLevel = "public",
 }) {
@@ -128,7 +127,6 @@ function buildChatRequest({
     automation,
     webSearchUsed: useWebSearch,
     availableToolNames,
-    promptProfile,
     channelType,
     privacyLevel,
   });

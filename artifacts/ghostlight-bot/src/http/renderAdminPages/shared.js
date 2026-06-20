@@ -8,7 +8,6 @@ function renderAdminTopnav({ currentSection = "home", theme = "light", themeLink
     { section: "feedbackLearning", label: "Feedback & Learning", path: "/admin/feedback-learning", icon: "feedbackLearning" },
     { section: "relationalState", label: "Relational State", path: "/admin/relational-state", icon: "relationalState" },
     { section: "secondLife", label: "Second Life", path: "/admin/second-life", icon: "companion" },
-    { section: "promptProfiles", label: "Prompt Profiles", path: "/admin/prompt-profiles", icon: "companion", child: true },
     { section: "innerLife", label: "Inner Life", path: "/admin/inner-life", icon: "emotionalArc" },
     { section: "continuity", label: "Continuity", path: "/admin/continuity/overview", icon: "automation" },
     { section: "memory", label: "Memory", path: "/admin/memory/library", icon: "memories" },

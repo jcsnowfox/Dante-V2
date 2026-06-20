@@ -12,7 +12,7 @@
  * delivered in later bridge phases; here those registries are shown as read-only
  * count summaries so the owner can see what exists.
  *
- * Reuses the existing ghb-* admin design system (shared with Prompt Profiles /
+ * Reuses the existing ghb-* admin design system (shared with the Companion /
  * Inner Life) so no new CSS is required. Nothing customer-specific is hardcoded;
  * every field is a generic, name-free default.
  */
@@ -852,7 +852,7 @@ ${storeWarning}
   <div class="ghb-hero-art" style="background-image:none;background:linear-gradient(135deg,#0f1f55 0%,#1d3a95 40%,#3a7ced 70%,#8bb4fa 100%)"></div>
   <div class="ghb-hero-text">
     <h2 class="ghb-title">Second Life Bridge ✦</h2>
-    <p class="ghb-subtitle">Operate the same companion inside Second Life. Configure the agent identity, shared secret, behaviour, and limits — the personality stays the one defined in Prompt Profiles.</p>
+    <p class="ghb-subtitle">Operate the same companion inside Second Life. Configure the agent identity, shared secret, behaviour, and limits — the personality stays the one defined in the Companion tab, shared with Discord.</p>
   </div>
   <aside class="ghb-card ghb-side-card">
     <h3 class="ghb-side-title">How it works</h3>
