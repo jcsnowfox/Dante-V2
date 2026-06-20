@@ -51,6 +51,52 @@ function asText(value) {
   return value == null ? "" : String(value);
 }
 
+// ── Phase 24 — Factual relationship question intent detection ─────────────────
+
+const RELATIONSHIP_QUESTION_PATTERNS = [
+  /\bwho(?:'s| is)\s+([A-Za-z][A-Za-z0-9 ]{1,40}?)(?:\?|[,!]|\s*$)/i,
+  /\bdo you know who\s+([A-Za-z][A-Za-z0-9 ]{1,40}?)\s+is\b/i,
+  /\bwhat is\s+([A-Za-z][A-Za-z0-9 ]{1,40}?)\s+to\b/i,
+  /\btell me about\s+([A-Za-z][A-Za-z0-9 ]{1,40}?)(?:\?|[,!]|\s*$)/i,
+];
+
+// Names that should never be treated as third-party entity mentions.
+const EXCLUDED_ENTITY_NAMES = new Set([
+  "you", "i", "he", "she", "they", "we", "it",
+  "that", "this", "someone", "anyone", "nobody", "everybody", "everyone",
+]);
+
+function detectRelationshipQuestionIntent(text) {
+  const s = String(text || "").trim();
+  if (!s) return { intent: false, mentionedName: null };
+  for (const pattern of RELATIONSHIP_QUESTION_PATTERNS) {
+    const m = pattern.exec(s);
+    if (m) {
+      const name = m[1].trim().replace(/\s{2,}/g, " ");
+      if (name.length >= 2 && !EXCLUDED_ENTITY_NAMES.has(name.toLowerCase())) {
+        return { intent: true, mentionedName: name };
+      }
+    }
+  }
+  return { intent: false, mentionedName: null };
+}
+
+function buildMentionedEntityContext(entity) {
+  if (!entity) return null;
+  const name = entity.nickname || entity.objectName || entity.name || "";
+  const lines = [];
+  if (name) lines.push(`Entity name: ${name}`);
+  const entityType = entity.objectUuid !== undefined ? "object" : "avatar";
+  lines.push(`Entity type: ${entityType}`);
+  if (entity.category) lines.push(`Category: ${entity.category}`);
+  if (entity.relationshipToUser) lines.push(`Relationship to user: ${entity.relationshipToUser}`);
+  if (entity.relationshipToCompanion) lines.push(`Relationship to companion: ${entity.relationshipToCompanion}`);
+  if (entity.childSafeOnly) lines.push("Child-safe only: true");
+  if (entity.notes) lines.push(`Notes: ${entity.notes}`);
+  if (!lines.length) return null;
+  return lines.join("\n");
+}
+
 function createSecondLifeAdapter({
   secondLife,
   companion,
@@ -835,6 +881,46 @@ function createSecondLifeAdapter({
     const publicChat = isPublicSpeaker(resolved);
     const safePrivacyLevel = (publicChat || resolved?.childSafeOnly) ? "public" : event.privacyLevel;
 
+    // Phase 24 — detect factual relationship questions ("who is Jezabelle?") and
+    // inject registry context so the model answers about the mentioned entity rather
+    // than treating the question as a challenge to its own identity.
+    const debug24 = process.env.SECOND_LIFE_DEBUG === "true";
+    const rqIntent = detectRelationshipQuestionIntent(asText(event.messageText));
+    let rqMatchedEntity = null;
+    if (rqIntent.intent && rqIntent.mentionedName) {
+      rqMatchedEntity = await safe(
+        () => secondLife.findRelationshipByName?.({ companionId, name: rqIntent.mentionedName }),
+        null,
+        "findRelationshipByName",
+      );
+      if (!rqMatchedEntity) {
+        rqMatchedEntity = await safe(
+          () => secondLife.findObjectRelationshipByName?.({ companionId, name: rqIntent.mentionedName }),
+          null,
+          "findObjectRelationshipByName",
+        );
+      }
+      if (rqMatchedEntity) {
+        const entityContent = buildMentionedEntityContext(rqMatchedEntity);
+        if (entityContent) {
+          contextSections.push({
+            label: "Second Life Mentioned Entity Context",
+            content: entityContent,
+            private: !publicChat,
+          });
+        }
+        contextSections.push({
+          label: "Factual Relationship Question",
+          content: [
+            `The speaker is asking a factual question about ${rqIntent.mentionedName}.`,
+            "Answer based on what you know about them from your relationship registry.",
+            "Do not treat this as a question about your own identity.",
+            "Keep the answer brief, natural, and in character.",
+          ].join("\n"),
+        });
+      }
+    }
+
     let processed;
     try {
       processed = await companion.processCompanionEvent({
@@ -872,6 +958,18 @@ function createSecondLifeAdapter({
     const responseText = asText(processed?.outbound?.responseText).trim();
     if (!responseText) {
       return { handled: true, replied: false, reason: "no_reply_text" };
+    }
+
+    if (debug24 && rqIntent.intent) {
+      logger?.info?.("[second-life] Relationship question response.", {
+        companionId,
+        relationshipQuestionIntent: rqIntent.intent,
+        mentionedEntityName: rqIntent.mentionedName,
+        matchedEntityType: rqMatchedEntity ? (rqMatchedEntity.objectUuid !== undefined ? "object" : "avatar") : null,
+        matchedEntityNickname: rqMatchedEntity?.nickname || null,
+        childSafeOnly: Boolean(rqMatchedEntity?.childSafeOnly),
+        replyLength: responseText.length,
+      });
     }
 
     const agentUuid = asText(settings?.agentUuid) || asText(worldState?.agentUuid);
