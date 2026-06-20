@@ -457,6 +457,7 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           generatedImageIds: Array.isArray(reply.generatedImageIds) ? reply.generatedImageIds : [],
           generatedAudioIds: Array.isArray(reply.generatedAudioIds) ? reply.generatedAudioIds : [],
           imageWarnings: Array.isArray(reply.imageWarnings) ? reply.imageWarnings : [],
+          internalThought: typeof reply.internalThought === "string" ? reply.internalThought.trim() : "",
         };
       const outgoingContent = replaceCustomEmojiLabelsForDiscord(
         replyPayload.content,
@@ -465,6 +466,18 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
       const replyChunks = splitTextIntoChunks(replyPayload.content);
       const outgoingChunks = splitTextIntoChunks(outgoingContent);
       let sentReply = null;
+
+      // Nothing sendable (e.g. the model produced only a hidden <think> block
+      // and no files). Bail out gracefully instead of dereferencing a null
+      // sentReply when recording the assistant event below.
+      if (!replyChunks.length && !replyPayload.files.length) {
+        logger.warn("[chat] Reply had no sendable content after processing", {
+          messageId: message.id,
+          channelId: message.channelId,
+          conversationId,
+        });
+        return;
+      }
 
       if (!replyChunks.length && replyPayload.files.length) {
         try {
@@ -551,6 +564,9 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
             chunkCount: replyChunks.length,
             generatedImageCount: replyPayload.generatedImageIds.length,
             generatedAudioCount: replyPayload.generatedAudioIds.length,
+            ...(replyPayload.internalThought
+              ? { internalThought: replyPayload.internalThought }
+              : {}),
           },
         });
 

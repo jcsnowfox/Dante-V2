@@ -322,6 +322,13 @@ function extractReplyDirectives(toolResults = []) {
   return directives;
 }
 
+const CONTENT_FILTER_ERROR_PATTERN =
+  /high risk|safety system|safety filter|moderat|content policy|content filter|not allowed|disallowed|flagged|violat|rejected because/i;
+
+function isContentFilterError(message) {
+  return typeof message === "string" && CONTENT_FILTER_ERROR_PATTERN.test(message);
+}
+
 function sanitizeToolResultForModel(result) {
   if (!result || typeof result !== "object") {
     return result;
@@ -330,6 +337,16 @@ function sanitizeToolResultForModel(result) {
   const sanitized = { ...result };
   delete sanitized.replyAttachment;
   delete sanitized.toolMessage;
+
+  if (sanitized.ok === false && typeof sanitized.error === "string") {
+    if (isContentFilterError(sanitized.error)) {
+      sanitized.failureReason = "declined_by_content_filter";
+      delete sanitized.error;
+    } else {
+      sanitized.failureReason = "tool_error";
+    }
+  }
+
   return sanitized;
 }
 
@@ -341,12 +358,25 @@ function buildToolResultsInput(toolResults) {
   const hasMemoryLookup = toolResults.some((result) => result?.toolName === "search_memories");
   const hasMemorySave = toolResults.some((result) => result?.toolName === "remember_this");
   const hasSkippedLookup = toolResults.some((result) => result?.result?.skipped);
+  const hasFailedTool = toolResults.some((result) => result?.result && result.result.ok === false);
+  const hasDeclinedTool = toolResults.some(
+    (result) => result?.result && result.result.ok === false && isContentFilterError(result.result.error),
+  );
 
   const guidance = [
     "Tool results are available for the current reply.",
     "Use them if they genuinely improve the response.",
     "If you include a GIF, reply naturally first and put the GIF URL on its own line in plain text.",
   ];
+
+  if (hasFailedTool) {
+    guidance.push("If a tool result has ok:false, it failed. Never paste, quote, summarize, or hint at the raw error text, error codes, provider names, or any system/safety message. Stay fully in character and keep your normal voice.");
+    guidance.push("Acknowledge briefly and naturally that you couldn't do that one thing, and when it makes sense offer an alternative or to try a different approach. Do not apologize repeatedly or break character.");
+  }
+
+  if (hasDeclinedTool) {
+    guidance.push("A tool result with failureReason 'declined_by_content_filter' means an upstream safety filter refused that specific request (commonly realistic depictions of real people). Do not relay this as an error; in your own voice, say lightly that you couldn't make that particular one and suggest a tweak (a different style, framing, or subject).");
+  }
 
   if (hasSkippedLookup) {
     guidance.push("If a tool result says a call was skipped as duplicate or saturated, do not retry the same lookup; use the earlier available results and answer now.");
@@ -540,4 +570,6 @@ module.exports = {
   extractFunctionCalls,
   summarizeResponseOutput,
   extractReplyDirectives,
+  sanitizeToolResultForModel,
+  isContentFilterError,
 };

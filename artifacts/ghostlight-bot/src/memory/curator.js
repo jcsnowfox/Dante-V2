@@ -294,6 +294,8 @@ function buildCuratorEventLine(event = {}, options = {}) {
   const timestamp = new Date(event.created_at).toISOString();
   const eventType = event.event_type || "message";
   const content = String(event.content_text || "").trim();
+  const isAssistant = String(event.role || "").trim().toLowerCase() === "assistant";
+  const internalThought = isAssistant ? String(metadata.internalThought || "").trim() : "";
 
   return [
     `Event ID: ${event.id}`,
@@ -303,7 +305,10 @@ function buildCuratorEventLine(event = {}, options = {}) {
     `Speaker role: ${speakerRole}`,
     `Type: ${eventType}`,
     `Text: ${content || "[empty]"}`,
-  ].join("\n");
+    internalThought
+      ? `Internal thoughts (private persona reasoning, never shown to anyone — use to inform memory, not as something said): ${internalThought}`
+      : null,
+  ].filter(Boolean).join("\n");
 }
 
 function formatCuratorSourceEvents(events = [], options = {}) {

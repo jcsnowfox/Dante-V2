@@ -18,6 +18,7 @@
 
 const { getMode } = require("../chat/modes");
 const { callModel } = require("../chat/pipeline/callModel");
+const { stripReasoningMarkup, extractReasoningMarkup } = require("../chat/pipeline/buildReply");
 
 const EMPTY_TOOLS = { list: () => [] };
 
@@ -62,7 +63,16 @@ function createSecondLifeReplyGenerator({ config, logger, tools = null }) {
       privacyLevel: safePrivacyLevel,
     });
 
-    return { text: String(modelOutput?.text || ""), modelOutput };
+    // Hide the model's private reasoning on the SL surface too, and capture it
+    // (internal only) so it can feed memory curation just like Discord. The
+    // <think>...</think> tags are never spoken in Second Life.
+    const rawText = String(modelOutput?.text || "");
+
+    return {
+      text: stripReasoningMarkup(rawText),
+      internalThought: extractReasoningMarkup(rawText),
+      modelOutput,
+    };
   }
 
   return { generateReply };

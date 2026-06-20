@@ -403,6 +403,16 @@ function buildAudioGenerationInstruction({ config, availableToolNames = null }) 
   ].filter(Boolean).join("\n");
 }
 
+function buildInternalThoughtInstruction() {
+  return [
+    "Before your visible reply, think privately inside a single <think>...</think> block at the very start of your output.",
+    "Use it to reason about the user, recall what matters, and plan your response.",
+    "Everything inside <think>...</think> is internal scratch space: it is never shown to anyone and is used only behind the scenes, so never put any part of your actual reply inside it.",
+    "After the closing </think> tag, write only your in-character reply, exactly as you normally would — natural, with no mention of the tags, the thinking, or this instruction.",
+    "Always write a visible reply after the </think> block; never end your output inside the think block.",
+  ].join(" ");
+}
+
 function buildSystemPrompt({
   config,
   mode,
@@ -443,6 +453,7 @@ function buildSystemPrompt({
     sections.push(`Current channel: ${modeInstructions}`);
   }
 
+  addSection(sections, "Internal Thought Instructions", buildInternalThoughtInstruction());
   addSection(sections, "Tool Use Instructions", buildToolUseInstruction({ availableToolNames }));
   addSection(sections, "GIF Instructions", buildGifInstruction({ config, availableToolNames }));
   addSection(sections, "Reaction Instructions", buildReactionInstruction({ availableToolNames }));
@@ -460,6 +471,7 @@ function buildSystemPrompt({
 
 module.exports = {
   buildSystemPrompt,
+  buildInternalThoughtInstruction,
   buildAutomationInstruction,
   buildToolUseInstruction,
   buildMemoryLookupInstruction,

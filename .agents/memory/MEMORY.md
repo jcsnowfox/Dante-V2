@@ -6,4 +6,5 @@
 - [Workspace has no real DB](workspace-no-real-db.md) — workspace DATABASE_URL is a placeholder (`{Postgres.DATABASE_URL}`); guard DB-connecting tooling on a real `postgres://` URL, not just presence.
 - [Ghostlight admin helper builders](ghostlight-admin-helpers.md) — admin pages: preview vs full-bot helper drift, missing route cases, and action handlers must pass `context` to `withAdmin` (else 500).
 - [Ghostlight-bot validation](ghostlight-bot-validation.md) — no `typecheck` script (plain CommonJS); validate with `node --check` per file + `scripts/verify-*.js` harnesses, not pnpm typecheck.
+- [Reasoning leak + thought capture](ghostlight-reasoning-leak.md) — skip `type:"reasoning"` output items; `<think>` tags now intentionally requested, ALWAYS hidden but captured for curation; strip/extract must be symmetric iterate-until-stable inverses on every channel.
 - [Ghostlight personality source](ghostlight-personality-source.md) — personality lives ONLY in config.chat.promptBlocks; Prompt Profiles are SL-overlay-only; adult is a separate Discord adultPrivateMode feature.

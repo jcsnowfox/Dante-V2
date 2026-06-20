@@ -75,23 +75,91 @@ function stripMirroredUserGifUrls(text, input) {
 
 const REASONING_TAG_NAMES = "think|thinking|reason|reasoning|reflection|analysis|scratchpad";
 const REASONING_TAG_BLOCK_PATTERN = new RegExp(`<(${REASONING_TAG_NAMES})\\b[^>]*>[\\s\\S]*?<\\/\\1>`, "gi");
-const REASONING_TAG_OPEN_PATTERN = new RegExp(`^\\s*<(${REASONING_TAG_NAMES})\\b[^>]*>`, "i");
+const REASONING_TAG_CAPTURE_PATTERN = new RegExp(`<(${REASONING_TAG_NAMES})\\b[^>]*>([\\s\\S]*?)<\\/\\1>`, "gi");
+const REASONING_TAG_OPEN_PATTERN = new RegExp(`<(${REASONING_TAG_NAMES})\\b[^>]*>`, "i");
 const REASONING_TAG_CLOSE_PATTERN = new RegExp(`<\\/(${REASONING_TAG_NAMES})\\s*>`, "i");
 
+// stripReasoningMarkup (visible text) and extractReasoningMarkup (private
+// thought) are exact inverses: whatever one removes, the other captures. Both
+// handle fully matched blocks anywhere, a dangling close tag (output that began
+// mid-reasoning), and an unclosed open tag (leading or mid-text). The private
+// reasoning is NEVER sent to a user on any channel.
 function stripReasoningMarkup(text) {
   let result = String(text || "");
+  let previous;
 
-  result = result.replace(REASONING_TAG_BLOCK_PATTERN, "");
+  // Iterate until stable so repeated/malformed tags (e.g. multiple dangling
+  // close tags) are all consumed, not just the first occurrence.
+  do {
+    previous = result;
 
-  if (REASONING_TAG_OPEN_PATTERN.test(result)) {
+    // Remove all fully matched reasoning blocks anywhere.
+    result = result.replace(REASONING_TAG_BLOCK_PATTERN, "");
+
+    // Drop a dangling close tag (and the leaked reasoning before it) when no
+    // matching open tag precedes it.
     const closeMatch = result.match(REASONING_TAG_CLOSE_PATTERN);
+    const openMatch = result.match(REASONING_TAG_OPEN_PATTERN);
 
-    result = closeMatch
-      ? result.slice(closeMatch.index + closeMatch[0].length)
-      : "";
+    if (closeMatch && (!openMatch || openMatch.index > closeMatch.index)) {
+      result = result.slice(closeMatch.index + closeMatch[0].length);
+    }
+  } while (result !== previous);
+
+  // Drop any remaining unclosed open tag (leading or mid-text) through end.
+  const trailingOpen = result.match(REASONING_TAG_OPEN_PATTERN);
+
+  if (trailingOpen) {
+    result = result.slice(0, trailingOpen.index);
   }
 
   return result.trim();
+}
+
+function extractReasoningMarkup(text) {
+  const thoughts = [];
+
+  const pushThought = (value) => {
+    const inner = String(value || "").trim();
+
+    if (inner) {
+      thoughts.push(inner);
+    }
+  };
+
+  let rest = String(text || "");
+  let previous;
+
+  // Mirror stripReasoningMarkup's state machine exactly so what is captured is
+  // precisely what is hidden — iterate until stable.
+  do {
+    previous = rest;
+
+    // Capture and remove the inner content of every fully matched block.
+    const blockPattern = new RegExp(REASONING_TAG_CAPTURE_PATTERN.source, "gi");
+    rest = rest.replace(blockPattern, (_match, _tag, inner) => {
+      pushThought(inner);
+      return "";
+    });
+
+    // Dangling close tag: capture the leaked reasoning before it.
+    const closeMatch = rest.match(REASONING_TAG_CLOSE_PATTERN);
+    const openMatch = rest.match(REASONING_TAG_OPEN_PATTERN);
+
+    if (closeMatch && (!openMatch || openMatch.index > closeMatch.index)) {
+      pushThought(rest.slice(0, closeMatch.index));
+      rest = rest.slice(closeMatch.index + closeMatch[0].length);
+    }
+  } while (rest !== previous);
+
+  // Unclosed open tag: capture everything after it.
+  const trailingOpen = rest.match(REASONING_TAG_OPEN_PATTERN);
+
+  if (trailingOpen) {
+    pushThought(rest.slice(trailingOpen.index + trailingOpen[0].length));
+  }
+
+  return thoughts.join("\n\n").trim();
 }
 
 function cleanModelReplyText(text, input) {
@@ -128,6 +196,14 @@ function buildReply({ mode, input, recentHistory, memories, modelOutput }) {
       content,
       suppressEmbeds: Boolean(modelOutput.webSearchUsed),
     };
+
+    // Capture the model's private reasoning (never sent to the user) so the
+    // memory curator can use it. Kept off the visible content entirely.
+    const internalThought = extractReasoningMarkup(modelOutput.text);
+
+    if (internalThought) {
+      reply.internalThought = internalThought;
+    }
 
     if (Array.isArray(modelOutput.files) && modelOutput.files.length) {
       reply.files = modelOutput.files;
@@ -167,4 +243,5 @@ module.exports = {
   collectUserGifUrls,
   stripMirroredUserGifUrls,
   stripReasoningMarkup,
+  extractReasoningMarkup,
 };
