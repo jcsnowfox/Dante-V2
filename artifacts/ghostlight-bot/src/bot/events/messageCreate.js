@@ -176,11 +176,13 @@ function splitTextIntoChunks(text, maxLength = DISCORD_MESSAGE_MAX_LENGTH) {
     const omitted = chunks.length - kept.length;
     const lastIndex = kept.length - 1;
     const notice = `\n\n…(${omitted} more message${omitted === 1 ? "" : "s"} trimmed)`;
-    const lastWithNotice = `${kept[lastIndex]}${notice}`;
+    const room = maxLength - notice.length;
 
-    if (lastWithNotice.length <= maxLength) {
-      kept[lastIndex] = lastWithNotice;
-    }
+    // Always surface that content was trimmed. If the last kept chunk leaves no
+    // room for the notice, trim it just enough so the marker still fits.
+    kept[lastIndex] = kept[lastIndex].length <= room
+      ? `${kept[lastIndex]}${notice}`
+      : `${kept[lastIndex].slice(0, Math.max(0, room)).trimEnd()}${notice}`;
 
     return kept;
   }
