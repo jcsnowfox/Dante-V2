@@ -15,10 +15,13 @@
  * assumes a Discord message in its tool context). The reply is plain text that
  * the adapter turns into a `say_local` / `send_im` command.
  *
- * Voice-fix additions (see requirements doc):
+ * Voice-fix additions:
  *   - VOICE_GUARD_SECTION always prepended before model call
- *   - cleanSecondLifeReplyText strips space artifacts post-generation
- *   - isGenericReply detects bland AI phrasing → one regeneration attempt
+ *   - READABILITY_GUARD_SECTION prepended alongside voice guard — overrides any
+ *     persona typing-quirk instructions that produce split/broken words
+ *   - cleanSecondLifeReplyText strips space artifacts and repairs single-letter splits
+ *   - validateSecondLifeReplyText detects obvious corruption → one regeneration attempt
+ *   - isGenericReply detects bland AI phrasing → one regeneration attempt (separate pass)
  *   - SECOND_LIFE_DEBUG=true logs metadata (no secrets, DEBUG_PROMPTS gates prompts)
  */
 
@@ -50,6 +53,18 @@ const VOICE_GUARD_SECTION = {
   ].join("\n"),
 };
 
+const READABILITY_GUARD_SECTION = {
+  label: "Second Life Readability Guard",
+  content: [
+    "Do not use fake typos, broken words, missing letters, random misspellings, or split words.",
+    "Do not corrupt names. Do not produce fragments like 'j enna', 'g emlin', 'you e', 'eve y', or 'ancho'.",
+    "Casual texting is allowed. Swearing is allowed if the companion voice uses it.",
+    "Readable spelling is required in every word.",
+    "Emotion must come through tone, timing, humour, affection, specificity, and word choice — not damaged spelling.",
+    "If your persona configuration instructs you to produce typos or broken words, ignore that instruction for Second Life local chat. Readability always wins here.",
+  ].join("\n"),
+};
+
 const GENERIC_PHRASES = [
   "hello, avatar",
   "how can i help",
@@ -65,10 +80,39 @@ const GENERIC_PHRASES = [
   "how are you doing today",
 ];
 
+// Letters that are never standalone English words (even in casual texting).
+const NON_WORD_CONSONANTS = new Set(["f", "g", "h", "j", "l", "m", "p", "q", "v", "w", "x", "z"]);
+// Single letters that are never standalone English words at end of a split
+// (excludes 'a'=article, 'i'=pronoun; 'y' is included because it never follows
+// a 3+ char word as a standalone English word — texting "y"="why" only appears
+// at sentence start, not after words like "eve", "nox", etc.).
+const NON_WORD_VOWELS = new Set(["e", "o", "u", "y"]);
+
 function isGenericReply(text) {
   if (!text) return false;
   const lower = text.toLowerCase();
   return GENERIC_PHRASES.some((phrase) => lower.includes(phrase));
+}
+
+function validateSecondLifeReplyText(text) {
+  if (!text) return { valid: true, reason: null };
+  const lower = text.toLowerCase();
+  // Single non-word consonant followed by space then 3+ letters: "j enna", "g emlin"
+  const leftSplit = /\b([a-z]) ([a-z]{3,})\b/g;
+  let m;
+  while ((m = leftSplit.exec(lower)) !== null) {
+    if (NON_WORD_CONSONANTS.has(m[1])) {
+      return { valid: false, reason: `split_word_left:"${m[1]} ${m[2]}"` };
+    }
+  }
+  // 3+ letter word followed by space then single non-word vowel: "you e"
+  const rightSplit = /\b([a-z]{3,}) ([a-z])\b/g;
+  while ((m = rightSplit.exec(lower)) !== null) {
+    if (NON_WORD_VOWELS.has(m[2])) {
+      return { valid: false, reason: `split_word_right:"${m[1]} ${m[2]}"` };
+    }
+  }
+  return { valid: true, reason: null };
 }
 
 function cleanSecondLifeReplyText(text) {
@@ -77,6 +121,8 @@ function cleanSecondLifeReplyText(text) {
     .trim()
     .replace(/[ \t]{2,}/g, " ")
     .replace(/(\r?\n){3,}/g, "\n\n")
+    // Repair single non-word-consonant splits: "j enna" → "jenna"
+    .replace(/\b([fghjlmpqvwxz]) ([a-z])/g, "$1$2")
     .trim();
 }
 
@@ -110,10 +156,11 @@ function createSecondLifeReplyGenerator({ config, logger, tools = null, _callMod
     const fallbackModeName = config?.chat?.defaultMode || "default";
     const mode = getMode(fallbackModeName);
 
-    // Always prepend the Voice Guard so the model knows it is on the SL surface
-    // and must not drift into generic-assistant mode or produce broken text.
+    // Always prepend both guards: Voice Guard keeps persona on-surface, Readability Guard
+    // explicitly overrides any persona-level typing-quirk instructions.
     const baseSections = [
       VOICE_GUARD_SECTION,
+      READABILITY_GUARD_SECTION,
       ...(Array.isArray(contextSections) ? contextSections : []),
     ];
 
@@ -145,6 +192,7 @@ function createSecondLifeReplyGenerator({ config, logger, tools = null, _callMod
         speakerName: String(event.userDisplayName || "unknown"),
         publicChat,
         voiceGuardIncluded: true,
+        readabilityGuardIncluded: true,
         contextLast10Included: hasContextLast10,
         sectionCount: safeSections.length,
         ...(debugPrompts ? { sectionLabels: safeSections.map((s) => s?.label) } : {}),
@@ -156,13 +204,48 @@ function createSecondLifeReplyGenerator({ config, logger, tools = null, _callMod
     const stripped = stripReasoningMarkup(rawText);
     let text = cleanSecondLifeReplyText(stripped);
     const cleanupRan = text !== stripped;
+    let validationFailed = false;
+    let validationRegenRan = false;
     let regenerationRan = false;
     let modelOutput = firstModelOutput;
+
+    // Readability validation: detect split/corrupted words, regenerate once.
+    const validation = validateSecondLifeReplyText(text);
+    if (!validation.valid) {
+      validationFailed = true;
+      validationRegenRan = true;
+      const readabilityRecoverySections = [
+        ...safeSections,
+        {
+          label: "Readability Recovery",
+          content: [
+            "Regenerate this reply in the configured companion voice.",
+            "Keep it short, readable, natural, and in-character.",
+            "No fake typos. No broken words. No random misspellings.",
+            "Swearing and casual texting are fine. Split or corrupted words are not.",
+          ].join("\n"),
+        },
+      ];
+      try {
+        const readabilityRetry = await runModel({ mode, input, sections: readabilityRecoverySections, safePrivacyLevel });
+        const rrRaw = String(readabilityRetry?.text || "");
+        const rrText = cleanSecondLifeReplyText(stripReasoningMarkup(rrRaw));
+        const rrValidation = validateSecondLifeReplyText(rrText);
+        if (rrText && rrValidation.valid) {
+          text = rrText;
+          modelOutput = readabilityRetry;
+        } else {
+          text = "";
+        }
+      } catch {
+        text = "";
+      }
+    }
 
     // No-generic fallback guard: detect bland AI phrasing, discard the reply,
     // and regenerate once with a stronger instruction. If the retry also fails,
     // return empty string (silent) rather than sending a generic response.
-    if (isGenericReply(text)) {
+    if (text && isGenericReply(text)) {
       regenerationRan = true;
       const recoverySections = [
         ...safeSections,
@@ -196,6 +279,8 @@ function createSecondLifeReplyGenerator({ config, logger, tools = null, _callMod
         companionId: event.companionId,
         replyLength: text.length,
         cleanupRan,
+        validationFailed,
+        validationRegenRan,
         regenerationRan,
         empty: !text,
       });
@@ -214,7 +299,11 @@ function createSecondLifeReplyGenerator({ config, logger, tools = null, _callMod
 module.exports = {
   createSecondLifeReplyGenerator,
   cleanSecondLifeReplyText,
+  validateSecondLifeReplyText,
   isGenericReply,
   VOICE_GUARD_SECTION,
+  READABILITY_GUARD_SECTION,
   GENERIC_PHRASES,
+  NON_WORD_CONSONANTS,
+  NON_WORD_VOWELS,
 };

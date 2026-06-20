@@ -97,6 +97,45 @@ function buildMentionedEntityContext(entity) {
   return lines.join("\n");
 }
 
+// ── Phase 25 — Bang command detection ────────────────────────────────────────
+
+/**
+ * Returns { isBangCommand: true, commandName, commandArgs, commandText } when
+ * the message starts with "!", otherwise { isBangCommand: false }. This check
+ * runs BEFORE the social engine so command messages never reach the model.
+ */
+function detectBangCommand(messageText) {
+  const text = asText(messageText).trim();
+  if (!text.startsWith("!")) return { isBangCommand: false };
+  const parts = text.slice(1).split(/\s+/);
+  const commandName = (parts[0] || "").toLowerCase();
+  const commandArgs = parts.slice(1).join(" ");
+  return {
+    isBangCommand: Boolean(commandName),
+    commandName,
+    commandArgs,
+    commandText: text,
+  };
+}
+
+// Short, plain acknowledgement texts (no LLM) for common safety controls.
+// Used only when secondLife.commandAcknowledgementsEnabled === true.
+const COMMAND_ACKNOWLEDGEMENTS = {
+  autonomy_on: "On.",
+  autonomy_off: "Off.",
+  local_on: "On.",
+  local_off: "Off.",
+  strangers_on: "On.",
+  strangers_off: "Off.",
+  sleep: "Sleeping.",
+  wake: "Awake.",
+  quiet: "Quiet.",
+  emergency_stop: "Stopped.",
+  return_home: "Going home.",
+  clear_queue: "Done.",
+  block_avatar: "Done.",
+};
+
 function createSecondLifeAdapter({
   secondLife,
   companion,
@@ -789,6 +828,78 @@ function createSecondLifeAdapter({
     return null;
   }
 
+  /**
+   * Phase 25 — format the result of a bang-command event into the clean command
+   * response shape: { handled, replied, action:"command", commandType, applied, state }.
+   * Optionally enqueues a short plain-text acknowledgement (no LLM) when
+   * settings.commandAcknowledgementsEnabled === true.
+   */
+  async function buildBangCommandResult({ bangCmd, commandOutcome, companionId, settings, worldState, event }) {
+    const debug = process.env.SECOND_LIFE_DEBUG === "true";
+
+    if (commandOutcome === null) {
+      if (debug) {
+        logger?.info?.("[second-life] Bang command: unknown trigger.", { companionId, commandName: bangCmd.commandName, applied: false });
+      }
+      return { handled: true, replied: false, action: "command", commandType: "unknown", applied: false, state: { reason: "unknown_command", commandName: bangCmd.commandName } };
+    }
+
+    // Denied by permission check — reason string starts with "command_"
+    if (commandOutcome.reason && commandOutcome.reason.startsWith("command_")) {
+      const denyReason = commandOutcome.reason.slice("command_".length);
+      if (debug) {
+        logger?.info?.("[second-life] Bang command: denied.", { companionId, commandName: bangCmd.commandName, commandType: commandOutcome.command?.commandType || "unknown", applied: false, state: { reason: denyReason } });
+      }
+      return { handled: true, replied: false, action: "command", commandType: commandOutcome.command?.commandType || "unknown", applied: false, state: { reason: denyReason } };
+    }
+
+    // Applied — either a safety control or a queued command.
+    const safetyControl = commandOutcome.safetyControl || null;
+    const commandType = safetyControl ? "system" : (commandOutcome.command?.commandType || commandOutcome.commandType || "custom");
+
+    const state = {};
+    if (safetyControl) state.safetyControl = safetyControl;
+    if (commandOutcome.autonomyPaused !== undefined) state.autonomyPaused = commandOutcome.autonomyPaused;
+    if (commandOutcome.cleared !== undefined) state.cleared = commandOutcome.cleared;
+    if (commandOutcome.blocked !== undefined) state.blocked = commandOutcome.blocked;
+    if (commandOutcome.reason) state.reason = commandOutcome.reason;
+    if (commandOutcome.commandResolved || commandOutcome.worldAction) state.queued = true;
+
+    if (debug) {
+      logger?.info?.("[second-life] Bang command: applied.", {
+        companionId,
+        commandName: bangCmd.commandName,
+        commandType,
+        applied: true,
+        state,
+      });
+    }
+
+    // Optional short plain-text acknowledgement — no LLM involved.
+    const ackEnabled = settings?.commandAcknowledgementsEnabled === true;
+    if (ackEnabled && safetyControl && COMMAND_ACKNOWLEDGEMENTS[safetyControl]) {
+      const ackText = COMMAND_ACKNOWLEDGEMENTS[safetyControl];
+      const agentUuid = asText(settings?.agentUuid) || asText(worldState?.agentUuid);
+      const commandTypeSay = event.eventType === "instant_message" ? "send_im" : "say_local";
+      const avatarUuid = asText(event.externalUserId || event.avatarUuid);
+      const ackCmd = await safe(
+        () => secondLife.enqueueCommand({
+          companionId,
+          agentUuid,
+          commandType: commandTypeSay,
+          payload: { text: ackText, avatarUuid, region: asText(event.region) || asText(worldState?.currentRegion) },
+          priority: 100,
+          sourceEventId: asText(event.sourceEventId),
+        }),
+        null,
+        "enqueueCommand(ack)",
+      );
+      return { handled: true, replied: Boolean(ackCmd), action: "command", commandType, applied: true, state, responseText: ackText };
+    }
+
+    return { handled: true, replied: false, action: "command", commandType, applied: true, state };
+  }
+
   async function handleConversationalEvent({ companionId, settings, worldState, event }) {
     const avatarUuid = asText(event.externalUserId || event.avatarUuid).trim();
     const objectUuid = asText(event.objectUuid).trim();
@@ -830,7 +941,16 @@ function createSecondLifeAdapter({
       );
     }
 
-    // Phase 9 — command tokens are handled before the social/reply path.
+    // Phase 25 — bang command gate: any "!..." message is a command attempt and
+    // must NEVER reach the social engine or the model. Unknown commands return a
+    // clean error response so the caller knows the trigger was not recognised.
+    const bangCmd = detectBangCommand(asText(event.messageText));
+    if (bangCmd.isBangCommand) {
+      const commandOutcome = await tryHandleCommand({ companionId, settings, worldState, resolved, event });
+      return buildBangCommandResult({ bangCmd, commandOutcome, companionId, settings, worldState, event });
+    }
+
+    // Phase 9 — non-bang command tokens are handled before the social/reply path.
     const commandOutcome = await tryHandleCommand({ companionId, settings, worldState, resolved, event });
     if (commandOutcome) return commandOutcome;
 
@@ -1163,4 +1283,9 @@ function createSecondLifeAdapter({
   };
 }
 
-module.exports = { createSecondLifeAdapter };
+module.exports = {
+  createSecondLifeAdapter,
+  detectBangCommand,
+  detectRelationshipQuestionIntent,
+  COMMAND_ACKNOWLEDGEMENTS,
+};
