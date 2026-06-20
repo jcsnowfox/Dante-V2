@@ -1,6 +1,6 @@
 const { getLlmClient, hasLlmApiKey, resolveChatModel, resolveLlmProviderConfig } = require("../../llm/client");
 const { extractWebSearchSources } = require("./webSearch");
-const { runToolLoop } = require("./runToolLoop");
+const { runToolLoop, isContentFilterError } = require("./runToolLoop");
 const { buildChatRequest } = require("./buildChatRequest");
 const {
   getCachedOpenRouterModelToolSupport,
@@ -422,7 +422,11 @@ function buildMissingOutputText({ response = {}, toolLoop = null } = {}) {
     : [];
   const outputSummary = outputTypes.length ? ` output types: ${outputTypes.join(", ")}.` : "";
   const error = response.error?.message || response.error;
-  const errorSummary = error ? ` provider error: ${error}.` : "";
+  const errorSummary = error
+    ? (isContentFilterError(error)
+      ? " The model provider declined this request."
+      : ` provider error: ${error}.`)
+    : "";
   const incompleteReason = response.incomplete_details?.reason;
   const incompleteSummary = incompleteReason ? ` incomplete reason: ${incompleteReason}.` : "";
   const failedProviderResponse = response.status === "failed" || Boolean(error);

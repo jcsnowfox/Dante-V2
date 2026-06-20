@@ -113,7 +113,7 @@ check("curator ignores internalThought on user events", !curatorOutput.includes(
 // System-prompt instruction communicates the tag + hidden guarantee.
 const instruction = buildInternalThoughtInstruction();
 check("instruction mentions the <think> tag", /<think>/.test(instruction));
-check("instruction states the thought is hidden/internal", /never shown|internal/i.test(instruction));
+check("instruction scopes the think block to planning only", /planning only|plan your reply/i.test(instruction));
 
 console.log("");
 console.log("================================");

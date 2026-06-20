@@ -156,6 +156,7 @@ function loadConfig() {
       defaultMode: process.env.DEFAULT_CHAT_MODE || "default",
       includeTimeContext: readBoolean(process.env.CHAT_INCLUDE_TIME_CONTEXT, true),
       timezone: normalizeIanaTimezone(process.env.CHAT_TIMEZONE || "UTC"),
+      internalThoughtEnabled: readBoolean(process.env.CHAT_INTERNAL_THOUGHT_ENABLED, false),
       placeholderModel: llmChatModel,
       promptBlocks: {
         personaName: process.env.CHAT_PROMPT_PERSONA_NAME || "Ghostlight",
