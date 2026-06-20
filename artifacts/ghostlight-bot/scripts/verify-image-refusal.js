@@ -125,6 +125,60 @@ async function main() {
     assert(!isStandaloneProviderRefusal(""));
   });
 
+  console.log("\n4. stored-context sanitizer (recovers poisoned history/memory)");
+
+  const { sanitizeStoredText, containsProviderRefusalText, SCRUBBED_PLACEHOLDER } = require("../src/chat/pipeline/providerRefusal");
+
+  check("(f) scrubs a stored bare refusal", () => {
+    assert.strictEqual(
+      sanitizeStoredText("The request was rejected because it was considered high risk"),
+      SCRUBBED_PLACEHOLDER,
+    );
+  });
+
+  check("(f) scrubs a poisoned image-analysis description (wrapped)", () => {
+    const wrapped = "[FISH attached an image. Description follows:]\nThe request was rejected because it was considered high risk";
+    assert.strictEqual(sanitizeStoredText(wrapped), SCRUBBED_PLACEHOLDER);
+  });
+
+  check("(f) scrubs this app's own leaked fallback string", () => {
+    assert.strictEqual(sanitizeStoredText("The model provider declined this request."), SCRUBBED_PLACEHOLDER);
+  });
+
+  check("(f) leaves ordinary stored text untouched", () => {
+    const ok = "FISH: hey, did you see that head I linked earlier?";
+    assert.strictEqual(sanitizeStoredText(ok), ok);
+    assert.strictEqual(containsProviderRefusalText(ok), false);
+    assert.strictEqual(sanitizeStoredText(""), "");
+  });
+
+  console.log("\n5. buildChatInput scrubs poisoned history before it reaches the provider");
+
+  const { buildChatInput, formatMemories } = require("../src/chat/pipeline/buildChatInput");
+
+  check("(g) poisoned history turn is not relayed verbatim", () => {
+    const messages = buildChatInput({
+      input: { content: "Hello?", authorName: "FISH" },
+      recentHistory: [
+        { role: "assistant", isBot: true, content: "The request was rejected because it was considered high risk" },
+        { role: "user", isBot: false, authorName: "FISH", content: "you there?" },
+      ],
+      includeSpeakerNames: true,
+    });
+    const flat = JSON.stringify(messages);
+    assert(!/considered high risk|request was rejected/i.test(flat), "poisoned history leaked into request");
+    assert(flat.includes("you there?"), "legit history was lost");
+  });
+
+  check("(g) poisoned memory line is scrubbed", () => {
+    const out = formatMemories([
+      { memoryType: "anchor", content: "The request was rejected because it was considered high risk" },
+      { memoryType: "anchor", content: "FISH likes the EvoX head named Kane." },
+    ]);
+    assert(!/considered high risk|request was rejected/i.test(out), "poisoned memory leaked");
+    assert(out.includes("Kane"), "legit memory was lost");
+  });
+
   console.log("\n" + "=".repeat(40));
   console.log(`  PASSED:  ${passed}`);
   console.log(`  FAILED:  ${failed}`);

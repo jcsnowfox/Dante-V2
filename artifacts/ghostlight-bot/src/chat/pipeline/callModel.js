@@ -11,6 +11,7 @@ const {
   formatRecentHistory,
   formatTimestamp,
 } = require("./buildChatInput");
+const { isStandaloneProviderRefusal } = require("./providerRefusal");
 
 function isToolUseUnsupportedError(error) {
   const status = Number(error?.status || error?.code || 0);
@@ -546,19 +547,6 @@ function isReasoningOnlyResponse(response = {}) {
   const outputTypes = getResponseOutputTypes(response);
 
   return outputTypes.length > 0 && outputTypes.every((type) => type === "reasoning");
-}
-
-// Safety net: some providers emit a content-filter refusal as the visible
-// output_text (not as response.error), which chooseResponseText would otherwise
-// relay verbatim as the companion's reply. Detect only SHORT, standalone refusal
-// templates so legit replies that merely mention these phrases are untouched.
-const STANDALONE_PROVIDER_REFUSAL_PATTERN =
-  /^\s*(the |this |your )?request (was|is|has been) rejected|^\s*rejected because|considered high risk|flagged (by the safety system|as high risk)/i;
-
-function isStandaloneProviderRefusal(text) {
-  const trimmed = String(text || "").trim();
-  if (!trimmed || trimmed.length > 320) return false;
-  return STANDALONE_PROVIDER_REFUSAL_PATTERN.test(trimmed);
 }
 
 async function callModel({

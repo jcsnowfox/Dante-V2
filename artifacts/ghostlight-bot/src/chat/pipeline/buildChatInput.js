@@ -1,3 +1,5 @@
+const { sanitizeStoredText } = require("./providerRefusal");
+
 function formatRecentHistory(recentHistory, options = {}) {
   if (!recentHistory.length) {
     return "None";
@@ -15,7 +17,7 @@ function buildHistoryText(item) {
   const baseAuthor = item.authorName || item.author?.username || item.role || "unknown";
   const heartbeatLabel = metadata.actionLabel || metadata.actionId || metadata.executorType || "Heartbeat action";
   const automationLabel = metadata.automationLabel || metadata.automationType || metadata.automationId || "scheduled automation";
-  const content = String(item.content || item.text || "").trim();
+  const content = sanitizeStoredText(String(item.content || item.text || "").trim());
 
   if (metadata.heartbeat) {
     return `Proactive action triggered: ${heartbeatLabel}\nFrom: ${baseAuthor}\nContent: ${content}`;
@@ -42,7 +44,7 @@ function buildHistoryRole(item) {
 
 function buildStructuredHistoryText(item, options = {}) {
   const metadata = item.metadata || {};
-  const content = String(item.content || item.text || "").trim();
+  const content = sanitizeStoredText(String(item.content || item.text || "").trim());
   const authorName = String(item.authorName || item.author?.username || "").trim();
   const role = buildHistoryRole(item);
 
@@ -73,13 +75,14 @@ function buildHistoryMessages(recentHistory = [], options = {}) {
 
 function formatMemoryLine(memory, index) {
   if (typeof memory === "string") {
-    return `${index + 1}. ${memory}`;
+    return `${index + 1}. ${sanitizeStoredText(memory)}`;
   }
 
   const referenceDate = memory.referenceDate || memory.reference_date;
   const dateNote = referenceDate ? ` (date: ${referenceDate})` : "";
   const title = memory.title ? `${memory.title}: ` : "";
-  return `${index + 1}.${dateNote} ${title}${memory.content || memory.text || JSON.stringify(memory)}`;
+  const body = sanitizeStoredText(memory.content || memory.text || JSON.stringify(memory));
+  return `${index + 1}.${dateNote} ${title}${body}`;
 }
 
 function formatMemorySection(label, items) {
