@@ -451,6 +451,10 @@ function collectResponseOutputTextParts(response = {}) {
   const parts = [];
 
   for (const output of Array.isArray(response.output) ? response.output : []) {
+    if (output?.type === "reasoning") {
+      continue;
+    }
+
     if (typeof output?.text === "string") {
       parts.push(output.text);
     }
@@ -465,6 +469,10 @@ function collectResponseOutputTextParts(response = {}) {
     }
 
     for (const content of Array.isArray(output?.content) ? output.content : []) {
+      if (content?.type === "reasoning") {
+        continue;
+      }
+
       if (typeof content === "string") {
         parts.push(content);
       } else if (typeof content?.text === "string") {

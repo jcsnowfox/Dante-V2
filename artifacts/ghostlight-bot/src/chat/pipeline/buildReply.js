@@ -73,8 +73,29 @@ function stripMirroredUserGifUrls(text, input) {
     .trim();
 }
 
+const REASONING_TAG_NAMES = "think|thinking|reason|reasoning|reflection|analysis|scratchpad";
+const REASONING_TAG_BLOCK_PATTERN = new RegExp(`<(${REASONING_TAG_NAMES})\\b[^>]*>[\\s\\S]*?<\\/\\1>`, "gi");
+const REASONING_TAG_OPEN_PATTERN = new RegExp(`^\\s*<(${REASONING_TAG_NAMES})\\b[^>]*>`, "i");
+const REASONING_TAG_CLOSE_PATTERN = new RegExp(`<\\/(${REASONING_TAG_NAMES})\\s*>`, "i");
+
+function stripReasoningMarkup(text) {
+  let result = String(text || "");
+
+  result = result.replace(REASONING_TAG_BLOCK_PATTERN, "");
+
+  if (REASONING_TAG_OPEN_PATTERN.test(result)) {
+    const closeMatch = result.match(REASONING_TAG_CLOSE_PATTERN);
+
+    result = closeMatch
+      ? result.slice(closeMatch.index + closeMatch[0].length)
+      : "";
+  }
+
+  return result.trim();
+}
+
 function cleanModelReplyText(text, input) {
-  const originalText = String(text || "").trim();
+  const originalText = stripReasoningMarkup(text);
   const strippedText = stripMirroredUserGifUrls(originalText, input);
 
   if (originalText && !strippedText) {
@@ -145,4 +166,5 @@ module.exports = {
   cleanModelReplyText,
   collectUserGifUrls,
   stripMirroredUserGifUrls,
+  stripReasoningMarkup,
 };
