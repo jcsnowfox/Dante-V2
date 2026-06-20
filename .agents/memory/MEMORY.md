@@ -1,0 +1,9 @@
+- [Git in main agent](git-workflow.md) — main agent cannot commit/push (blocked, even inside grep); checkpoint auto-commits at turn end; delegate pushes to a Project Task.
+- [Railway online-but-offline](railway-discord-bot.md) — a Discord bot "online in Railway, offline in Discord" usually means the deploy runs a placeholder web server, not the bot.
+- [Replit decoupling](replit-decoupling.md) — `.replit`/`.replitignore` can't be deleted (gitignore them); deleting an artifact's `.replit-artifact/` deregisters it but keeps code; Vite artifacts broke the Railway build.
+- [Runtime-settings whitelist](ghostlight-runtime-settings-whitelist.md) — a ghostlight-bot admin setting "saves" but never applies/renders unless its key is in EDITABLE_RUNTIME_SETTINGS.
+- [Qdrant memory layer](qdrant-memory-layer.md) — collection is created lazily on first WRITE; READ paths must tolerate a missing collection (allow404) or they 404-spam on fresh deploys.
+- [Workspace has no real DB](workspace-no-real-db.md) — workspace DATABASE_URL is a placeholder (`{Postgres.DATABASE_URL}`); guard DB-connecting tooling on a real `postgres://` URL, not just presence.
+- [Ghostlight admin helper builders](ghostlight-admin-helpers.md) — admin pages: preview vs full-bot helper drift, missing route cases, and action handlers must pass `context` to `withAdmin` (else 500).
+- [Ghostlight-bot validation](ghostlight-bot-validation.md) — no `typecheck` script (plain CommonJS); validate with `node --check` per file + `scripts/verify-*.js` harnesses, not pnpm typecheck.
+- [Ghostlight personality source](ghostlight-personality-source.md) — personality lives ONLY in config.chat.promptBlocks; Prompt Profiles are SL-overlay-only; adult is a separate Discord adultPrivateMode feature.

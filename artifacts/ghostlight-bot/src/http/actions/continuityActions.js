@@ -1,0 +1,157 @@
+"use strict";
+
+const { parseRequestForm } = require("../adminRequestUtils");
+const { normalizeTheme, buildReturnLocation } = require("../adminUiHelpers");
+const { BOOLEAN_FLAGS, NUMERIC_FIELDS, STRING_FIELDS } = require("../../continuity/continuityConfig");
+
+const RETURN_PATH = "/admin/continuity";
+
+function fieldValue(fields, key) {
+  const raw = fields[key];
+  return String(Array.isArray(raw) ? raw[0] : raw || "").trim();
+}
+
+function redirect(innerRes, { returnTo, theme, message, error }) {
+  return innerRes.writeHead(303, {
+    Location: buildReturnLocation({ returnTo, fallbackPath: RETURN_PATH, theme, message, error }),
+  }).end();
+}
+
+function buildConfigFromFields(fields) {
+  const config = {};
+  for (const flag of BOOLEAN_FLAGS) {
+    config[flag] = Boolean(fields[flag]);
+  }
+  for (const [field, spec] of Object.entries(NUMERIC_FIELDS)) {
+    const n = Number(fieldValue(fields, field));
+    config[field] = Number.isFinite(n) ? Math.max(spec.min, Math.min(spec.max, n)) : spec.default;
+  }
+  for (const field of STRING_FIELDS) {
+    config[field] = fieldValue(fields, field);
+  }
+  return config;
+}
+
+async function handleContinuityActions({ req, res, url, context, withAdmin }) {
+  // Save settings
+  if (req.method === "POST" && url.pathname === "/admin/actions/continuity-save") {
+    return withAdmin(async (innerReq, innerRes, innerContext) => {
+      const { fields } = await parseRequestForm(innerReq);
+      const theme = normalizeTheme(fields.theme);
+      const returnTo = fieldValue(fields, "returnTo") || RETURN_PATH;
+      const engine = innerContext.continuity || null;
+
+      if (!engine || !engine.store || engine.store.available !== true) {
+        return redirect(innerRes, { returnTo, theme, error: "No database configured — continuity engine is inert." });
+      }
+
+      const newConfig = buildConfigFromFields(fields);
+      Object.assign(engine.config, newConfig);
+      return redirect(innerRes, { returnTo, theme, message: "Continuity settings saved." });
+    })(req, res, context);
+  }
+
+  // Toggle enable/pause
+  if (req.method === "POST" && url.pathname === "/admin/actions/continuity-toggle") {
+    return withAdmin(async (innerReq, innerRes, innerContext) => {
+      const { fields } = await parseRequestForm(innerReq);
+      const theme = normalizeTheme(fields.theme);
+      const returnTo = fieldValue(fields, "returnTo") || RETURN_PATH;
+      const engine = innerContext.continuity || null;
+      if (!engine) return redirect(innerRes, { returnTo, theme, error: "Engine not available." });
+      const enable = fieldValue(fields, "enable") === "true";
+      engine.config.continuity_enabled = enable;
+      return redirect(innerRes, { returnTo, theme, message: enable ? "Continuity enabled." : "Continuity paused." });
+    })(req, res, context);
+  }
+
+  // Resolve item
+  if (req.method === "POST" && url.pathname === "/admin/actions/continuity-resolve") {
+    return withAdmin(async (innerReq, innerRes, innerContext) => {
+      const { fields } = await parseRequestForm(innerReq);
+      const theme = normalizeTheme(fields.theme);
+      const returnTo = fieldValue(fields, "returnTo") || RETURN_PATH;
+      const itemId = Number(fieldValue(fields, "itemId"));
+      const engine = innerContext.continuity || null;
+      if (!engine || !itemId) return redirect(innerRes, { returnTo, theme, error: "Invalid request." });
+      try {
+        await engine.storeWrapper.resolve(itemId, fieldValue(fields, "resolution") || "Resolved via admin.");
+        return redirect(innerRes, { returnTo, theme, message: "Item resolved." });
+      } catch (err) {
+        return redirect(innerRes, { returnTo, theme, error: `Resolve failed: ${err.message}` });
+      }
+    })(req, res, context);
+  }
+
+  // Archive item
+  if (req.method === "POST" && url.pathname === "/admin/actions/continuity-archive") {
+    return withAdmin(async (innerReq, innerRes, innerContext) => {
+      const { fields } = await parseRequestForm(innerReq);
+      const theme = normalizeTheme(fields.theme);
+      const returnTo = fieldValue(fields, "returnTo") || RETURN_PATH;
+      const itemId = Number(fieldValue(fields, "itemId"));
+      const engine = innerContext.continuity || null;
+      if (!engine || !itemId) return redirect(innerRes, { returnTo, theme, error: "Invalid request." });
+      try {
+        await engine.storeWrapper.archive(itemId);
+        return redirect(innerRes, { returnTo, theme, message: "Item archived." });
+      } catch (err) {
+        return redirect(innerRes, { returnTo, theme, error: `Archive failed: ${err.message}` });
+      }
+    })(req, res, context);
+  }
+
+  // Delete item
+  if (req.method === "POST" && url.pathname === "/admin/actions/continuity-delete") {
+    return withAdmin(async (innerReq, innerRes, innerContext) => {
+      const { fields } = await parseRequestForm(innerReq);
+      const theme = normalizeTheme(fields.theme);
+      const returnTo = fieldValue(fields, "returnTo") || RETURN_PATH;
+      const itemId = Number(fieldValue(fields, "itemId"));
+      const engine = innerContext.continuity || null;
+      if (!engine || !itemId) return redirect(innerRes, { returnTo, theme, error: "Invalid request." });
+      try {
+        await engine.storeWrapper.delete(itemId);
+        return redirect(innerRes, { returnTo, theme, message: "Item deleted." });
+      } catch (err) {
+        return redirect(innerRes, { returnTo, theme, error: `Delete failed: ${err.message}` });
+      }
+    })(req, res, context);
+  }
+
+  // Mark promise kept
+  if (req.method === "POST" && url.pathname === "/admin/actions/continuity-promise-kept") {
+    return withAdmin(async (innerReq, innerRes, innerContext) => {
+      const { fields } = await parseRequestForm(innerReq);
+      const theme = normalizeTheme(fields.theme);
+      const returnTo = fieldValue(fields, "returnTo") || RETURN_PATH;
+      const itemId = Number(fieldValue(fields, "itemId"));
+      const engine = innerContext.continuity || null;
+      if (!engine || !itemId) return redirect(innerRes, { returnTo, theme, error: "Invalid request." });
+      try {
+        await engine.storeWrapper.resolve(itemId, "Promise kept.");
+        return redirect(innerRes, { returnTo, theme, message: "Promise marked kept." });
+      } catch (err) {
+        return redirect(innerRes, { returnTo, theme, error: `Failed: ${err.message}` });
+      }
+    })(req, res, context);
+  }
+
+  // Pause all follow-ups (set proactive_followups_enabled = false)
+  if (req.method === "POST" && url.pathname === "/admin/actions/continuity-pause-followups") {
+    return withAdmin(async (innerReq, innerRes, innerContext) => {
+      const { fields } = await parseRequestForm(innerReq);
+      const theme = normalizeTheme(fields.theme);
+      const returnTo = fieldValue(fields, "returnTo") || RETURN_PATH;
+      const engine = innerContext.continuity || null;
+      if (!engine) return redirect(innerRes, { returnTo, theme, error: "Engine not available." });
+      engine.config.proactive_followups_enabled = false;
+      engine.scheduler?.stop?.();
+      return redirect(innerRes, { returnTo, theme, message: "Proactive follow-ups paused." });
+    })(req, res, context);
+  }
+
+  return false;
+}
+
+module.exports = { handleContinuityActions };

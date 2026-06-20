@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Engine Settings</title>
+  <desc id="desc">Ghostlight AI Feedback and Learning cinematic SVG asset.</desc>
+  <defs>
+    <linearGradient id="line" x1="90" y1="82" x2="420" y2="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.36" stop-color="#efe9ff"/>
+      <stop offset="0.68" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#6d28d9"/>
+    </linearGradient>
+    <linearGradient id="fill" x1="110" y1="100" x2="410" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".66"/>
+      <stop offset=".54" stop-color="#ddd6fe" stop-opacity=".3"/>
+      <stop offset="1" stop-color="#6d28d9" stop-opacity=".14"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="50%" cy="48%" r="58%">
+      <stop offset="0" stop-color="#ddd6fe" stop-opacity=".62"/>
+      <stop offset=".56" stop-color="#a78bfa" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#6d28d9" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softGlow" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0.60 0 0 0 0.42  0 0.48 0 0 0.25  0 0 0.90 0 0.90  0 0 0 .72 0"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <style>
+      .ring { fill:url(#halo); opacity:.62; }
+      .line { fill:none; stroke:url(#line); stroke-width:18; stroke-linecap:round; stroke-linejoin:round; filter:url(#softGlow); }
+      .thin { fill:none; stroke:url(#line); stroke-width:12; stroke-linecap:round; stroke-linejoin:round; filter:url(#softGlow); }
+      .micro { fill:none; stroke:url(#line); stroke-width:8; stroke-linecap:round; stroke-linejoin:round; filter:url(#softGlow); }
+      .fill { fill:url(#fill); stroke:url(#line); stroke-width:14; stroke-linecap:round; stroke-linejoin:round; filter:url(#softGlow); }
+      .spark { fill:#fff7ff; filter:url(#softGlow); }
+      .dot { fill:#22c55e; filter:url(#softGlow); }
+    </style>
+  </defs>
+  <circle class="ring" cx="256" cy="256" r="190"/>
+  <path class="line" d="M256 104 L292 118 L304 158 L344 144 L374 174 L360 214 L398 232 L398 292 L360 310 L374 350 L344 380 L304 366 L292 406 L256 420 L220 406 L208 366 L168 380 L138 350 L152 310 L114 292 L114 232 L152 214 L138 174 L168 144 L208 158 L220 118 Z"/><circle class="fill" cx="256" cy="262" r="62"/><circle class="dot" cx="256" cy="262" r="12"/>
+</svg>

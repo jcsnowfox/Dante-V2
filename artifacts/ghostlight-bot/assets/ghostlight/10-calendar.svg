@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Calendar</title>
+  <desc id="desc">Ghostlight cinematic SVG icon with luminous silver linework and teal violet glow.</desc>
+  <defs>
+    <linearGradient id="ghostStroke" x1="80" y1="72" x2="432" y2="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.38" stop-color="#DFF9FF"/>
+      <stop offset="0.68" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#BE7BFF"/>
+    </linearGradient>
+    <linearGradient id="softFill" x1="112" y1="120" x2="400" y2="408" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#BE7BFF" stop-opacity="0.16"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="55%">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="0.55" stop-color="#BE7BFF" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#050815" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#162034"/>
+      <stop offset="0.52" stop-color="#090D18"/>
+      <stop offset="1" stop-color="#02040B"/>
+    </radialGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="3.2" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0.55 0 0 0 0.22  0 0.75 0 0 0.64  0 0 1 0 1  0 0 0 0.85 0" result="glowColor"/>
+      <feMerge>
+        <feMergeNode in="glowColor"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="sparkGlow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="4.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .line { fill: none; stroke: url(#ghostStroke); stroke-width: 18; stroke-linecap: round; stroke-linejoin: round; filter: url(#glow); }
+      .thin { fill: none; stroke: url(#ghostStroke); stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; filter: url(#glow); }
+      .micro { fill: none; stroke: url(#ghostStroke); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; filter: url(#glow); }
+      .fill { fill: url(#softFill); stroke: url(#ghostStroke); stroke-width: 14; stroke-linecap: round; stroke-linejoin: round; filter: url(#glow); }
+      .soft { fill: url(#softFill); opacity: 0.72; }
+      .spark { fill: #F4EEFF; filter: url(#sparkGlow); }
+    </style>
+  </defs>
+  
+  
+  <rect class="line" x="116" y="142" width="280" height="266" rx="30"/>
+  <path class="line" d="M116 214 L396 214"/>
+  <path class="thin" d="M180 104 L180 164 M332 104 L332 164"/>
+  <path class="micro" d="M176 270 L176 270 M236 270 L236 270 M296 270 L296 270 M176 326 L176 326 M236 326 L236 326"/>
+  
+  <path class="spark" d="M316 310.7 L321.1 320.9 L331.3 326 L321.1 331.1 L316 341.3 L310.9 331.1 L300.7 326 L310.9 320.9 Z"/>
+
+
+</svg>

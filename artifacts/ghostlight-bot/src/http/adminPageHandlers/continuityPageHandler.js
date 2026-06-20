@@ -1,0 +1,58 @@
+"use strict";
+
+async function handleContinuityPageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks }) {
+  const { getMessage, getError, renderAdminShell } = helpers;
+  const { renderContinuityPage } = require("../renderAdminPages/continuityPage");
+  const engine = innerContext.continuity || null;
+
+  const tab = url.pathname.split("/")[3] || "overview";
+  const typeFilter = url.searchParams.get("type") || "";
+  const statusFilter = url.searchParams.get("status") || "";
+
+  let settings = null;
+  let items = [];
+  let storeAvailable = false;
+
+  if (engine) {
+    settings = engine.config || null;
+    try { storeAvailable = engine.store?.available === true; } catch { storeAvailable = false; }
+    if (storeAvailable) {
+      try {
+        items = await engine.storeWrapper.list({
+          type: typeFilter,
+          status: statusFilter || (tab === "overview" ? "" : "open"),
+          limit: 100,
+        });
+      } catch { items = []; }
+    }
+  }
+
+  const msg = getMessage(url);
+  const err = getError(url);
+
+  innerRes.end(
+    renderAdminShell({
+      title: "Continuity",
+      section: "continuity",
+      theme,
+      themeLinks,
+      msg,
+      err,
+      helpers,
+      pageBody: renderContinuityPage({
+        tab,
+        items,
+        settings,
+        typeFilter,
+        statusFilter,
+        storeAvailable,
+        theme,
+        helpers,
+        msg,
+        err,
+      }),
+    }),
+  );
+}
+
+module.exports = { handleContinuityPageRequest };
