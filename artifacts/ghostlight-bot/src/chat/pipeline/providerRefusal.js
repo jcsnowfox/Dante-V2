@@ -49,6 +49,18 @@ function sanitizeStoredText(text) {
   return raw;
 }
 
+// Line-wise variant for multi-line blobs (e.g. injected context sections) where
+// replacing the WHOLE blob on a single bad line would discard legitimate content.
+// Only the offending line(s) are neutralized.
+function scrubProviderRefusalLines(text) {
+  const raw = String(text || "");
+  if (!raw.trim() || !PROVIDER_REFUSAL_MARKERS.test(raw)) return raw;
+  return raw
+    .split("\n")
+    .map((line) => (PROVIDER_REFUSAL_MARKERS.test(line) ? SCRUBBED_PLACEHOLDER : line))
+    .join("\n");
+}
+
 module.exports = {
   STANDALONE_PROVIDER_REFUSAL_PATTERN,
   PROVIDER_REFUSAL_MARKERS,
@@ -56,4 +68,5 @@ module.exports = {
   isStandaloneProviderRefusal,
   containsProviderRefusalText,
   sanitizeStoredText,
+  scrubProviderRefusalLines,
 };

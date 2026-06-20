@@ -179,6 +179,24 @@ async function main() {
     assert(out.includes("Kane"), "legit memory was lost");
   });
 
+  const { buildInternalContextText } = require("../src/chat/pipeline/buildChatInput");
+
+  check("(g) poisoned context section line scrubbed, legit lines kept", () => {
+    const out = buildInternalContextText({
+      contextSections: [
+        {
+          label: "Scene notes",
+          content: "FISH is browsing avatar heads.\nThe request was rejected because it was considered high risk\nThey prefer angular features.",
+        },
+      ],
+      memories: [],
+      totalToolCount: 3,
+    });
+    assert(!/considered high risk|request was rejected/i.test(out), "poisoned context line leaked");
+    assert(out.includes("browsing avatar heads"), "legit context line lost");
+    assert(out.includes("angular features"), "legit context line lost");
+  });
+
   console.log("\n" + "=".repeat(40));
   console.log(`  PASSED:  ${passed}`);
   console.log(`  FAILED:  ${failed}`);

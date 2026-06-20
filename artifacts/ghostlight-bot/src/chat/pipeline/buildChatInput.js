@@ -1,4 +1,4 @@
-const { sanitizeStoredText } = require("./providerRefusal");
+const { sanitizeStoredText, scrubProviderRefusalLines } = require("./providerRefusal");
 
 function formatRecentHistory(recentHistory, options = {}) {
   if (!recentHistory.length) {
@@ -158,7 +158,7 @@ function buildInternalContextText({
 
   const sections = contextSections
     .filter((section) => section?.label && String(section.content || "").trim())
-    .map((section) => `${section.label}:\n${String(section.content).trim()}`);
+    .map((section) => `${section.label}:\n${scrubProviderRefusalLines(String(section.content).trim())}`);
 
   if (sections.length) {
     parts.push(...sections);
