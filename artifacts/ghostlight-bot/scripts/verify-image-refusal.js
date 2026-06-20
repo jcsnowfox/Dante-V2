@@ -199,6 +199,27 @@ async function main() {
     assert(flat.includes("did you like it?"), "legit history was lost");
   });
 
+  check("(g) image_analysis description is neutralized in summary transcripts", () => {
+    const { formatEventAsPlainText } = require("../src/storage/conversations/index");
+    const line = formatEventAsPlainText({
+      created_at: new Date("2026-06-20T00:00:00Z").toISOString(),
+      author_name: "FISH",
+      role: "system",
+      event_type: "image_analysis",
+      content_text: "The image shows an extremely explicit nude scene with graphic sexual detail.",
+    });
+    assert(!/explicit|nude|graphic sexual/i.test(line), "explicit description leaked into summary transcript");
+    assert(/image was shared/i.test(line), "neutral summary marker missing");
+    const msg = formatEventAsPlainText({
+      created_at: new Date("2026-06-20T00:00:00Z").toISOString(),
+      author_name: "FISH",
+      role: "user",
+      event_type: "message",
+      content_text: "hey are we still on for tonight?",
+    });
+    assert(msg.includes("still on for tonight"), "legit message lost from summary transcript");
+  });
+
   const { buildInternalContextText } = require("../src/chat/pipeline/buildChatInput");
 
   check("(g) poisoned context section line scrubbed, legit lines kept", () => {

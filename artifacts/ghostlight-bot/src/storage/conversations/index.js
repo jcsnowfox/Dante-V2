@@ -119,11 +119,22 @@ function mapEventToHistoryItem(event) {
   };
 }
 
+// Summary transcripts feed an LLM and the generated summary is later persisted as a
+// memory artifact. A persisted image_analysis description can be explicit/flagged, so
+// folding it verbatim into a summary would re-introduce the same content the provider
+// rejects (and seed it into long-term memory). Collapse it to a neutral marker here —
+// this is the single chokepoint both the daily and weekly summarizers go through.
+const SUMMARY_IMAGE_PLACEHOLDER = "[An image was shared in the conversation.]";
+
 function formatEventAsPlainText(event) {
   const timestamp = new Date(event.created_at).toISOString();
   const author = event.author_name || event.role || "unknown";
+  const body =
+    event.event_type === "image_analysis"
+      ? SUMMARY_IMAGE_PLACEHOLDER
+      : buildEventContentText(event);
 
-  return `[${timestamp}] ${author}: ${buildEventContentText(event)}`.trim();
+  return `[${timestamp}] ${author}: ${body}`.trim();
 }
 
 function getConversationLabel(metadata = {}, fallbackConversationId = "") {
