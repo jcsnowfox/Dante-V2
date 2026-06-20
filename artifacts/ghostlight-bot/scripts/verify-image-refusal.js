@@ -220,6 +220,29 @@ async function main() {
     assert(msg.includes("still on for tonight"), "legit message lost from summary transcript");
   });
 
+  check("(g) image_analysis description is neutralized in memory curator source text", () => {
+    const { formatCuratorSourceEvents } = require("../src/memory/curator");
+    const out = formatCuratorSourceEvents([
+      {
+        id: 1,
+        created_at: new Date("2026-06-20T00:00:00Z").toISOString(),
+        role: "system",
+        event_type: "image_analysis",
+        content_text: "The image shows an extremely explicit nude scene with graphic sexual detail.",
+      },
+      {
+        id: 2,
+        created_at: new Date("2026-06-20T00:01:00Z").toISOString(),
+        role: "user",
+        event_type: "message",
+        content_text: "remember that I prefer tea over coffee",
+      },
+    ]);
+    assert(!/explicit|nude|graphic sexual/i.test(out), "explicit description leaked into curator source text");
+    assert(/image was shared/i.test(out), "neutral curator marker missing");
+    assert(out.includes("prefer tea over coffee"), "legit message lost from curator source text");
+  });
+
   const { buildInternalContextText } = require("../src/chat/pipeline/buildChatInput");
 
   check("(g) poisoned context section line scrubbed, legit lines kept", () => {

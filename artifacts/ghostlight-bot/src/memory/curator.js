@@ -293,7 +293,13 @@ function buildCuratorEventLine(event = {}, options = {}) {
   const speakerRole = event.role || "unknown";
   const timestamp = new Date(event.created_at).toISOString();
   const eventType = event.event_type || "message";
-  const content = String(event.content_text || "").trim();
+  // Persisted image descriptions can be explicit/flagged. Feeding them to the memory
+  // curator LLM would both risk a provider refusal and seed that content into
+  // long-term memory. Neutralize them here while keeping all other event text intact.
+  const content =
+    eventType === "image_analysis"
+      ? "[An image was shared in the conversation.]"
+      : String(event.content_text || "").trim();
   const isAssistant = String(event.role || "").trim().toLowerCase() === "assistant";
   const internalThought = isAssistant ? String(metadata.internalThought || "").trim() : "";
 
