@@ -179,6 +179,26 @@ async function main() {
     assert(out.includes("Kane"), "legit memory was lost");
   });
 
+  check("(g) persisted image_analysis description is NOT re-injected into history", () => {
+    const messages = buildChatInput({
+      input: { content: "How are you today?", authorName: "FISH" },
+      recentHistory: [
+        {
+          role: "system",
+          eventType: "image_analysis",
+          authorName: "FISH",
+          content: "The image shows an extremely explicit nude scene with graphic sexual detail.",
+        },
+        { role: "user", isBot: false, authorName: "FISH", content: "did you like it?" },
+      ],
+      includeSpeakerNames: true,
+    });
+    const flat = JSON.stringify(messages);
+    assert(!/explicit|nude|graphic sexual/i.test(flat), "explicit image description leaked into history");
+    assert(/image was shared/i.test(flat), "neutral image marker missing");
+    assert(flat.includes("did you like it?"), "legit history was lost");
+  });
+
   const { buildInternalContextText } = require("../src/chat/pipeline/buildChatInput");
 
   check("(g) poisoned context section line scrubbed, legit lines kept", () => {

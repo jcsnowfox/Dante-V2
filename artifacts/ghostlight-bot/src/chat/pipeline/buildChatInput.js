@@ -1,5 +1,23 @@
 const { sanitizeStoredText, scrubProviderRefusalLines } = require("./providerRefusal");
 
+// Derived image descriptions (event_type "image_analysis") are useful on the turn
+// the image is sent — there the full description reaches the model live via the
+// current input. But persisting that description and RE-INJECTING it verbatim on
+// every later turn is what bricks conversations: if the image was explicit/flagged,
+// the provider rejects every subsequent request because the stored description is
+// still in context (and a plain refusal-phrase scrub can't catch descriptive text).
+// So when an image_analysis event is replayed as history, collapse it to a short
+// neutral note. The bot still knows an image was shared; it just doesn't re-send the
+// full (possibly policy-violating) description forever.
+const DERIVED_IMAGE_HISTORY_PLACEHOLDER = "[An image was shared earlier in the conversation.]";
+
+function resolveStoredHistoryContent(item) {
+  if (item && item.eventType === "image_analysis") {
+    return DERIVED_IMAGE_HISTORY_PLACEHOLDER;
+  }
+  return sanitizeStoredText(String(item?.content || item?.text || "").trim());
+}
+
 function formatRecentHistory(recentHistory, options = {}) {
   if (!recentHistory.length) {
     return "None";
@@ -17,7 +35,7 @@ function buildHistoryText(item) {
   const baseAuthor = item.authorName || item.author?.username || item.role || "unknown";
   const heartbeatLabel = metadata.actionLabel || metadata.actionId || metadata.executorType || "Heartbeat action";
   const automationLabel = metadata.automationLabel || metadata.automationType || metadata.automationId || "scheduled automation";
-  const content = sanitizeStoredText(String(item.content || item.text || "").trim());
+  const content = resolveStoredHistoryContent(item);
 
   if (metadata.heartbeat) {
     return `Proactive action triggered: ${heartbeatLabel}\nFrom: ${baseAuthor}\nContent: ${content}`;
@@ -44,7 +62,7 @@ function buildHistoryRole(item) {
 
 function buildStructuredHistoryText(item, options = {}) {
   const metadata = item.metadata || {};
-  const content = sanitizeStoredText(String(item.content || item.text || "").trim());
+  const content = resolveStoredHistoryContent(item);
   const authorName = String(item.authorName || item.author?.username || "").trim();
   const role = buildHistoryRole(item);
 
