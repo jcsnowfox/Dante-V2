@@ -15,6 +15,8 @@ const ICON_EYE_OFF =
 const ICON_STATUS =
   "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M22 12h-4l-3 9L9 3l-3 9H2\"/></svg>";
 
+const ASSET_BASE = "/assets/ghostlight/login";
+
 const LOGIN_STYLES = `
 *{box-sizing:border-box;}
 :root{
@@ -29,67 +31,41 @@ body.gl-login-body{
   -webkit-font-smoothing:antialiased;
 }
 .gl-stage{position:fixed;inset:0;z-index:0;overflow:hidden;}
-/* split base */
-.gl-stage::before{
-  content:"";position:absolute;inset:0;
-  background:
-    radial-gradient(120% 90% at 18% 30%, rgba(57,215,240,.20), transparent 55%),
-    radial-gradient(130% 100% at 85% 70%, rgba(111,60,203,.28), transparent 60%),
-    linear-gradient(100deg,#04060c 0%,#070b16 42%,#0a0a12 58%,#05060a 100%);
+/* cinematic photographic backdrop: moonlit ocean arch + candlelit gothic chamber */
+.gl-bg{
+  position:absolute;inset:0;
+  background:url('${ASSET_BASE}/login-bg.jpg') center/cover no-repeat;
+  transform:scale(1.04);
 }
-/* left: moonlit ocean through a gothic arch */
-.gl-ocean{
-  position:absolute;left:0;top:0;bottom:0;width:52%;
-  background:
-    radial-gradient(60% 38% at 50% 14%, rgba(180,240,255,.55), rgba(120,200,230,.18) 45%, transparent 70%),
-    linear-gradient(180deg,#0a1a2b 0%,#0c2438 36%,#0a1626 60%,#060c16 100%);
-  -webkit-mask:radial-gradient(78% 92% at 50% 112%, #000 60%, transparent 72%);
-  mask:radial-gradient(78% 92% at 50% 112%, #000 60%, transparent 72%);
-  filter:saturate(1.05);
+.gl-bg-tint{
+  position:absolute;inset:0;
+  background:linear-gradient(90deg, rgba(5,7,13,.34), rgba(5,7,13,.10) 38%, rgba(5,7,13,.18) 62%, rgba(5,7,13,.48)),
+    radial-gradient(120% 80% at 50% 30%, transparent 50%, rgba(5,7,13,.4) 100%);
 }
-.gl-ocean::after{ /* moon shimmer on water */
-  content:"";position:absolute;left:18%;right:18%;bottom:0;height:46%;
-  background:repeating-linear-gradient(180deg, rgba(180,240,255,.10) 0 2px, transparent 2px 9px);
-  -webkit-mask:linear-gradient(180deg,transparent,#000);mask:linear-gradient(180deg,transparent,#000);
-  opacity:.6;
-}
-/* right: candlelit gothic chamber with mirror + mist */
-.gl-chamber{
-  position:absolute;right:0;top:0;bottom:0;width:54%;
-  background:
-    radial-gradient(40% 50% at 72% 36%, rgba(255,176,92,.30), transparent 60%),
-    radial-gradient(30% 40% at 30% 60%, rgba(111,60,203,.30), transparent 65%),
-    linear-gradient(200deg,#120a18 0%,#0c0a16 50%,#070710 100%);
-  mix-blend-mode:screen;opacity:.9;
-}
-.gl-chamber::after{ /* mirror sheen */
-  content:"";position:absolute;right:10%;top:16%;width:120px;height:62%;
-  border-radius:80px 80px 18px 18px;
-  background:linear-gradient(160deg, rgba(180,240,255,.16), rgba(120,140,180,.05) 60%, transparent);
-  box-shadow:0 0 60px rgba(120,200,230,.18);filter:blur(.4px);
-}
-.gl-fog{position:absolute;inset:-10%;z-index:1;pointer-events:none;
-  background:
-    radial-gradient(40% 30% at 20% 80%, rgba(168,176,194,.10), transparent 70%),
-    radial-gradient(38% 26% at 70% 88%, rgba(168,176,194,.12), transparent 70%),
-    radial-gradient(50% 30% at 50% 100%, rgba(57,215,240,.08), transparent 75%);
-  opacity:.9;}
+.gl-fog{position:absolute;inset:-8%;z-index:1;pointer-events:none;
+  background:url('${ASSET_BASE}/fog-overlay.png') center/cover no-repeat;
+  opacity:.45;mix-blend-mode:screen;}
 .gl-vignette{position:absolute;inset:0;z-index:2;pointer-events:none;
-  background:radial-gradient(120% 120% at 50% 35%, transparent 55%, rgba(0,0,0,.55) 100%);}
+  background:radial-gradient(120% 120% at 50% 38%, transparent 52%, rgba(0,0,0,.6) 100%);}
 
 .gl-wrap{position:relative;z-index:3;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px 20px;}
 .gl-card{
-  width:min(440px,100%);
-  background:linear-gradient(180deg, rgba(18,26,42,.72), rgba(8,12,22,.62));
-  border:1px solid rgba(120,200,230,.18);border-radius:22px;
-  padding:38px 34px 26px;
-  backdrop-filter:blur(22px) saturate(1.2);-webkit-backdrop-filter:blur(22px) saturate(1.2);
-  box-shadow:0 0 0 1px rgba(255,255,255,.03), 0 30px 80px rgba(2,6,14,.7), 0 0 70px rgba(57,215,240,.18);
+  position:relative;width:min(440px,100%);
+  background:linear-gradient(180deg, rgba(11,18,32,.78), rgba(5,9,18,.7));
+  border:1px solid rgba(125,220,255,.22);border-radius:24px;
+  padding:34px 34px 26px;
+  backdrop-filter:blur(24px) saturate(1.2);-webkit-backdrop-filter:blur(24px) saturate(1.2);
+  box-shadow:0 0 0 1px rgba(255,255,255,.04), 0 30px 90px rgba(2,6,14,.78), 0 0 80px rgba(57,215,240,.20);
 }
-.gl-logo{display:flex;justify-content:center;margin-bottom:14px;}
-.gl-logo img{height:60px;width:auto;filter:drop-shadow(0 6px 24px rgba(57,215,240,.45));}
+.gl-card::before{ /* soft outer glow halo behind the card */
+  content:"";position:absolute;inset:-46px;z-index:-1;pointer-events:none;
+  background:url('${ASSET_BASE}/card-glow.png') center/contain no-repeat;opacity:.65;
+}
+.gl-logo{display:flex;justify-content:center;margin-bottom:6px;}
+.gl-logo img{height:104px;width:auto;mix-blend-mode:screen;
+  filter:drop-shadow(0 8px 30px rgba(57,215,240,.5));}
 .gl-title{font-family:'Cormorant Garamond','Playfair Display',Georgia,serif;
-  font-weight:600;font-size:2.5rem;line-height:1.05;margin:6px 0 8px;text-align:center;
+  font-weight:600;font-size:2.4rem;line-height:1.05;margin:2px 0 8px;text-align:center;
   color:#fff;letter-spacing:.5px;text-shadow:0 2px 30px rgba(102,230,255,.25);}
 .gl-sub{margin:0 auto 24px;max-width:34ch;text-align:center;color:var(--gl-muted);font-size:.92rem;line-height:1.5;}
 .gl-err{margin:0 0 18px;padding:11px 14px;border-radius:12px;font-size:.88rem;
@@ -138,15 +114,17 @@ body.gl-login-body{
   background:linear-gradient(180deg,transparent,rgba(57,215,240,.06) 70%,rgba(111,60,203,.08));
   -webkit-mask:linear-gradient(180deg,transparent,#000);mask:linear-gradient(180deg,transparent,#000);}
 @media (max-width:560px){
-  .gl-ocean,.gl-chamber{width:100%;opacity:.5;}
-  .gl-card{padding:30px 22px 22px;}
-  .gl-title{font-size:2.1rem;}
+  .gl-bg{background-image:url('${ASSET_BASE}/login-bg-blur.jpg');transform:scale(1.08);}
+  .gl-bg-tint{background:rgba(5,7,13,.58);}
+  .gl-fog{opacity:.3;}
+  .gl-card{padding:28px 22px 22px;}
+  .gl-card::before{inset:-26px;}
+  .gl-title{font-size:2.05rem;}
+  .gl-logo img{height:84px;}
 }
 @media (prefers-reduced-motion:no-preference){
-  .gl-fog{animation:gl-drift 26s ease-in-out infinite alternate;}
-  .gl-chamber{animation:gl-flicker 7s ease-in-out infinite;}
+  .gl-fog{animation:gl-drift 28s ease-in-out infinite alternate;}
   @keyframes gl-drift{from{transform:translate3d(-2%,0,0);}to{transform:translate3d(3%,-2%,0);}}
-  @keyframes gl-flicker{0%,100%{opacity:.86;}45%{opacity:.98;}70%{opacity:.8;}}
 }
 `;
 
@@ -177,15 +155,15 @@ function renderLoginPage({ error = "", next = "/admin", username = "" } = {}) {
 
   const body = [
     "<div class=\"gl-stage\" aria-hidden=\"true\">",
-    "<div class=\"gl-ocean\"></div>",
-    "<div class=\"gl-chamber\"></div>",
+    "<div class=\"gl-bg\"></div>",
+    "<div class=\"gl-bg-tint\"></div>",
     "<div class=\"gl-fog\"></div>",
     "<div class=\"gl-vignette\"></div>",
     "</div>",
     "<div class=\"gl-reflect\" aria-hidden=\"true\"></div>",
     "<div class=\"gl-wrap\">",
     "<div class=\"gl-card\">",
-    "<div class=\"gl-logo\"><img src=\"/assets/ghostlight-logo.png\" alt=\"Ghostlight\"></div>",
+    `<div class="gl-logo"><img src="${ASSET_BASE}/logo-lockup.png" alt="Ghostlight — Admin Control Room" width="248" height="104"></div>`,
     "<h1 class=\"gl-title\">Welcome back</h1>",
     `<p class="gl-sub">${escapeHtml(LOGIN_SUBTITLE)}</p>`,
     errorBlock,
