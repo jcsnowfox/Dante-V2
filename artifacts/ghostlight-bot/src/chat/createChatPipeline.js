@@ -10,7 +10,7 @@ const {
   listPresetsSafe,
   buildImagePresetContextSection,
 } = require("../images/presetContext");
-const { buildMainUserPresenceContextSection } = require("../bot/mainUserPresence");
+const { buildMainUserPresenceContextSection, buildMainUserSpeakerIdentitySection } = require("../bot/mainUserPresence");
 const {
   shouldSeedImageConversationFromUserText,
   shouldRefreshImageConversationFromAssistant,
@@ -156,6 +156,10 @@ function createChatPipeline({
       });
       if (presenceContext) {
         contextSections.push(presenceContext);
+      }
+      const speakerIdentitySection = buildMainUserSpeakerIdentitySection({ config, userId: input.authorId });
+      if (speakerIdentitySection) {
+        contextSections.push(speakerIdentitySection);
       }
       if (shouldSeedImageConversationFromUserText(input.content)) {
         imageConversationState = await markImageConversationActive({
