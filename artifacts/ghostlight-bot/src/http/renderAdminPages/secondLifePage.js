@@ -1023,8 +1023,10 @@ ${storeWarning}
           </div>
         </div>
         ${secretField}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px">
         ${textFields}
         ${numberFields}
+        </div>
       </section>
 
       <section class="ghb-card ghb-setting-card">
@@ -1035,7 +1037,9 @@ ${storeWarning}
             <p class="ghb-copy">What the companion is allowed to do in-world.</p>
           </div>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
         ${toggles}
+        </div>
         <div class="ghb-field-grid" style="margin-top:12px">
           <button type="submit" class="ghb-btn"${disabledAttr} style="padding:10px 18px;border-radius:8px;border:0;background:#3a7ced;color:#fff;font:inherit;cursor:pointer">Save bridge settings</button>
         </div>
@@ -1049,57 +1053,79 @@ ${storeWarning}
   </section>
 </form>
 
-<section class="ghb-main-grid" style="margin-top:18px">
-  <div class="ghb-left">
+<div style="margin-top:18px">
+  <nav style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid rgba(124,58,237,.2)">
+    <button id="sl-tab-people"      type="button" onclick="slTab('people')"      class="ghb-btn" style="padding:8px 14px;border-radius:8px;border:1px solid #6d28d9;background:#6d28d9;color:#fff;font:inherit;cursor:pointer">People &amp; Objects</button>
+    <button id="sl-tab-commands"    type="button" onclick="slTab('commands')"    class="ghb-btn" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(124,58,237,.3);background:transparent;font:inherit;cursor:pointer">Commands</button>
+    <button id="sl-tab-outfits"     type="button" onclick="slTab('outfits')"     class="ghb-btn" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(124,58,237,.3);background:transparent;font:inherit;cursor:pointer">Outfits</button>
+    <button id="sl-tab-landmarks"   type="button" onclick="slTab('landmarks')"   class="ghb-btn" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(124,58,237,.3);background:transparent;font:inherit;cursor:pointer">Landmarks</button>
+    <button id="sl-tab-objects"     type="button" onclick="slTab('objects')"     class="ghb-btn" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(124,58,237,.3);background:transparent;font:inherit;cursor:pointer">World Objects</button>
+    <button id="sl-tab-engine"      type="button" onclick="slTab('engine')"      class="ghb-btn" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(124,58,237,.3);background:transparent;font:inherit;cursor:pointer">Life Engine</button>
+    <button id="sl-tab-schedule"    type="button" onclick="slTab('schedule')"    class="ghb-btn" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(124,58,237,.3);background:transparent;font:inherit;cursor:pointer">Schedule</button>
+    <button id="sl-tab-discoveries" type="button" onclick="slTab('discoveries')" class="ghb-btn" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(124,58,237,.3);background:transparent;font:inherit;cursor:pointer">Discoveries</button>
+    <button id="sl-tab-memories"    type="button" onclick="slTab('memories')"    class="ghb-btn" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(124,58,237,.3);background:transparent;font:inherit;cursor:pointer">Experiences &amp; Goals</button>
+  </nav>
+
+  <div id="sl-panel-people">
     ${renderPeopleObjectsPanel({ relationships, objectRelationships, companionId, escapeHtml, withThemeField, theme, disabledAttr })}
   </div>
-  <div class="ghb-right">
+  <div id="sl-panel-commands" style="display:none">
     ${renderCommandPanel({ commands, copyBlock, escapeHtml, withThemeField, theme, disabledAttr })}
   </div>
-</section>
-
-<section class="ghb-main-grid" style="margin-top:18px">
-  <div class="ghb-left">
+  <div id="sl-panel-outfits" style="display:none">
     ${renderOutfitPanel({ outfits, escapeHtml, withThemeField, theme, disabledAttr })}
   </div>
-  <div class="ghb-right">
+  <div id="sl-panel-landmarks" style="display:none">
     ${renderLandmarkPanel({ landmarks, escapeHtml, withThemeField, theme, disabledAttr })}
   </div>
-</section>
-
-<section class="ghb-main-grid" style="margin-top:18px">
-  <div class="ghb-left">
+  <div id="sl-panel-objects" style="display:none">
     ${renderObjectPanel({ objects, escapeHtml, withThemeField, theme, disabledAttr })}
   </div>
-  <div class="ghb-right">
-    ${renderLifeEnginePanel({ lifeEngineEnabled, lifeEngineAutonomy, escapeHtml, withThemeField, theme })}
+  <div id="sl-panel-engine" style="display:none">
+    <section class="ghb-main-grid">
+      <div class="ghb-left">
+        ${renderLifeEnginePanel({ lifeEngineEnabled, lifeEngineAutonomy, escapeHtml, withThemeField, theme })}
+      </div>
+      <div class="ghb-right">
+        ${renderInitiativePanel({ initiativeSettings, initiatives, escapeHtml, withThemeField, theme })}
+      </div>
+    </section>
   </div>
-</section>
-
-<section class="ghb-main-grid" style="margin-top:18px">
-  <div class="ghb-left">
+  <div id="sl-panel-schedule" style="display:none">
     ${renderSchedulePanel({ schedule, editingEntry: scheduleEditing, escapeHtml, withThemeField, theme, disabledAttr })}
   </div>
-  <div class="ghb-right">
+  <div id="sl-panel-discoveries" style="display:none">
     ${renderDiscoveryPanel({ discoveries, escapeHtml, withThemeField, theme, disabledAttr })}
   </div>
-</section>
+  <div id="sl-panel-memories" style="display:none">
+    <section class="ghb-main-grid">
+      <div class="ghb-left">
+        ${renderSharedExperiencePanel({ sharedExperiences, editingEntry: experienceEditing, escapeHtml, withThemeField, theme, disabledAttr })}
+      </div>
+      <div class="ghb-right">
+        ${renderGoalPanel({ goals, editingEntry: goalEditing, escapeHtml, withThemeField, theme, disabledAttr })}
+      </div>
+    </section>
+  </div>
 
-<section class="ghb-main-grid" style="margin-top:18px">
-  <div class="ghb-left">
-    ${renderSharedExperiencePanel({ sharedExperiences, editingEntry: experienceEditing, escapeHtml, withThemeField, theme, disabledAttr })}
-  </div>
-  <div class="ghb-right">
-    ${renderGoalPanel({ goals, editingEntry: goalEditing, escapeHtml, withThemeField, theme, disabledAttr })}
-  </div>
-</section>
-
-<section class="ghb-main-grid" style="margin-top:18px">
-  <div class="ghb-left">
-    ${renderInitiativePanel({ initiativeSettings, initiatives, escapeHtml, withThemeField, theme })}
-  </div>
-  <div class="ghb-right"></div>
-</section>
+  <script>
+  (function(){
+    var SL_TABS=['people','commands','outfits','landmarks','objects','engine','schedule','discoveries','memories'];
+    window.slTab=function(name){
+      SL_TABS.forEach(function(t){
+        var p=document.getElementById('sl-panel-'+t);
+        var b=document.getElementById('sl-tab-'+t);
+        if(p)p.style.display=t===name?'block':'none';
+        if(b){
+          b.style.background=t===name?'#6d28d9':'transparent';
+          b.style.color=t===name?'#fff':'';
+          b.style.borderColor=t===name?'#6d28d9':'rgba(124,58,237,.3)';
+        }
+      });
+    };
+  })();
+  </script>
+</div>
 </div>`;
 }
 
