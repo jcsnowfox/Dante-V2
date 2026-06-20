@@ -318,13 +318,36 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
       return;
     }
 
-    // !adult command — toggles Adult Private Mode for the current channel.
-    if (message.content.trim().toLowerCase() === "!adult") {
+    // !adult command — controls Adult Private Mode for the current channel.
+    //   !adult            -> enable for this channel (idempotent)
+    //   !adult on         -> enable for this channel (idempotent)
+    //   !adult off        -> disable
+    //   !adult status     -> report current state
+    // Bare `!adult` always turns it ON (never silently disables) so it is a
+    // reliable way to switch the mode on for the channel it is run in.
+    const adultTokens = message.content.trim().toLowerCase().split(/\s+/);
+    if (adultTokens[0] === "!adult") {
       try {
         const currentChannelId = message.channelId;
+        const subcommand = adultTokens[1] || "on";
         const currentlyEnabled = Boolean(config.chat?.adultPrivateMode?.enabled);
         const currentChannelBound = config.chat?.adultPrivateMode?.channelId === currentChannelId;
-        const turningOff = currentlyEnabled && currentChannelBound;
+        const enabledHere = currentlyEnabled && currentChannelBound;
+
+        if (subcommand === "status") {
+          let statusLine;
+          if (enabledHere) {
+            statusLine = "Adult Private Mode is **enabled** for this channel.";
+          } else if (currentlyEnabled) {
+            statusLine = "Adult Private Mode is enabled, but bound to a different channel. Run `!adult on` here to move it.";
+          } else {
+            statusLine = "Adult Private Mode is **disabled**. Run `!adult on` to enable it for this channel.";
+          }
+          await message.channel.send({ content: statusLine });
+          return;
+        }
+
+        const turningOff = subcommand === "off";
         const update = turningOff
           ? {
             "chat.adultPrivateMode.enabled": false,
@@ -340,13 +363,19 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           await settingsStore.upsertSettings(update);
         }
 
-        const statusLine = turningOff
-          ? "Adult Private Mode disabled for this channel."
-          : "Adult Private Mode enabled for this channel.";
+        let statusLine;
+        if (turningOff) {
+          statusLine = "Adult Private Mode disabled for this channel.";
+        } else if (enabledHere) {
+          statusLine = "Adult Private Mode is already enabled for this channel.";
+        } else {
+          statusLine = "Adult Private Mode enabled for this channel.";
+        }
 
-        logger.info?.("[chat] !adult command toggled adult private mode", {
+        logger.info?.("[chat] !adult command set adult private mode", {
           messageId: message.id,
           channelId: currentChannelId,
+          subcommand,
           enabled: !turningOff,
         });
 
@@ -357,7 +386,7 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           channelId: message.channelId,
           error: error.message,
         }, error);
-        await message.channel.send({ content: "Failed to toggle Adult Private Mode." });
+        await message.channel.send({ content: "Failed to update Adult Private Mode." });
       }
 
       return;
