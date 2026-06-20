@@ -77,12 +77,72 @@ function extractSecret(req, body) {
   return "";
 }
 
+/**
+ * Normalize an event body from the Second Life relay.
+ *
+ * Phase 21 adds LSL field aliases so that scripts sending snake_case or
+ * alternate field names are normalized to the canonical event shape:
+ *
+ *   companion_slug  → companionId (resolved at auth time, not here)
+ *   speaker_key     → avatarUuid / externalUserId
+ *   speaker_name    → avatarName / userDisplayName
+ *   speaker_desc    → objectDescription
+ *   object_key      → objectUuid
+ *   object_name     → objectName
+ *   source_type     → sourceType
+ *   message         → messageText (existing)
+ *   context_last_10 → contextLast10
+ *   recentContext   → contextLast10 (alternate)
+ *   is_direct_mention → directlyAddressed
+ */
 function normalizeEventFromBody(body, fallbackType) {
+  // LSL alias resolution for avatarUuid / speaker
+  const avatarUuid = body.avatarUuid != null ? String(body.avatarUuid)
+    : body.speaker_key != null ? String(body.speaker_key)
+    : "";
+  const avatarName = body.avatarName != null ? String(body.avatarName)
+    : body.speaker_name != null ? String(body.speaker_name)
+    : "";
+
+  // LSL alias resolution for messageText
+  const messageText = body.message != null ? String(body.message)
+    : body.messageText != null ? String(body.messageText)
+    : "";
+
+  // LSL alias resolution for object fields
+  const objectUuid = body.objectUuid != null ? String(body.objectUuid)
+    : body.object_key != null ? String(body.object_key)
+    : "";
+  const objectName = body.objectName != null ? String(body.objectName)
+    : body.object_name != null ? String(body.object_name)
+    : "";
+  const objectDescription = body.objectDescription != null ? String(body.objectDescription)
+    : body.speaker_desc != null ? String(body.speaker_desc)
+    : "";
+
+  // sourceType (avatar vs object)
+  const sourceType = body.sourceType != null ? String(body.sourceType)
+    : body.source_type != null ? String(body.source_type)
+    : "";
+
+  // directlyAddressed
+  const directlyAddressedRaw = body.directlyAddressed !== undefined ? body.directlyAddressed
+    : body.is_direct_mention !== undefined ? body.is_direct_mention
+    : undefined;
+  const directlyAddressed = directlyAddressedRaw !== undefined ? Boolean(directlyAddressedRaw) : undefined;
+
+  // context_last_10 — recent local chat context lines
+  const contextLast10 = body.context_last_10 != null ? String(body.context_last_10)
+    : body.recentContext != null ? String(body.recentContext)
+    : "";
+
   return {
     eventType: String(body.type || body.eventType || fallbackType || "").trim(),
-    externalUserId: body.avatarUuid != null ? String(body.avatarUuid) : "",
-    userDisplayName: body.avatarName != null ? String(body.avatarName) : "",
-    messageText: body.message != null ? String(body.message) : (body.messageText != null ? String(body.messageText) : ""),
+    externalUserId: avatarUuid,
+    userDisplayName: avatarName,
+    avatarUuid,
+    avatarName,
+    messageText,
     region: body.region != null ? String(body.region) : "",
     parcel: body.parcel != null ? String(body.parcel) : "",
     coordinates: body.coordinates != null ? body.coordinates : undefined,
@@ -97,6 +157,13 @@ function normalizeEventFromBody(body, fallbackType) {
     agentUuid: body.agentUuid != null ? String(body.agentUuid) : "",
     sourceEventId: body.eventId != null ? String(body.eventId) : (body.sourceEventId != null ? String(body.sourceEventId) : ""),
     timestamp: body.timestamp != null ? String(body.timestamp) : "",
+    // Phase 21 — new fields
+    objectUuid,
+    objectName,
+    objectDescription,
+    sourceType,
+    directlyAddressed,
+    contextLast10,
   };
 }
 
@@ -151,8 +218,12 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
     return true;
   }
 
-  const companionId = (body.companionId != null ? String(body.companionId) : "").trim()
-    || resolveCompanionId(config);
+  // Phase 21 — accept companion_slug as an alias for companionId (LSL scripts).
+  const companionId = (
+    body.companionId != null ? String(body.companionId)
+    : body.companion_slug != null ? String(body.companion_slug)
+    : ""
+  ).trim() || resolveCompanionId(config);
   const secret = extractSecret(req, body);
 
   const authed = await secondLife.verifySharedSecret({ companionId, secret });

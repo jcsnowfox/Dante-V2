@@ -129,6 +129,10 @@ async function handleSecondLifeActions({ req, res, url, context, withAdmin }) {
     "/admin/actions/second-life-experience-delete",
     "/admin/actions/second-life-goal-save",
     "/admin/actions/second-life-goal-delete",
+    // Phase 21 — People & Objects identity registry
+    "/admin/actions/second-life-object-relationship-save",
+    "/admin/actions/second-life-object-relationship-delete",
+    "/admin/actions/second-life-import-relationships",
   ]);
   if (!knownPaths.has(path)) return false;
 
@@ -216,6 +220,9 @@ async function handleSecondLifeActions({ req, res, url, context, withAdmin }) {
         return redirect(innerRes, { returnTo, theme, error: "An avatar UUID is required." });
       }
       const roles = rolesFromTier(fieldValue(fields, "relationshipType").trim());
+      const rawReplyPolicy = fieldValue(fields, "replyPolicy").trim().toLowerCase();
+      const VALID_POLICIES = ["banned", "always_allowed", "allowed_if_mentioned", "ambient_only", "ignore"];
+      const replyPolicy = VALID_POLICIES.includes(rawReplyPolicy) ? rawReplyPolicy : "allowed_if_mentioned";
       try {
         await store.upsertRelationship({
           companionId,
@@ -226,6 +233,18 @@ async function handleSecondLifeActions({ req, res, url, context, withAdmin }) {
           chatPermission: Boolean(fields.chatPermission),
           followPermission: Boolean(fields.followPermission),
           privateMemoryPermission: Boolean(fields.privateMemoryPermission),
+          // Phase 21 identity registry fields
+          nickname: fieldValue(fields, "nickname").trim(),
+          category: fieldValue(fields, "category").trim(),
+          relationshipToUser: fieldValue(fields, "relationshipToUser").trim(),
+          relationshipToCompanion: fieldValue(fields, "relationshipToCompanion").trim(),
+          replyPolicy,
+          alwaysRespond: Boolean(fields.alwaysRespond),
+          neverRespond: Boolean(fields.neverRespond),
+          childSafeOnly: Boolean(fields.childSafeOnly),
+          publicIdentityContextEnabled: fields.publicIdentityContextEnabled !== undefined ? Boolean(fields.publicIdentityContextEnabled) : true,
+          localChatChatterEnabled: fields.localChatChatterEnabled !== undefined ? Boolean(fields.localChatChatterEnabled) : true,
+          minSecondsBetweenReplies: Math.max(0, Number(fieldValue(fields, "minSecondsBetweenReplies")) || 0),
           ...roles,
         });
         return redirect(innerRes, { returnTo, theme, message: "Saved relationship." });
@@ -597,6 +616,90 @@ async function handleSecondLifeActions({ req, res, url, context, withAdmin }) {
       } catch (error) {
         innerContext.logger?.error?.("[second-life] Failed to delete goal.", { error: error.message });
         return redirect(innerRes, { returnTo, theme, error: "Failed to delete goal." });
+      }
+    }
+
+    // ── Phase 21 — Object relationship CRUD ──────────────────────────────────
+    if (path === "/admin/actions/second-life-object-relationship-save") {
+      const objectUuid = fieldValue(fields, "objectUuid").trim();
+      const objectDescriptionToken = fieldValue(fields, "objectDescriptionToken").trim();
+      const objectName = fieldValue(fields, "objectName").trim();
+      if (!objectUuid && !objectDescriptionToken && !objectName) {
+        return redirect(innerRes, { returnTo, theme, error: "An object UUID, description token, or name is required." });
+      }
+      const rawPolicy = fieldValue(fields, "replyPolicy").trim().toLowerCase();
+      const VALID_OBJ_POLICIES = ["banned", "always_allowed", "allowed_if_mentioned", "ambient_only", "ignore"];
+      const replyPolicy = VALID_OBJ_POLICIES.includes(rawPolicy) ? rawPolicy : "ambient_only";
+      try {
+        await store.upsertObjectRelationship({
+          companionId,
+          objectUuid,
+          objectName,
+          objectDescriptionToken,
+          nickname: fieldValue(fields, "nickname").trim(),
+          category: fieldValue(fields, "category").trim(),
+          relationshipToUser: fieldValue(fields, "relationshipToUser").trim(),
+          relationshipToCompanion: fieldValue(fields, "relationshipToCompanion").trim(),
+          trustLevel: fieldValue(fields, "trustLevel").trim() || "known",
+          replyPolicy,
+          privateChannelAllowed: Boolean(fields.privateChannelAllowed),
+          childSafeOnly: Boolean(fields.childSafeOnly),
+          alwaysRespond: Boolean(fields.alwaysRespond),
+          neverRespond: Boolean(fields.neverRespond),
+          publicIdentityContextEnabled: fields.publicIdentityContextEnabled !== undefined ? Boolean(fields.publicIdentityContextEnabled) : true,
+          localChatChatterEnabled: fields.localChatChatterEnabled !== undefined ? Boolean(fields.localChatChatterEnabled) : true,
+          minSecondsBetweenReplies: Math.max(0, Number(fieldValue(fields, "minSecondsBetweenReplies")) || 180),
+          notes: fieldValue(fields, "notes").trim(),
+        });
+        return redirect(innerRes, { returnTo, theme, message: "Saved object relationship." });
+      } catch (error) {
+        innerContext.logger?.error?.("[second-life] Failed to save object relationship.", { error: error.message });
+        return redirect(innerRes, { returnTo, theme, error: "Failed to save object relationship." });
+      }
+    }
+
+    if (path === "/admin/actions/second-life-object-relationship-delete") {
+      const id = fieldValue(fields, "id").trim();
+      try {
+        await store.deleteObjectRelationship({ companionId, id });
+        return redirect(innerRes, { returnTo, theme, message: "Deleted object relationship." });
+      } catch (error) {
+        innerContext.logger?.error?.("[second-life] Failed to delete object relationship.", { error: error.message });
+        return redirect(innerRes, { returnTo, theme, error: "Failed to delete object relationship." });
+      }
+    }
+
+    // ── Phase 21 — Import Nox family relationships pack ────────────────────────
+    if (path === "/admin/actions/second-life-import-relationships") {
+      const packName = fieldValue(fields, "pack").trim().toLowerCase();
+      if (packName !== "nox" && companionId !== "nox") {
+        return redirect(innerRes, { returnTo, theme, error: "This import pack is only available for companionId 'nox'." });
+      }
+      try {
+        const packPath = require("path").join(__dirname, "../../assets/second-life/nox-family-relationships.json");
+        const pack = require(packPath);
+        let avatarCount = 0;
+        let objectCount = 0;
+        if (Array.isArray(pack.avatars)) {
+          for (const rec of pack.avatars) {
+            await store.upsertRelationship({ companionId, ...rec });
+            avatarCount++;
+          }
+        }
+        if (Array.isArray(pack.objects)) {
+          for (const rec of pack.objects) {
+            await store.upsertObjectRelationship({ companionId, ...rec });
+            objectCount++;
+          }
+        }
+        return redirect(innerRes, {
+          returnTo,
+          theme,
+          message: `Imported Nox family pack: ${avatarCount} avatar(s), ${objectCount} object(s).`,
+        });
+      } catch (error) {
+        innerContext.logger?.error?.("[second-life] Failed to import Nox family pack.", { error: error.message });
+        return redirect(innerRes, { returnTo, theme, error: "Failed to import Nox family pack." });
       }
     }
 

@@ -50,6 +50,9 @@ const NUMBER_SETTINGS = [
 // here owner-first for the picker). Generic; nothing customer-specific.
 const RELATIONSHIP_TIERS = ["owner", "family", "friend", "trusted", "known", "stranger", "blocked"];
 
+// Reply policies for per-identity control (Phase 21).
+const REPLY_POLICIES = ["always_allowed", "allowed_if_mentioned", "ambient_only", "ignore", "banned"];
+
 // Command types the registry understands.
 const COMMAND_TYPES = ["movement", "teleport", "object", "outfit", "system", "custom"];
 
@@ -107,61 +110,194 @@ function renderSelect({ name, options, current, escapeHtml, disabledAttr }) {
   return `<select name="${escapeHtml(name)}" style="${inputStyle}"${disabledAttr}>${opts}</select>`;
 }
 
-function renderRelationshipPanel({ relationships, escapeHtml, withThemeField, theme, disabledAttr }) {
-  const rows = Array.isArray(relationships) ? relationships : [];
-  const list = rows.length
-    ? rows.map((r) => {
-        const tier = r.isBlocked ? "blocked"
-          : r.isOwner ? "owner"
-          : r.isFamily ? "family"
-          : r.isFriend ? "friend"
-          : r.isTrusted ? "trusted"
-          : (r.relationshipType || "known");
+function renderPeopleObjectsPanel({ relationships, objectRelationships, companionId, escapeHtml, withThemeField, theme, disabledAttr }) {
+  const avatarRows = Array.isArray(relationships) ? relationships : [];
+  const objectRows = Array.isArray(objectRelationships) ? objectRelationships : [];
+
+  function getTier(r) {
+    if (r.isBlocked) return "blocked";
+    if (r.isOwner) return "owner";
+    if (r.isFamily) return "family";
+    if (r.isFriend) return "friend";
+    if (r.isTrusted) return "trusted";
+    return r.relationshipType || "known";
+  }
+
+  const tierColor = {
+    owner: "#6d28d9", family: "#0f766e", friend: "#1d4ed8", trusted: "#475569",
+    known: "#374151", stranger: "#6b7280", blocked: "#b91c1c",
+  };
+
+  const sorted = [...avatarRows].sort((a, b) => {
+    const order = { owner: 0, family: 1, friend: 2, trusted: 3, known: 4, stranger: 5, blocked: 6 };
+    return (order[getTier(a)] ?? 5) - (order[getTier(b)] ?? 5);
+  });
+
+  const avatarList = sorted.length
+    ? sorted.map((r) => {
+        const tier = getTier(r);
+        const color = tierColor[tier] || "#374151";
         const perms = [
           r.chatPermission ? "chat" : null,
           r.followPermission ? "follow" : null,
           r.privateMemoryPermission ? "memory" : null,
         ].filter(Boolean).join(", ") || "none";
+        const badges = [
+          r.alwaysRespond ? "always-reply" : null,
+          r.neverRespond ? "never-reply" : null,
+          r.childSafeOnly ? "child-safe" : null,
+        ].filter(Boolean);
         return [
-          "<li style=\"display:flex;align-items:flex-start;gap:10px;justify-content:space-between;margin-bottom:8px\">",
+          `<li style="display:flex;align-items:flex-start;gap:10px;justify-content:space-between;margin-bottom:8px;padding:8px;background:rgba(0,0,0,.08);border-radius:8px;border-left:3px solid ${color}">`,
           "<div>",
-          `<strong>${escapeHtml(r.avatarName || "(unnamed)")}</strong> — <span class="ghb-copy">${escapeHtml(tier)}</span>`,
-          r.displayLabel ? ` <em class="ghb-copy">(${escapeHtml(r.displayLabel)})</em>` : "",
-          `<br><code class="ghb-copy" style="opacity:.7;font-size:.78rem">${escapeHtml(r.avatarUuid)}</code>`,
-          `<br><span class="ghb-copy" style="opacity:.7;font-size:.78rem">Permissions: ${escapeHtml(perms)}</span>`,
+          `<strong>${escapeHtml(r.nickname || r.avatarName || "(unnamed)")}</strong>`,
+          (r.nickname && r.avatarName && r.nickname !== r.avatarName) ? ` <span class="ghb-copy" style="opacity:.65;font-size:.82rem">(${escapeHtml(r.avatarName)})</span>` : "",
+          ` — <span class="ghb-copy" style="color:${color}">${escapeHtml(tier)}</span>`,
+          badges.length ? ` <span class="ghb-copy" style="opacity:.55;font-size:.73rem">[${escapeHtml(badges.join(", "))}]</span>` : "",
+          `<br><code class="ghb-copy" style="opacity:.65;font-size:.78rem">${escapeHtml(r.avatarUuid || "")}</code>`,
+          (r.category || r.relationshipToUser)
+            ? `<br><span class="ghb-copy" style="opacity:.65;font-size:.78rem">${r.category ? `Category: ${escapeHtml(r.category)}` : ""}${r.category && r.relationshipToUser ? " · " : ""}${r.relationshipToUser ? `Relation: ${escapeHtml(r.relationshipToUser)}` : ""}</span>`
+            : "",
+          `<br><span class="ghb-copy" style="opacity:.65;font-size:.78rem">Policy: ${escapeHtml(r.replyPolicy || "allowed_if_mentioned")} · Perms: ${escapeHtml(perms)}${r.minSecondsBetweenReplies > 0 ? ` · Cooldown: ${escapeHtml(String(r.minSecondsBetweenReplies))}s` : ""}</span>`,
+          r.notes ? `<br><span class="ghb-copy" style="opacity:.5;font-size:.75rem">${escapeHtml(String(r.notes).slice(0, 120))}${r.notes.length > 120 ? "…" : ""}</span>` : "",
           "</div>",
-          `<form method="POST" action="/admin/actions/second-life-relationship-delete" style="margin:0">${withThemeField(theme)}<input type="hidden" name="returnTo" value="/admin/second-life"><input type="hidden" name="avatarUuid" value="${escapeHtml(r.avatarUuid)}"><button type="submit" class="ghb-btn"${disabledAttr} style="padding:6px 10px;border-radius:6px;border:0;background:#b91c1c;color:#fff;font:inherit;cursor:pointer">Delete</button></form>`,
+          `<form method="POST" action="/admin/actions/second-life-relationship-delete" style="margin:0">${withThemeField(theme)}<input type="hidden" name="returnTo" value="/admin/second-life"><input type="hidden" name="avatarUuid" value="${escapeHtml(r.avatarUuid || "")}"><button type="submit" class="ghb-btn"${disabledAttr} style="padding:6px 10px;border-radius:6px;border:0;background:#b91c1c;color:#fff;font:inherit;cursor:pointer">Delete</button></form>`,
           "</li>",
         ].join("");
       }).join("")
-    : `<p class="ghb-copy" style="opacity:.7">No relationships stored yet.</p>`;
+    : `<p class="ghb-copy" style="opacity:.7">No people registered yet. Add someone below or use the Import Pack.</p>`;
+
+  const objectList = objectRows.length
+    ? objectRows.map((o) => {
+        const badges = [
+          o.alwaysRespond ? "always-reply" : null,
+          o.neverRespond ? "never-reply" : null,
+          o.childSafeOnly ? "child-safe" : null,
+        ].filter(Boolean);
+        return [
+          "<li style=\"display:flex;align-items:flex-start;gap:10px;justify-content:space-between;margin-bottom:8px;padding:8px;background:rgba(0,0,0,.08);border-radius:8px;border-left:3px solid #7c3aed\">",
+          "<div>",
+          `<strong>${escapeHtml(o.nickname || o.objectName || "(unnamed object)")}</strong>`,
+          ` <span class="ghb-copy" style="opacity:.5;font-size:.73rem">[object]</span>`,
+          badges.length ? ` <span class="ghb-copy" style="opacity:.55;font-size:.73rem">[${escapeHtml(badges.join(", "))}]</span>` : "",
+          o.objectUuid ? `<br><code class="ghb-copy" style="opacity:.65;font-size:.78rem">${escapeHtml(o.objectUuid)}</code>` : "",
+          o.objectDescriptionToken ? `<br><span class="ghb-copy" style="opacity:.65;font-size:.78rem">Token: ${escapeHtml(o.objectDescriptionToken)}</span>` : "",
+          (o.category || o.relationshipToUser)
+            ? `<br><span class="ghb-copy" style="opacity:.65;font-size:.78rem">${o.category ? `Category: ${escapeHtml(o.category)}` : ""}${o.category && o.relationshipToUser ? " · " : ""}${o.relationshipToUser ? `Relation: ${escapeHtml(o.relationshipToUser)}` : ""}</span>`
+            : "",
+          `<br><span class="ghb-copy" style="opacity:.65;font-size:.78rem">Policy: ${escapeHtml(o.replyPolicy || "ambient_only")}${o.minSecondsBetweenReplies > 0 ? ` · Cooldown: ${escapeHtml(String(o.minSecondsBetweenReplies))}s` : ""}</span>`,
+          o.notes ? `<br><span class="ghb-copy" style="opacity:.5;font-size:.75rem">${escapeHtml(String(o.notes).slice(0, 120))}${o.notes.length > 120 ? "…" : ""}</span>` : "",
+          "</div>",
+          o.id != null
+            ? `<form method="POST" action="/admin/actions/second-life-object-relationship-delete" style="margin:0">${withThemeField(theme)}<input type="hidden" name="returnTo" value="/admin/second-life"><input type="hidden" name="id" value="${escapeHtml(String(o.id))}"><button type="submit" class="ghb-btn"${disabledAttr} style="padding:6px 10px;border-radius:6px;border:0;background:#b91c1c;color:#fff;font:inherit;cursor:pointer">Delete</button></form>`
+            : "",
+          "</li>",
+        ].join("");
+      }).join("")
+    : `<p class="ghb-copy" style="opacity:.7">No object relationships yet. Add one below or use the Import Pack.</p>`;
+
+  const avatarForm = [
+    `<form method="POST" action="/admin/actions/second-life-relationship-save" style="margin-top:4px">`,
+    withThemeField(theme),
+    "<input type=\"hidden\" name=\"returnTo\" value=\"/admin/second-life\">",
+    "<div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px\">",
+    `<div class="ghb-field" style="flex:1 1 220px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Avatar UUID *</label><input name="avatarUuid" type="text" placeholder="00000000-0000-0000-0000-000000000000" style="${inputStyle}"${disabledAttr}></div>`,
+    `<div class="ghb-field" style="flex:1 1 160px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Avatar Name</label><input name="avatarName" type="text" placeholder="In-world display name" style="${inputStyle}"${disabledAttr}></div>`,
+    "</div>",
+    "<div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px\">",
+    `<div class="ghb-field" style="flex:1 1 140px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Nickname</label><input name="nickname" type="text" placeholder="Short name used in chat" style="${inputStyle}"${disabledAttr}></div>`,
+    `<div class="ghb-field" style="flex:1 1 140px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Category</label><input name="category" type="text" placeholder="e.g. jc_sister, owner_partner" style="${inputStyle}"${disabledAttr}></div>`,
+    `<div class="ghb-field" style="flex:1 1 120px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Display Label</label><input name="displayLabel" type="text" placeholder="Optional label" style="${inputStyle}"${disabledAttr}></div>`,
+    "</div>",
+    "<div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px\">",
+    `<div class="ghb-field" style="flex:1 1 140px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Tier</label>${renderSelect({ name: "relationshipType", options: RELATIONSHIP_TIERS, current: "known", escapeHtml, disabledAttr })}</div>`,
+    `<div class="ghb-field" style="flex:1 1 180px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Reply Policy</label>${renderSelect({ name: "replyPolicy", options: REPLY_POLICIES, current: "allowed_if_mentioned", escapeHtml, disabledAttr })}</div>`,
+    `<div class="ghb-field" style="flex:1 1 120px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Min secs between replies</label><input name="minSecondsBetweenReplies" type="number" min="0" value="0" style="${inputStyle}"${disabledAttr}></div>`,
+    "</div>",
+    "<div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px\">",
+    `<div class="ghb-field" style="flex:1 1 200px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Relation to user</label><input name="relationshipToUser" type="text" placeholder="e.g. older sister" style="${inputStyle}"${disabledAttr}></div>`,
+    `<div class="ghb-field" style="flex:1 1 200px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Relation to companion</label><input name="relationshipToCompanion" type="text" placeholder="e.g. trusted family, sister-in-law energy" style="${inputStyle}"${disabledAttr}></div>`,
+    "</div>",
+    "<div style=\"display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px\">",
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="chatPermission" value="true" checked${disabledAttr}> Chat</label>`,
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="followPermission" value="true"${disabledAttr}> Follow</label>`,
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="privateMemoryPermission" value="true"${disabledAttr}> Private memory</label>`,
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="alwaysRespond" value="true"${disabledAttr}> Always respond</label>`,
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="neverRespond" value="true"${disabledAttr}> Never respond</label>`,
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="childSafeOnly" value="true"${disabledAttr}> Child-safe only</label>`,
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="publicIdentityContextEnabled" value="true" checked${disabledAttr}> Public identity context</label>`,
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="localChatChatterEnabled" value="true" checked${disabledAttr}> Local chat chatter</label>`,
+    "</div>",
+    "<div class=\"ghb-field\" style=\"margin-bottom:8px\"><label class=\"ghb-section-title\" style=\"font-size:.9rem;display:block;margin-bottom:4px\">Notes (character context for companion)</label>",
+    `<input name="notes" type="text" placeholder="Notes shown to the companion when this person speaks" style="${inputStyle}"${disabledAttr}></div>`,
+    `<button type="submit" class="ghb-btn"${disabledAttr} style="padding:8px 16px;border-radius:8px;border:0;background:#3a7ced;color:#fff;font:inherit;cursor:pointer">Save person</button>`,
+    "</form>",
+  ].join("");
+
+  const objectForm = [
+    `<form method="POST" action="/admin/actions/second-life-object-relationship-save" style="margin-top:4px">`,
+    withThemeField(theme),
+    "<input type=\"hidden\" name=\"returnTo\" value=\"/admin/second-life\">",
+    "<div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px\">",
+    `<div class="ghb-field" style="flex:1 1 180px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Object Name</label><input name="objectName" type="text" placeholder="In-world object name" style="${inputStyle}"${disabledAttr}></div>`,
+    `<div class="ghb-field" style="flex:1 1 140px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Nickname</label><input name="nickname" type="text" placeholder="Short name" style="${inputStyle}"${disabledAttr}></div>`,
+    "</div>",
+    "<div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px\">",
+    `<div class="ghb-field" style="flex:1 1 220px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Object UUID (if known)</label><input name="objectUuid" type="text" placeholder="00000000-0000-0000-0000-000000000000" style="${inputStyle}"${disabledAttr}></div>`,
+    `<div class="ghb-field" style="flex:1 1 220px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Description token (UUID or keyword in object description)</label><input name="objectDescriptionToken" type="text" placeholder="e.g. owner avatar UUID" style="${inputStyle}"${disabledAttr}></div>`,
+    "</div>",
+    "<div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px\">",
+    `<div class="ghb-field" style="flex:1 1 180px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Reply Policy</label>${renderSelect({ name: "replyPolicy", options: REPLY_POLICIES, current: "ambient_only", escapeHtml, disabledAttr })}</div>`,
+    `<div class="ghb-field" style="flex:1 1 120px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Min secs between replies</label><input name="minSecondsBetweenReplies" type="number" min="0" value="0" style="${inputStyle}"${disabledAttr}></div>`,
+    `<div class="ghb-field" style="flex:1 1 140px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Category</label><input name="category" type="text" placeholder="e.g. family_child_object" style="${inputStyle}"${disabledAttr}></div>`,
+    "</div>",
+    "<div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px\">",
+    `<div class="ghb-field" style="flex:1 1 200px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Relation to user</label><input name="relationshipToUser" type="text" placeholder="e.g. Belz's daughter" style="${inputStyle}"${disabledAttr}></div>`,
+    `<div class="ghb-field" style="flex:1 1 200px"><label class="ghb-section-title" style="font-size:.9rem;display:block;margin-bottom:4px">Relation to companion</label><input name="relationshipToCompanion" type="text" placeholder="e.g. family child" style="${inputStyle}"${disabledAttr}></div>`,
+    "</div>",
+    "<div style=\"display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px\">",
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="childSafeOnly" value="true"${disabledAttr}> Child-safe only</label>`,
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="publicIdentityContextEnabled" value="true" checked${disabledAttr}> Public identity context</label>`,
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="localChatChatterEnabled" value="true" checked${disabledAttr}> Local chat chatter</label>`,
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="alwaysRespond" value="true"${disabledAttr}> Always respond</label>`,
+    `<label class="ghb-copy" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="neverRespond" value="true"${disabledAttr}> Never respond</label>`,
+    "</div>",
+    "<div class=\"ghb-field\" style=\"margin-bottom:8px\"><label class=\"ghb-section-title\" style=\"font-size:.9rem;display:block;margin-bottom:4px\">Notes (character context for companion)</label>",
+    `<input name="notes" type="text" placeholder="Notes about this object shown to the companion" style="${inputStyle}"${disabledAttr}></div>`,
+    `<button type="submit" class="ghb-btn"${disabledAttr} style="padding:8px 16px;border-radius:8px;border:0;background:#7c3aed;color:#fff;font:inherit;cursor:pointer">Save object</button>`,
+    "</form>",
+  ].join("");
+
+  const importForm = [
+    `<form method="POST" action="/admin/actions/second-life-import-relationships" style="margin:0">`,
+    withThemeField(theme),
+    `<input type="hidden" name="returnTo" value="/admin/second-life">`,
+    `<input type="hidden" name="companionId" value="${escapeHtml(companionId || "")}">`,
+    `<input type="hidden" name="pack" value="nox">`,
+    `<button type="submit" class="ghb-btn"${disabledAttr} style="padding:8px 14px;border-radius:8px;border:0;background:#0f766e;color:#fff;font:inherit;cursor:pointer">Import Nox Family Pack</button>`,
+    "</form>",
+  ].join("");
 
   return [
     "<section class=\"ghb-card ghb-setting-card\">",
     "<div class=\"ghb-setting-head\"><span class=\"ghb-icon-bubble\">☺</span><div>",
-    "<h3 class=\"ghb-section-title\">Relationships</h3>",
-    "<p class=\"ghb-copy\">Recognise avatars by UUID (the source of truth — names can change). Re-submit an existing UUID to update it.</p>",
+    "<h3 class=\"ghb-section-title\">People &amp; Objects</h3>",
+    "<p class=\"ghb-copy\">Identity registry — recognise avatars by UUID (source of truth, names can change) and objects by UUID or description token. Re-submit an existing UUID to update. Reply policy, cooldown, and child-safe mode are all per-identity.</p>",
     "</div></div>",
-    `<ul class="ghb-bullet-list" style="list-style:none;padding:0">${list}</ul>`,
-    `<form method="POST" action="/admin/actions/second-life-relationship-save" style="margin-top:12px">`,
-    withThemeField(theme),
-    "<input type=\"hidden\" name=\"returnTo\" value=\"/admin/second-life\">",
-    "<div class=\"ghb-field\" style=\"margin-bottom:10px\"><label class=\"ghb-section-title\" style=\"font-size:.9rem;display:block;margin-bottom:4px\">Avatar UUID</label>",
-    `<input name="avatarUuid" type="text" placeholder="00000000-0000-0000-0000-000000000000" style="${inputStyle}"${disabledAttr}></div>`,
-    "<div class=\"ghb-field\" style=\"margin-bottom:10px\"><label class=\"ghb-section-title\" style=\"font-size:.9rem;display:block;margin-bottom:4px\">Avatar Name</label>",
-    `<input name="avatarName" type="text" placeholder="In-world display name" style="${inputStyle}"${disabledAttr}></div>`,
-    "<div class=\"ghb-field\" style=\"margin-bottom:10px\"><label class=\"ghb-section-title\" style=\"font-size:.9rem;display:block;margin-bottom:4px\">Relationship Tier</label>",
-    renderSelect({ name: "relationshipType", options: RELATIONSHIP_TIERS, current: "known", escapeHtml, disabledAttr }),
+    "<div style=\"display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px\">",
+    importForm,
+    "<span class=\"ghb-copy\" style=\"opacity:.6;font-size:.82rem\">Nox family pack only — imports only when companion ID is 'nox'.</span>",
     "</div>",
-    "<div class=\"ghb-field\" style=\"margin-bottom:10px\"><label class=\"ghb-section-title\" style=\"font-size:.9rem;display:block;margin-bottom:4px\">Display Label</label>",
-    `<input name="displayLabel" type="text" placeholder="Optional short label" style="${inputStyle}"${disabledAttr}></div>`,
-    `<label class="ghb-copy" style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input type="checkbox" name="chatPermission" value="true" checked${disabledAttr}> Chat permission</label>`,
-    `<label class="ghb-copy" style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input type="checkbox" name="followPermission" value="true"${disabledAttr}> Follow permission</label>`,
-    `<label class="ghb-copy" style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input type="checkbox" name="privateMemoryPermission" value="true"${disabledAttr}> Private-memory permission</label>`,
-    "<div class=\"ghb-field\" style=\"margin:8px 0\"><label class=\"ghb-section-title\" style=\"font-size:.9rem;display:block;margin-bottom:4px\">Notes</label>",
-    `<input name="notes" type="text" placeholder="Optional notes" style="${inputStyle}"${disabledAttr}></div>`,
-    `<button type="submit" class="ghb-btn"${disabledAttr} style="padding:8px 16px;border-radius:8px;border:0;background:#3a7ced;color:#fff;font:inherit;cursor:pointer">Save relationship</button>`,
-    "</form>",
+    `<h4 class="ghb-copy" style="margin:0 0 8px;font-weight:600;font-size:.95rem">Known People (${escapeHtml(String(avatarRows.length))})</h4>`,
+    `<ul class="ghb-bullet-list" style="list-style:none;padding:0;margin-bottom:16px">${avatarList}</ul>`,
+    "<h4 class=\"ghb-copy\" style=\"margin:0 0 8px;font-weight:600;font-size:.95rem\">Add / Update Person</h4>",
+    avatarForm,
+    "<hr style=\"margin:20px 0;border:0;border-top:1px solid rgba(124,58,237,.15)\">",
+    `<h4 class="ghb-copy" style="margin:0 0 8px;font-weight:600;font-size:.95rem">Object Relationships (${escapeHtml(String(objectRows.length))})</h4>`,
+    "<p class=\"ghb-copy\" style=\"opacity:.7;margin:0 0 8px;font-size:.85rem\">Objects recognised by UUID or description token (useful when object description contains the owner's avatar UUID). All replies to child-safe objects are forced child-safe regardless of companion adult mode.</p>",
+    `<ul class="ghb-bullet-list" style="list-style:none;padding:0;margin-bottom:16px">${objectList}</ul>`,
+    "<h4 class=\"ghb-copy\" style=\"margin:0 0 8px;font-weight:600;font-size:.95rem\">Add / Update Object</h4>",
+    objectForm,
     "</section>",
   ].join("");
 }
@@ -740,6 +876,7 @@ function renderSecondLifePage({
   status = null,
   summary = null,
   relationships = [],
+  objectRelationships = [],
   commands = [],
   outfits = [],
   landmarks = [],
@@ -910,7 +1047,7 @@ ${storeWarning}
 
 <section class="ghb-main-grid" style="margin-top:18px">
   <div class="ghb-left">
-    ${renderRelationshipPanel({ relationships, escapeHtml, withThemeField, theme, disabledAttr })}
+    ${renderPeopleObjectsPanel({ relationships, objectRelationships, companionId, escapeHtml, withThemeField, theme, disabledAttr })}
   </div>
   <div class="ghb-right">
     ${renderCommandPanel({ commands, copyBlock, escapeHtml, withThemeField, theme, disabledAttr })}
@@ -968,6 +1105,7 @@ module.exports = {
   TEXT_SETTINGS,
   NUMBER_SETTINGS,
   RELATIONSHIP_TIERS,
+  REPLY_POLICIES,
   COMMAND_TYPES,
   COMMAND_ALLOWED_TIERS,
   AUTONOMY_LEVELS,

@@ -166,6 +166,72 @@ function createSecondLifeStore({ config, logger }) {
         ON second_life_avatar_relationships (companion_id, relationship_type)
       `);
 
+      // Phase 21 — idempotent migrations for the People + Objects identity registry.
+      // Extends second_life_avatar_relationships with rich identity/policy fields.
+      const avatarCols = [
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS nickname TEXT NOT NULL DEFAULT ''`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT ''`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS relationship_to_user TEXT NOT NULL DEFAULT ''`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS relationship_to_companion TEXT NOT NULL DEFAULT ''`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS reply_policy TEXT NOT NULL DEFAULT 'allowed_if_mentioned'`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS always_respond BOOLEAN NOT NULL DEFAULT FALSE`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS never_respond BOOLEAN NOT NULL DEFAULT FALSE`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS child_safe_only BOOLEAN NOT NULL DEFAULT FALSE`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS public_identity_context_enabled BOOLEAN NOT NULL DEFAULT TRUE`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS local_chat_chatter_enabled BOOLEAN NOT NULL DEFAULT TRUE`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS min_seconds_between_replies INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS last_reply_at TIMESTAMPTZ`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMPTZ`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS message_count INTEGER NOT NULL DEFAULT 0`,
+      ];
+      for (const sql of avatarCols) {
+        await client.query(sql);
+      }
+
+      // Phase 21 — object identity / chatter relationships table.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS second_life_object_relationships (
+          id BIGSERIAL PRIMARY KEY,
+          companion_id TEXT NOT NULL,
+          object_uuid TEXT NOT NULL DEFAULT '',
+          object_name TEXT NOT NULL DEFAULT '',
+          object_description_token TEXT NOT NULL DEFAULT '',
+          nickname TEXT NOT NULL DEFAULT '',
+          category TEXT NOT NULL DEFAULT '',
+          relationship_to_user TEXT NOT NULL DEFAULT '',
+          relationship_to_companion TEXT NOT NULL DEFAULT '',
+          trust_level TEXT NOT NULL DEFAULT 'known',
+          reply_policy TEXT NOT NULL DEFAULT 'ambient_only',
+          private_channel_allowed BOOLEAN NOT NULL DEFAULT FALSE,
+          child_safe_only BOOLEAN NOT NULL DEFAULT FALSE,
+          always_respond BOOLEAN NOT NULL DEFAULT FALSE,
+          never_respond BOOLEAN NOT NULL DEFAULT FALSE,
+          public_identity_context_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          local_chat_chatter_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          min_seconds_between_replies INTEGER NOT NULL DEFAULT 180,
+          notes TEXT NOT NULL DEFAULT '',
+          first_seen_at TIMESTAMPTZ,
+          last_seen_at TIMESTAMPTZ,
+          last_reply_at TIMESTAMPTZ,
+          message_count INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sl_obj_rel_companion
+        ON second_life_object_relationships (companion_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sl_obj_rel_companion_uuid
+        ON second_life_object_relationships (companion_id, object_uuid)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sl_obj_rel_companion_desc
+        ON second_life_object_relationships (companion_id, object_description_token)
+      `);
+
       await client.query(`
         CREATE TABLE IF NOT EXISTS second_life_outfits (
           id BIGSERIAL PRIMARY KEY,
@@ -572,6 +638,53 @@ function createSecondLifeStore({ config, logger }) {
       followPermission: Boolean(row.follow_permission),
       privateMemoryPermission: Boolean(row.private_memory_permission),
       notes: row.notes || "",
+      // Phase 21 — identity registry fields
+      nickname: row.nickname || "",
+      category: row.category || "",
+      relationshipToUser: row.relationship_to_user || "",
+      relationshipToCompanion: row.relationship_to_companion || "",
+      replyPolicy: row.reply_policy || "allowed_if_mentioned",
+      alwaysRespond: Boolean(row.always_respond),
+      neverRespond: Boolean(row.never_respond),
+      childSafeOnly: Boolean(row.child_safe_only),
+      publicIdentityContextEnabled: row.public_identity_context_enabled == null ? true : Boolean(row.public_identity_context_enabled),
+      localChatChatterEnabled: row.local_chat_chatter_enabled == null ? true : Boolean(row.local_chat_chatter_enabled),
+      minSecondsBetweenReplies: Number(row.min_seconds_between_replies || 0),
+      lastReplyAt: row.last_reply_at || null,
+      firstSeenAt: row.first_seen_at || null,
+      lastSeenAt: row.last_seen_at || null,
+      messageCount: Number(row.message_count || 0),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  function mapObjectRelationshipRow(row) {
+    if (!row) return null;
+    return {
+      id: String(row.id),
+      companionId: row.companion_id,
+      objectUuid: row.object_uuid || "",
+      objectName: row.object_name || "",
+      objectDescriptionToken: row.object_description_token || "",
+      nickname: row.nickname || "",
+      category: row.category || "",
+      relationshipToUser: row.relationship_to_user || "",
+      relationshipToCompanion: row.relationship_to_companion || "",
+      trustLevel: row.trust_level || "known",
+      replyPolicy: row.reply_policy || "ambient_only",
+      privateChannelAllowed: Boolean(row.private_channel_allowed),
+      childSafeOnly: Boolean(row.child_safe_only),
+      alwaysRespond: Boolean(row.always_respond),
+      neverRespond: Boolean(row.never_respond),
+      publicIdentityContextEnabled: row.public_identity_context_enabled == null ? true : Boolean(row.public_identity_context_enabled),
+      localChatChatterEnabled: row.local_chat_chatter_enabled == null ? true : Boolean(row.local_chat_chatter_enabled),
+      minSecondsBetweenReplies: Number(row.min_seconds_between_replies || 180),
+      notes: row.notes || "",
+      firstSeenAt: row.first_seen_at || null,
+      lastSeenAt: row.last_seen_at || null,
+      lastReplyAt: row.last_reply_at || null,
+      messageCount: Number(row.message_count || 0),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -821,6 +934,7 @@ function createSecondLifeStore({ config, logger }) {
    * source of truth; display name is weak metadata. The relationship_type label
    * plus the role booleans are stored as supplied so the resolver can derive a
    * single canonical tier. Empty/omitted fields fall back to the existing row.
+   * Phase 21 adds the identity registry fields (nickname, category, replyPolicy, etc.).
    */
   async function upsertRelationship({
     companionId,
@@ -837,6 +951,18 @@ function createSecondLifeStore({ config, logger }) {
     followPermission = false,
     privateMemoryPermission = false,
     notes = "",
+    // Phase 21 identity registry fields
+    nickname = "",
+    category = "",
+    relationshipToUser = "",
+    relationshipToCompanion = "",
+    replyPolicy = "allowed_if_mentioned",
+    alwaysRespond = false,
+    neverRespond = false,
+    childSafeOnly = false,
+    publicIdentityContextEnabled = true,
+    localChatChatterEnabled = true,
+    minSecondsBetweenReplies = 0,
   }) {
     if (!available) return null;
     if (!avatarUuid) return null;
@@ -844,8 +970,12 @@ function createSecondLifeStore({ config, logger }) {
       `INSERT INTO second_life_avatar_relationships
          (companion_id, avatar_uuid, avatar_name, relationship_type, display_label,
           is_owner, is_family, is_friend, is_trusted, is_blocked,
-          chat_permission, follow_permission, private_memory_permission, notes, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, NOW())
+          chat_permission, follow_permission, private_memory_permission, notes,
+          nickname, category, relationship_to_user, relationship_to_companion,
+          reply_policy, always_respond, never_respond, child_safe_only,
+          public_identity_context_enabled, local_chat_chatter_enabled, min_seconds_between_replies,
+          updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,NOW())
        ON CONFLICT (companion_id, avatar_uuid) DO UPDATE SET
          avatar_name = COALESCE(NULLIF(EXCLUDED.avatar_name, ''), second_life_avatar_relationships.avatar_name),
          relationship_type = EXCLUDED.relationship_type,
@@ -859,6 +989,17 @@ function createSecondLifeStore({ config, logger }) {
          follow_permission = EXCLUDED.follow_permission,
          private_memory_permission = EXCLUDED.private_memory_permission,
          notes = EXCLUDED.notes,
+         nickname = EXCLUDED.nickname,
+         category = EXCLUDED.category,
+         relationship_to_user = EXCLUDED.relationship_to_user,
+         relationship_to_companion = EXCLUDED.relationship_to_companion,
+         reply_policy = EXCLUDED.reply_policy,
+         always_respond = EXCLUDED.always_respond,
+         never_respond = EXCLUDED.never_respond,
+         child_safe_only = EXCLUDED.child_safe_only,
+         public_identity_context_enabled = EXCLUDED.public_identity_context_enabled,
+         local_chat_chatter_enabled = EXCLUDED.local_chat_chatter_enabled,
+         min_seconds_between_replies = EXCLUDED.min_seconds_between_replies,
          updated_at = NOW()
        RETURNING *`,
       [
@@ -876,6 +1017,17 @@ function createSecondLifeStore({ config, logger }) {
         Boolean(followPermission),
         Boolean(privateMemoryPermission),
         String(notes || ""),
+        String(nickname || ""),
+        String(category || ""),
+        String(relationshipToUser || ""),
+        String(relationshipToCompanion || ""),
+        String(replyPolicy || "allowed_if_mentioned"),
+        Boolean(alwaysRespond),
+        Boolean(neverRespond),
+        Boolean(childSafeOnly),
+        publicIdentityContextEnabled === false ? false : true,
+        localChatChatterEnabled === false ? false : true,
+        Number(minSecondsBetweenReplies || 0),
       ],
     );
     return mapRelationshipRow(rows[0]);
@@ -890,6 +1042,229 @@ function createSecondLifeStore({ config, logger }) {
       [companionId, String(avatarUuid)],
     );
     return rowCount > 0;
+  }
+
+  // ─── Phase 21 — avatar seen/reply tracking ───────────────────────────────
+
+  async function markRelationshipSeen({ companionId, avatarUuid, avatarName = "" }) {
+    if (!available || !avatarUuid) return null;
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO second_life_avatar_relationships
+           (companion_id, avatar_uuid, avatar_name, first_seen_at, last_seen_at, message_count, updated_at)
+         VALUES ($1, $2, $3, NOW(), NOW(), 1, NOW())
+         ON CONFLICT (companion_id, avatar_uuid) DO UPDATE SET
+           avatar_name = COALESCE(NULLIF(EXCLUDED.avatar_name, ''), second_life_avatar_relationships.avatar_name),
+           first_seen_at = COALESCE(second_life_avatar_relationships.first_seen_at, NOW()),
+           last_seen_at = NOW(),
+           message_count = second_life_avatar_relationships.message_count + 1,
+           updated_at = NOW()
+         RETURNING *`,
+        [companionId, String(avatarUuid), String(avatarName || "")],
+      );
+      return mapRelationshipRow(rows[0]);
+    } catch {
+      return null;
+    }
+  }
+
+  async function recordRelationshipReply({ companionId, avatarUuid }) {
+    if (!available || !avatarUuid) return null;
+    try {
+      const { rows } = await pool.query(
+        `UPDATE second_life_avatar_relationships
+           SET last_reply_at = NOW(), updated_at = NOW()
+         WHERE companion_id = $1 AND avatar_uuid = $2
+         RETURNING *`,
+        [companionId, String(avatarUuid)],
+      );
+      return mapRelationshipRow(rows[0]);
+    } catch {
+      return null;
+    }
+  }
+
+  // ─── Phase 21 — object relationship accessors ────────────────────────────
+
+  async function getObjectRelationshipByUuid({ companionId, objectUuid }) {
+    if (!available || !objectUuid) return null;
+    const { rows } = await pool.query(
+      `SELECT * FROM second_life_object_relationships
+       WHERE companion_id = $1 AND object_uuid = $2 LIMIT 1`,
+      [companionId, String(objectUuid)],
+    );
+    return mapObjectRelationshipRow(rows[0]);
+  }
+
+  async function getObjectRelationshipByDescriptionToken({ companionId, objectDescription }) {
+    if (!available || !objectDescription) return null;
+    const desc = String(objectDescription);
+    const { rows } = await pool.query(
+      `SELECT * FROM second_life_object_relationships
+       WHERE companion_id = $1
+         AND object_description_token <> ''
+         AND $2 LIKE '%' || object_description_token || '%'
+       LIMIT 1`,
+      [companionId, desc],
+    );
+    return mapObjectRelationshipRow(rows[0]);
+  }
+
+  async function listObjectRelationships({ companionId } = {}) {
+    if (!available) return [];
+    const { rows } = await pool.query(
+      `SELECT * FROM second_life_object_relationships
+       WHERE companion_id = $1
+       ORDER BY nickname ASC, object_name ASC`,
+      [companionId],
+    );
+    return rows.map(mapObjectRelationshipRow);
+  }
+
+  async function upsertObjectRelationship({
+    companionId,
+    objectUuid = "",
+    objectName = "",
+    objectDescriptionToken = "",
+    nickname = "",
+    category = "",
+    relationshipToUser = "",
+    relationshipToCompanion = "",
+    trustLevel = "known",
+    replyPolicy = "ambient_only",
+    privateChannelAllowed = false,
+    childSafeOnly = false,
+    alwaysRespond = false,
+    neverRespond = false,
+    publicIdentityContextEnabled = true,
+    localChatChatterEnabled = true,
+    minSecondsBetweenReplies = 180,
+    notes = "",
+  }) {
+    if (!available) return null;
+    if (!objectUuid && !objectDescriptionToken && !objectName) return null;
+
+    // Use (companionId, objectDescriptionToken) or (companionId, objectUuid) as the merge key.
+    // If objectDescriptionToken is set, try to match on that first.
+    if (objectDescriptionToken) {
+      const existing = await getObjectRelationshipByDescriptionToken({ companionId, objectDescription: objectDescriptionToken });
+      if (existing) {
+        const { rows } = await pool.query(
+          `UPDATE second_life_object_relationships SET
+             object_uuid = COALESCE(NULLIF($3, ''), object_uuid),
+             object_name = COALESCE(NULLIF($4, ''), object_name),
+             object_description_token = $5,
+             nickname = $6, category = $7,
+             relationship_to_user = $8, relationship_to_companion = $9,
+             trust_level = $10, reply_policy = $11,
+             private_channel_allowed = $12, child_safe_only = $13,
+             always_respond = $14, never_respond = $15,
+             public_identity_context_enabled = $16, local_chat_chatter_enabled = $17,
+             min_seconds_between_replies = $18, notes = $19,
+             updated_at = NOW()
+           WHERE companion_id = $1 AND id = $2
+           RETURNING *`,
+          [
+            companionId, existing.id,
+            String(objectUuid || ""), String(objectName || ""),
+            String(objectDescriptionToken),
+            String(nickname || ""), String(category || ""),
+            String(relationshipToUser || ""), String(relationshipToCompanion || ""),
+            String(trustLevel || "known"), String(replyPolicy || "ambient_only"),
+            Boolean(privateChannelAllowed), Boolean(childSafeOnly),
+            Boolean(alwaysRespond), Boolean(neverRespond),
+            publicIdentityContextEnabled === false ? false : true,
+            localChatChatterEnabled === false ? false : true,
+            Number(minSecondsBetweenReplies || 180),
+            String(notes || ""),
+          ],
+        );
+        return mapObjectRelationshipRow(rows[0]);
+      }
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO second_life_object_relationships
+         (companion_id, object_uuid, object_name, object_description_token,
+          nickname, category, relationship_to_user, relationship_to_companion,
+          trust_level, reply_policy, private_channel_allowed, child_safe_only,
+          always_respond, never_respond, public_identity_context_enabled,
+          local_chat_chatter_enabled, min_seconds_between_replies, notes, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
+       RETURNING *`,
+      [
+        companionId,
+        String(objectUuid || ""), String(objectName || ""),
+        String(objectDescriptionToken || ""),
+        String(nickname || ""), String(category || ""),
+        String(relationshipToUser || ""), String(relationshipToCompanion || ""),
+        String(trustLevel || "known"), String(replyPolicy || "ambient_only"),
+        Boolean(privateChannelAllowed), Boolean(childSafeOnly),
+        Boolean(alwaysRespond), Boolean(neverRespond),
+        publicIdentityContextEnabled === false ? false : true,
+        localChatChatterEnabled === false ? false : true,
+        Number(minSecondsBetweenReplies || 180),
+        String(notes || ""),
+      ],
+    );
+    return mapObjectRelationshipRow(rows[0]);
+  }
+
+  async function deleteObjectRelationship({ companionId, id }) {
+    if (!available || !id) return false;
+    const { rowCount } = await pool.query(
+      `DELETE FROM second_life_object_relationships WHERE companion_id = $1 AND id = $2`,
+      [companionId, Number(id)],
+    );
+    return rowCount > 0;
+  }
+
+  async function markObjectRelationshipSeen({ companionId, objectUuid = "", objectName = "", objectDescriptionToken = "" }) {
+    if (!available) return null;
+    if (!objectUuid && !objectDescriptionToken) return null;
+    try {
+      const existing = objectUuid
+        ? await getObjectRelationshipByUuid({ companionId, objectUuid })
+        : objectDescriptionToken
+          ? await getObjectRelationshipByDescriptionToken({ companionId, objectDescription: objectDescriptionToken })
+          : null;
+      if (!existing) return null;
+      const { rows } = await pool.query(
+        `UPDATE second_life_object_relationships SET
+           object_name = COALESCE(NULLIF($3, ''), object_name),
+           first_seen_at = COALESCE(first_seen_at, NOW()),
+           last_seen_at = NOW(),
+           message_count = message_count + 1,
+           updated_at = NOW()
+         WHERE companion_id = $1 AND id = $2
+         RETURNING *`,
+        [companionId, existing.id, String(objectName || "")],
+      );
+      return mapObjectRelationshipRow(rows[0]);
+    } catch {
+      return null;
+    }
+  }
+
+  async function recordObjectRelationshipReply({ companionId, objectUuid = "", objectDescriptionToken = "" }) {
+    if (!available) return null;
+    if (!objectUuid && !objectDescriptionToken) return null;
+    try {
+      const existing = objectUuid
+        ? await getObjectRelationshipByUuid({ companionId, objectUuid })
+        : await getObjectRelationshipByDescriptionToken({ companionId, objectDescription: objectDescriptionToken });
+      if (!existing) return null;
+      const { rows } = await pool.query(
+        `UPDATE second_life_object_relationships
+           SET last_reply_at = NOW(), updated_at = NOW()
+         WHERE companion_id = $1 AND id = $2
+         RETURNING *`,
+        [companionId, existing.id],
+      );
+      return mapObjectRelationshipRow(rows[0]);
+    } catch {
+      return null;
+    }
   }
 
   async function listCommandDefinitions({ companionId } = {}) {
@@ -2219,6 +2594,15 @@ function createSecondLifeStore({ config, logger }) {
     listRelationships,
     upsertRelationship,
     deleteRelationship,
+    markRelationshipSeen,
+    recordRelationshipReply,
+    getObjectRelationshipByUuid,
+    getObjectRelationshipByDescriptionToken,
+    listObjectRelationships,
+    upsertObjectRelationship,
+    deleteObjectRelationship,
+    markObjectRelationshipSeen,
+    recordObjectRelationshipReply,
     listCommandDefinitions,
     getCommandDefinitionByTrigger,
     upsertCommandDefinition,
