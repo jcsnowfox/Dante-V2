@@ -1,4 +1,9 @@
 const DISCORD_MESSAGE_MAX_LENGTH = 2000;
+// Hard upper bound on how many separate Discord messages a single reply may be
+// split into. Real replies never need this many; the cap is a safety valve so a
+// degenerate/looping model response can never flood a channel with dozens of
+// near-identical messages.
+const MAX_OUTGOING_CHUNKS = 5;
 const DEFAULT_TYPING_INDICATOR_TIMEOUT_MS = 2000;
 const STANDALONE_URL_PATTERN = /^https?:\/\/\S+$/i;
 const STANDALONE_MEDIA_URL_PATTERN = /\.(?:gif|webp|png|jpe?g)(?:[?#].*)?$/i;
@@ -165,6 +170,21 @@ function splitTextIntoChunks(text, maxLength = DISCORD_MESSAGE_MAX_LENGTH) {
   }
 
   pushCurrentChunk();
+
+  if (chunks.length > MAX_OUTGOING_CHUNKS) {
+    const kept = chunks.slice(0, MAX_OUTGOING_CHUNKS);
+    const omitted = chunks.length - kept.length;
+    const lastIndex = kept.length - 1;
+    const notice = `\n\n…(${omitted} more message${omitted === 1 ? "" : "s"} trimmed)`;
+    const lastWithNotice = `${kept[lastIndex]}${notice}`;
+
+    if (lastWithNotice.length <= maxLength) {
+      kept[lastIndex] = lastWithNotice;
+    }
+
+    return kept;
+  }
+
   return chunks;
 }
 

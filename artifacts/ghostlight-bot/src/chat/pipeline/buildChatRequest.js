@@ -2,6 +2,12 @@ const { buildSystemPrompt, isSharedServerMode } = require("../prompt/buildSystem
 const { shouldUseWebSearch, buildWebSearchRequestOptions } = require("./webSearch");
 const { buildChatInput, buildInternalContextText, formatTimestamp } = require("./buildChatInput");
 
+// Generous default cap on a single reply's generated tokens. A long companion
+// message fits comfortably under this; the cap exists so a degenerate/looping
+// model cannot emit an unbounded wall of repeated text. Override per-deployment
+// via config.chat.maxOutputTokens.
+const DEFAULT_MAX_OUTPUT_TOKENS = 1200;
+
 const CONVERSATION_RETRIEVAL_FORCE_PATTERNS = Object.freeze([
   /\bwhat\s+(?:did|was)\s+i\s+(?:just\s+)?(?:say|ask|tell|mention|write|start|open|discuss)\b/i,
   /\b(?:do\s+you\s+)?remember\s+what\s+i\s+(?:said|asked|mentioned|wrote|started|opened|discussed)\b/i,
@@ -141,8 +147,18 @@ function buildChatRequest({
     totalToolCount,
   });
 
+  // Bound how long a single generation can run. Without this, a degenerate or
+  // looping model can produce an unbounded, repetitive wall of text that the bot
+  // then posts verbatim. The default is generous (a long companion reply fits
+  // comfortably) and is overridable via config.chat.maxOutputTokens.
+  const configuredMaxOutputTokens = Number(config.chat?.maxOutputTokens);
+  const maxOutputTokens = Number.isFinite(configuredMaxOutputTokens) && configuredMaxOutputTokens > 0
+    ? Math.round(configuredMaxOutputTokens)
+    : DEFAULT_MAX_OUTPUT_TOKENS;
+
   const request = {
     model: selectedModel,
+    max_output_tokens: maxOutputTokens,
     instructions: [
       systemPromptPrefix ? String(systemPromptPrefix).trim() : "",
       baseInstructions,
