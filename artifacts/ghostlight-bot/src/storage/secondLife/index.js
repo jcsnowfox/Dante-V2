@@ -937,6 +937,21 @@ function createSecondLifeStore({ config, logger }) {
     return rows.map(mapRelationshipRow);
   }
 
+  async function findRelationshipByName({ companionId, name }) {
+    if (!available || !name) return null;
+    const n = String(name).toLowerCase().trim();
+    if (!n) return null;
+    const { rows } = await pool.query(
+      `SELECT * FROM second_life_avatar_relationships
+       WHERE companion_id = $1
+         AND (LOWER(nickname) = $2 OR LOWER(avatar_name) = $2)
+         AND is_blocked = false
+       LIMIT 1`,
+      [companionId, n],
+    );
+    return mapRelationshipRow(rows[0]);
+  }
+
   /**
    * Create or update a relationship by (companionId, avatarUuid). UUID is the
    * source of truth; display name is weak metadata. The relationship_type label
@@ -1135,6 +1150,20 @@ function createSecondLifeStore({ config, logger }) {
       [companionId],
     );
     return rows.map(mapObjectRelationshipRow);
+  }
+
+  async function findObjectRelationshipByName({ companionId, name }) {
+    if (!available || !name) return null;
+    const n = String(name).toLowerCase().trim();
+    if (!n) return null;
+    const { rows } = await pool.query(
+      `SELECT * FROM second_life_object_relationships
+       WHERE companion_id = $1
+         AND (LOWER(nickname) = $2 OR LOWER(object_name) = $2)
+       LIMIT 1`,
+      [companionId, n],
+    );
+    return mapObjectRelationshipRow(rows[0]);
   }
 
   async function upsertObjectRelationship({
@@ -2608,6 +2637,7 @@ function createSecondLifeStore({ config, logger }) {
     upsertWorldState,
     getRelationshipByUuid,
     listRelationships,
+    findRelationshipByName,
     upsertRelationship,
     deleteRelationship,
     markRelationshipSeen,
@@ -2615,6 +2645,7 @@ function createSecondLifeStore({ config, logger }) {
     getObjectRelationshipByUuid,
     getObjectRelationshipByDescriptionToken,
     listObjectRelationships,
+    findObjectRelationshipByName,
     upsertObjectRelationship,
     deleteObjectRelationship,
     markObjectRelationshipSeen,
