@@ -185,7 +185,24 @@ async function enrichInput({ config, logger, input }) {
           imageModel: resolveImageModel(config),
         });
 
-        const text = await analyzeImageAttachment({ client: imageClient, config, attachment });
+        let text = "";
+        try {
+          text = await analyzeImageAttachment({ client: imageClient, config, attachment });
+        } catch (error) {
+          if (error && error.contentFiltered) {
+            logger.warn("[chat] Image analysis declined by content filter; using neutral placeholder", {
+              name: attachment.name,
+            });
+            derivedAttachments.push({
+              kind: "image_analysis",
+              attachment,
+              authorName: input.authorName,
+              text: "(The attached image could not be described automatically.)",
+            });
+            continue;
+          }
+          throw error;
+        }
 
         if (text) {
           derivedAttachments.push({

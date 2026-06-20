@@ -548,6 +548,19 @@ function isReasoningOnlyResponse(response = {}) {
   return outputTypes.length > 0 && outputTypes.every((type) => type === "reasoning");
 }
 
+// Safety net: some providers emit a content-filter refusal as the visible
+// output_text (not as response.error), which chooseResponseText would otherwise
+// relay verbatim as the companion's reply. Detect only SHORT, standalone refusal
+// templates so legit replies that merely mention these phrases are untouched.
+const STANDALONE_PROVIDER_REFUSAL_PATTERN =
+  /^\s*(the |this |your )?request (was|is|has been) rejected|^\s*rejected because|considered high risk|flagged (by the safety system|as high risk)/i;
+
+function isStandaloneProviderRefusal(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed || trimmed.length > 320) return false;
+  return STANDALONE_PROVIDER_REFUSAL_PATTERN.test(trimmed);
+}
+
 async function callModel({
   config,
   logger,
@@ -926,11 +939,22 @@ async function callModel({
     toolsMutedByFallback,
   });
 
+  let visibleText = text;
+  if (isStandaloneProviderRefusal(visibleText)) {
+    logger.warn("[chat] Suppressed standalone provider refusal leaked as visible text", {
+      provider: providerLabel,
+      model: selectedModel,
+      responseId: response.id,
+      preview: truncateDiagnosticText(visibleText, 200),
+    });
+    visibleText = "The model provider declined this request.";
+  }
+
   return {
     provider: providerLabel,
     mode: mode.name,
     toolCount: totalToolCount,
-    text: text || buildMissingOutputText({ response, toolLoop }),
+    text: visibleText || buildMissingOutputText({ response, toolLoop }),
     sources,
     webSearchUsed: useWebSearch,
     files: replyDirectives.files,
@@ -959,4 +983,5 @@ module.exports = {
   chooseResponseText,
   isOnlyLiteralToolInvocationMarkup,
   isReasoningOnlyResponse,
+  isStandaloneProviderRefusal,
 };

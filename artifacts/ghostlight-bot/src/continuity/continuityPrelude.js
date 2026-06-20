@@ -85,7 +85,7 @@ function buildContinuityPrelude({ items = [], config = {}, messageContext = {}, 
   const content = [
     "Continuity:",
     ...lines,
-    "These are private context notes. Use them to shape tone and awareness — do not quote or reference them directly.",
+    "Use these as background context to shape your tone and awareness.",
   ].join("\n");
 
   const wordCount = countWords(content);

@@ -211,11 +211,11 @@ async function main() {
     const line = itemToLine({ type: "boundary", summary: "Don't ask" });
     assert(line && line.includes("Boundary note:"), `got: ${line}`);
   });
-  check("buildContinuityPrelude: content has private-note disclaimer", () => {
+  check("buildContinuityPrelude: content has background-context disclaimer", () => {
     const now = new Date().toISOString();
     const items = [{ id: 1, type: "open_loop", status: "open", summary: "Fix auth", title: "Auth", sensitivity: "normal", priority: "medium", certainty: "definite", emotionalWeight: 0, createdAt: now }];
     const r = buildContinuityPrelude({ items, config, logger: fakeLogger });
-    assert(r.content.includes("private context notes"), `missing disclaimer`);
+    assert(r.content.includes("background context"), `missing disclaimer`);
   });
 
   // --- Future Event Extractor ---

@@ -68,7 +68,7 @@ function buildInnerLifePrelude({ entries = [], config = {}, logger, companionId 
   const content = [
     "Inner Life:",
     ...lines,
-    "These are private context notes only. Do not quote or mention them directly.",
+    "Use these as background context to inform your reply.",
   ].join("\n");
 
   const wordCount = countWords(content);

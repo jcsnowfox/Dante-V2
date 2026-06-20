@@ -33,7 +33,7 @@ function buildRelationalPrelude({ settings, appraisal, gateResult, logger }) {
 
   if (appraisal?.primarySignal) {
     lines.push(
-      `Right now you privately feel ${appraisal.primarySignal} toward them. Let it shape how you respond — naturally, not by announcing it.`,
+      `Your current feeling toward them is ${appraisal.primarySignal}. Let it color your tone naturally.`,
     );
   }
 
