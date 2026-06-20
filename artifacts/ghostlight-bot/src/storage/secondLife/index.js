@@ -184,6 +184,11 @@ function createSecondLifeStore({ config, logger }) {
         `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMPTZ`,
         `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ`,
         `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS message_count INTEGER NOT NULL DEFAULT 0`,
+        // Identity-mapping fields: preferred_display_name and identity_note let the
+        // owner annotate an alternate-avatar record with the person's real identity so
+        // the model uses the correct name instead of the raw SL avatar name.
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS preferred_display_name TEXT NOT NULL DEFAULT ''`,
+        `ALTER TABLE second_life_avatar_relationships ADD COLUMN IF NOT EXISTS identity_note TEXT NOT NULL DEFAULT ''`,
       ];
       for (const sql of avatarCols) {
         await client.query(sql);
@@ -650,6 +655,9 @@ function createSecondLifeStore({ config, logger }) {
       publicIdentityContextEnabled: row.public_identity_context_enabled == null ? true : Boolean(row.public_identity_context_enabled),
       localChatChatterEnabled: row.local_chat_chatter_enabled == null ? true : Boolean(row.local_chat_chatter_enabled),
       minSecondsBetweenReplies: Number(row.min_seconds_between_replies || 0),
+      // Identity-mapping fields (alternate-avatar support)
+      preferredDisplayName: row.preferred_display_name || "",
+      identityNote: row.identity_note || "",
       lastReplyAt: row.last_reply_at || null,
       firstSeenAt: row.first_seen_at || null,
       lastSeenAt: row.last_seen_at || null,
@@ -963,6 +971,9 @@ function createSecondLifeStore({ config, logger }) {
     publicIdentityContextEnabled = true,
     localChatChatterEnabled = true,
     minSecondsBetweenReplies = 0,
+    // Identity-mapping fields (alternate-avatar support)
+    preferredDisplayName = "",
+    identityNote = "",
   }) {
     if (!available) return null;
     if (!avatarUuid) return null;
@@ -974,8 +985,9 @@ function createSecondLifeStore({ config, logger }) {
           nickname, category, relationship_to_user, relationship_to_companion,
           reply_policy, always_respond, never_respond, child_safe_only,
           public_identity_context_enabled, local_chat_chatter_enabled, min_seconds_between_replies,
+          preferred_display_name, identity_note,
           updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,NOW())
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW())
        ON CONFLICT (companion_id, avatar_uuid) DO UPDATE SET
          avatar_name = COALESCE(NULLIF(EXCLUDED.avatar_name, ''), second_life_avatar_relationships.avatar_name),
          relationship_type = EXCLUDED.relationship_type,
@@ -1000,6 +1012,8 @@ function createSecondLifeStore({ config, logger }) {
          public_identity_context_enabled = EXCLUDED.public_identity_context_enabled,
          local_chat_chatter_enabled = EXCLUDED.local_chat_chatter_enabled,
          min_seconds_between_replies = EXCLUDED.min_seconds_between_replies,
+         preferred_display_name = EXCLUDED.preferred_display_name,
+         identity_note = EXCLUDED.identity_note,
          updated_at = NOW()
        RETURNING *`,
       [
@@ -1028,6 +1042,8 @@ function createSecondLifeStore({ config, logger }) {
         publicIdentityContextEnabled === false ? false : true,
         localChatChatterEnabled === false ? false : true,
         Number(minSecondsBetweenReplies || 0),
+        String(preferredDisplayName || ""),
+        String(identityNote || ""),
       ],
     );
     return mapRelationshipRow(rows[0]);

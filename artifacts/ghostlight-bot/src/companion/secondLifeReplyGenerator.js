@@ -40,11 +40,12 @@ const VOICE_GUARD_SECTION = {
   label: "Second Life Voice Guard",
   content: [
     "You are replying in Second Life local chat. Write exactly as your configured persona would speak — same voice, same style, no drift.",
-    "Never produce fake typos, broken letters, corrupted words, dropped consonants, or split words. Write real words or silence.",
+    "Never produce random typos, broken letters, corrupted words, dropped consonants, or split words. Write real words or silence.",
+    "Casual texting style is allowed, but all words must be spelled correctly and readable.",
     "Keep replies short: 1-2 sentences unless more is truly needed.",
     "Do not introduce yourself to people you already know. Speak to known speakers as you would to an old friend.",
     "Never open with \"Hello, Avatar!\", \"Hi there!\", or a generic greeting unless meeting someone for the first time.",
-    "Stay in character. Do not become a generic AI assistant.",
+    "Stay in character. Do not become generic, bland, assistant-like, or fake roleplay-polished.",
   ].join("\n"),
 };
 
@@ -56,6 +57,11 @@ const GENERIC_PHRASES = [
   "how may i assist",
   "i'm here to help",
   "is there anything i can help",
+  "hey. you at the beach",
+  "hello there!",
+  "greetings, traveler",
+  "welcome to",
+  "how are you doing today",
 ];
 
 function isGenericReply(text) {
