@@ -182,6 +182,30 @@ function createSecondLifeAdapter({
       sections.push({ label: "Second Life Speaker", content: relationshipLine, private: true });
     }
 
+    // Voice-fix — known speaker tone reinforcement. When the speaker is owner,
+    // family, friend, or trusted (or has private-memory permission), add a
+    // short behavioral instruction so the model does not introduce itself or
+    // fall into generic-assistant phrasing with people it already knows.
+    const isKnownSpeaker = Boolean(
+      resolved?.isOwner
+      || resolved?.isFamily
+      || resolved?.isFriend
+      || resolved?.isTrusted
+      || permissions?.privateMemory === true,
+    );
+    if (isKnownSpeaker) {
+      const nickname = resolved?.nickname || resolved?.name || null;
+      sections.push({
+        label: "Known Speaker Tone",
+        content: [
+          "You know this person. Do not introduce yourself or ask who they are.",
+          "Do not open with a formal greeting. You have spoken before.",
+          "Speak naturally, warmly, and directly as you would with someone you know well.",
+          nickname ? `Their name/nickname is ${nickname}. Use it if it comes naturally.` : "",
+        ].filter(Boolean).join("\n"),
+      });
+    }
+
     const worldLines = [];
     const region = asText(event.region) || asText(worldState?.currentRegion);
     if (region) worldLines.push(`Region: ${region}.`);
