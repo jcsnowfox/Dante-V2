@@ -103,12 +103,28 @@ function createIdentityResolver({ secondLife = null, config = null, logger = nul
     const permissions = derivePermissions(tier, relationship);
     const replyPolicy = relationship ? normalizeReplyPolicy(relationship.replyPolicy) : "allowed_if_mentioned";
 
+    const resolvedAvatarName = asText(relationship?.avatarName) || asText(avatarName);
+    // Preferred identity name: used as the model-facing speaker label.
+    // Priority: nickname → preferredDisplayName → displayLabel → raw avatar name.
+    // This lets an alternate-avatar record (e.g. AngelDust Corvinus → Jenna) be
+    // recognised correctly without the model seeing only the raw SL account name.
+    const displayName = asText(relationship?.nickname)
+      || asText(relationship?.preferredDisplayName)
+      || asText(relationship?.displayLabel)
+      || resolvedAvatarName;
+
     return {
       sourceType: "avatar",
       uuid,
-      name: asText(relationship?.avatarName) || asText(avatarName),
+      name: resolvedAvatarName,
+      // displayName is the preferred identity the model should call this person by.
+      displayName,
       nickname: relationship?.nickname || "",
+      preferredDisplayName: relationship?.preferredDisplayName || "",
+      identityNote: relationship?.identityNote || "",
+      displayLabel: relationship?.displayLabel || "",
       category: relationship?.category || "",
+      relationshipType: asText(relationship?.relationshipType) || tier,
       relationshipToUser: relationship?.relationshipToUser || "",
       relationshipToCompanion: relationship?.relationshipToCompanion || "",
       trustLevel: tier,
@@ -132,7 +148,7 @@ function createIdentityResolver({ secondLife = null, config = null, logger = nul
       rawRelationship: relationship,
       // Legacy compatibility
       avatarUuid: uuid,
-      avatarName: asText(relationship?.avatarName) || asText(avatarName),
+      avatarName: resolvedAvatarName,
       relationship,
       tier,
       isStranger: tier === "stranger",

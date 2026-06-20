@@ -148,13 +148,46 @@ function createSecondLifeAdapter({
       + "\n- Do not mention UUIDs, database fields, or registry mechanics in-character.";
   }
 
+  /**
+   * Build a structured identity block for a known speaker who is NOT public-safe
+   * (i.e. owners, trusted speakers with private-memory permission). This replaces
+   * the terse "Speaker relationship: owner" line with a section that explicitly
+   * names the preferred identity so the model uses the right name even when the
+   * SL avatar account name differs (e.g. AngelDust Corvinus → Jenna / JC).
+   */
+  function buildKnownSpeakerIdentityBlock(resolved) {
+    const displayName = resolved.displayName || resolved.nickname || resolved.name || "";
+    const slName = resolved.avatarName || resolved.name || "";
+    const lines = [];
+    if (displayName) lines.push(`Current speaker identity: ${displayName}`);
+    if (slName && slName !== displayName) lines.push(`Second Life avatar name: ${slName}`);
+    const relType = resolved.relationshipType || resolved.tier || "";
+    if (relType) lines.push(`Relationship type: ${relType}`);
+    if (resolved.isOwner) lines.push("Is owner: true");
+    if (resolved.isFamily) lines.push("Is family: true");
+    if (resolved.isTrusted) lines.push("Is trusted: true");
+    if (resolved.permissions?.privateMemory) lines.push("Private memory permission: true");
+    // Merge notes + identityNote (identityNote is the new dedicated identity-mapping field)
+    const notesText = [resolved.identityNote, resolved.notes].filter(Boolean).join(" ").trim();
+    if (notesText) lines.push(`Notes: ${notesText}`);
+
+    if (!lines.length) return null;
+
+    return lines.join("\n")
+      + "\n\nRules:"
+      + "\n- Use the current speaker identity naturally."
+      + "\n- Do not call the speaker by their raw Second Life avatar name unless they ask about the avatar/account."
+      + "\n- If the notes say this avatar belongs to someone else, treat the speaker as that person."
+      + "\n- Do not introduce yourself like a stranger."
+      + "\n- Do not mention UUIDs, registry fields, database fields, or bridge mechanics.";
+  }
+
   function buildContextSections({ resolved, worldState, event }) {
     const tier = asText(resolved?.tier) || (resolved?.isOwner ? "owner" : "stranger");
     const permissions = resolved?.permissions || {};
     const publicTier = isPublicSpeaker(resolved);
 
     const sections = [];
-    const relationship = resolved?.relationship || resolved?.rawRelationship || null;
 
     // Phase 21 — public-safe identity context for known identities.
     if (resolved?.publicIdentityContextEnabled && resolved?.isKnown) {
@@ -173,13 +206,19 @@ function createSecondLifeAdapter({
         content: `Speaker relationship: ${tier}. Treat this as public/local chat with a non-trusted person.`,
       });
     } else {
-      const relationshipLine = relationship
-        ? `Speaker relationship: ${tier}`
-          + `${relationship.displayLabel ? ` (${relationship.displayLabel})` : ""}.`
-          + `${resolved.isOwner ? " This is the owner." : ""}`
-          + `${relationship.notes ? `\nNotes: ${relationship.notes}` : ""}`
-        : `Speaker relationship: ${tier} (no stored relationship record).`;
-      sections.push({ label: "Second Life Speaker", content: relationshipLine, private: true });
+      // Private speaker (owner, trusted, etc.) — inject the full structured identity
+      // block so the model uses the preferred name, not just the raw SL avatar name.
+      const identityContent = buildKnownSpeakerIdentityBlock(resolved);
+      if (identityContent) {
+        sections.push({ label: "Second Life Known Speaker Identity", content: identityContent, private: true });
+      } else {
+        // Fallback if no identity fields are populated.
+        sections.push({
+          label: "Second Life Speaker",
+          content: `Speaker relationship: ${tier}${resolved.isOwner ? ". This is the owner." : "."}`,
+          private: true,
+        });
+      }
     }
 
     // Voice-fix — known speaker tone reinforcement. When the speaker is owner,
@@ -802,7 +841,9 @@ function createSecondLifeAdapter({
         companionId,
         channelType: "second_life",
         externalUserId: avatarUuid,
-        userDisplayName: event.userDisplayName,
+        // Use the preferred identity name (nickname/preferredDisplayName/displayLabel)
+        // so the model sees "Jenna" rather than "AngelDust Corvinus" when they differ.
+        userDisplayName: resolved.displayName || event.userDisplayName,
         messageText: event.messageText,
         eventType: event.eventType,
         privacyLevel: safePrivacyLevel,

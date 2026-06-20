@@ -245,6 +245,9 @@ async function handleSecondLifeActions({ req, res, url, context, withAdmin }) {
           publicIdentityContextEnabled: fields.publicIdentityContextEnabled !== undefined ? Boolean(fields.publicIdentityContextEnabled) : true,
           localChatChatterEnabled: fields.localChatChatterEnabled !== undefined ? Boolean(fields.localChatChatterEnabled) : true,
           minSecondsBetweenReplies: Math.max(0, Number(fieldValue(fields, "minSecondsBetweenReplies")) || 0),
+          // Identity-mapping fields (alternate-avatar support)
+          preferredDisplayName: fieldValue(fields, "preferredDisplayName").trim(),
+          identityNote: fieldValue(fields, "identityNote").trim(),
           ...roles,
         });
         return redirect(innerRes, { returnTo, theme, message: "Saved relationship." });
