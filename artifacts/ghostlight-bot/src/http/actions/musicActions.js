@@ -144,10 +144,17 @@ async function handleMusicActions({
       }
 
       const userScope = innerContext.config.memory?.userScope || "user";
-      const connect = await innerContext.spotify.startConnect({
-        userScope,
-        redirectUri: inferSpotifyRedirectUri(innerReq),
-      });
+      const redirectUri = innerContext.config.spotify?.redirectUri || inferSpotifyRedirectUri(innerReq);
+
+      let connect;
+      try {
+        connect = await innerContext.spotify.startConnect({ userScope, redirectUri });
+      } catch (err) {
+        redirect(innerRes, buildMusicReturnTo(theme, {
+          error: `Spotify connection failed: ${err.message}`,
+        }));
+        return;
+      }
 
       innerRes.writeHead(302, {
         Location: connect.url,
@@ -177,12 +184,21 @@ async function handleMusicActions({
         return;
       }
 
-      await innerContext.spotify.completeConnect({
-        userScope: innerContext.config.memory?.userScope || "user",
-        code,
-        state,
-        redirectUri: inferSpotifyRedirectUri(_innerReq),
-      });
+      const redirectUri = innerContext.config.spotify?.redirectUri || inferSpotifyRedirectUri(_innerReq);
+
+      try {
+        await innerContext.spotify.completeConnect({
+          userScope: innerContext.config.memory?.userScope || "user",
+          code,
+          state,
+          redirectUri,
+        });
+      } catch (err) {
+        redirect(innerRes, buildMusicReturnTo(theme, {
+          error: `Spotify connection could not be completed: ${err.message}`,
+        }));
+        return;
+      }
 
       redirect(innerRes, buildMusicReturnTo(theme, {
         message: "Spotify connected.",
