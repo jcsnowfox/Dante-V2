@@ -273,12 +273,12 @@ function renderPeopleObjectsPanel({ relationships, objectRelationships, companio
   ].join("");
 
   const importForm = [
-    `<form method="POST" action="/admin/actions/second-life-import-relationships" style="margin:0">`,
+    `<form method="POST" action="/admin/actions/second-life-import-relationships" enctype="multipart/form-data" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">`,
     withThemeField(theme),
     `<input type="hidden" name="returnTo" value="/admin/second-life">`,
     `<input type="hidden" name="companionId" value="${escapeHtml(companionId || "")}">`,
-    `<input type="hidden" name="pack" value="nox">`,
-    `<button type="submit" class="ghb-btn"${disabledAttr} style="padding:8px 14px;border-radius:8px;border:0;background:#0f766e;color:#fff;font:inherit;cursor:pointer">Import Nox Family Pack</button>`,
+    `<input type="file" name="packFile" accept=".json"${disabledAttr} style="font:inherit;font-size:.85rem">`,
+    `<button type="submit" class="ghb-btn"${disabledAttr} style="padding:8px 14px;border-radius:8px;border:0;background:#0f766e;color:#fff;font:inherit;cursor:pointer">Import Pack</button>`,
     "</form>",
   ].join("");
 
@@ -288,9 +288,9 @@ function renderPeopleObjectsPanel({ relationships, objectRelationships, companio
     "<h3 class=\"ghb-section-title\">People &amp; Objects</h3>",
     "<p class=\"ghb-copy\">Identity registry — recognise avatars by UUID (source of truth, names can change) and objects by UUID or description token. Re-submit an existing UUID to update. Reply policy, cooldown, and child-safe mode are all per-identity.</p>",
     "</div></div>",
-    "<div style=\"display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px\">",
+    "<div style=\"margin-bottom:16px\">",
     importForm,
-    "<span class=\"ghb-copy\" style=\"opacity:.6;font-size:.82rem\">Nox family pack only — imports only when companion ID is 'nox'.</span>",
+    "<span class=\"ghb-copy\" style=\"display:block;margin-top:6px;opacity:.6;font-size:.82rem\">Upload a JSON file with an 'avatars' and/or 'objects' array to bulk-import relationships.</span>",
     "</div>",
     `<h4 class="ghb-copy" style="margin:0 0 8px;font-weight:600;font-size:.95rem">Known People (${escapeHtml(String(avatarRows.length))})</h4>`,
     `<ul class="ghb-bullet-list" style="list-style:none;padding:0;margin-bottom:16px">${avatarList}</ul>`,
