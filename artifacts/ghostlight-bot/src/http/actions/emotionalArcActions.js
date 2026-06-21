@@ -48,7 +48,9 @@ function collectTextGroup(fields, prefix, keys) {
 function collectBooleanGroup(fields, prefix, keys) {
   const result = {};
   for (const key of keys) {
-    result[key] = Boolean(fields[`${prefix}.${key}`]);
+    const raw = fields[`${prefix}.${key}`];
+    const last = Array.isArray(raw) ? raw[raw.length - 1] : raw;
+    result[key] = last === "true";
   }
   return result;
 }
@@ -83,8 +85,9 @@ async function handleEmotionalArcActions({ req, res, url, context, withAdmin }) 
       const depthRaw = String(fields.emotionalDepth || "light").trim();
       const emotionalDepth = VALID_DEPTHS.includes(depthRaw) ? depthRaw : "light";
 
+      const enabledRaw = fields.enabled;
       const profile = {
-        enabled: Boolean(fields.enabled),
+        enabled: (Array.isArray(enabledRaw) ? enabledRaw[enabledRaw.length - 1] : enabledRaw) === "true",
         emotionalDepth,
         baselineTemperament: collectNumberGroup(fields, "baselineTemperament", TEMPERAMENT_KEYS, { min: 0, max: 10 }),
         thresholds: collectNumberGroup(fields, "thresholds", THRESHOLD_KEYS, { min: 1, max: 10 }),

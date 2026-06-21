@@ -21,7 +21,9 @@ function redirect(innerRes, { returnTo, theme, message, error }) {
 function buildConfigFromFields(fields) {
   const config = {};
   for (const flag of BOOLEAN_FLAGS) {
-    config[flag] = Boolean(fields[flag]);
+    const raw = fields[flag];
+    const last = Array.isArray(raw) ? raw[raw.length - 1] : raw;
+    config[flag] = last === "true";
   }
   for (const [field, spec] of Object.entries(NUMERIC_FIELDS)) {
     const n = Number(fieldValue(fields, field));
