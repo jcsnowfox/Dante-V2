@@ -50,6 +50,32 @@ function renderHomePage({ stats, theme = "light", helpers }) {
   const recentDecisions = Array.isArray(stats.recentDecisions) ? stats.recentDecisions.filter(Boolean) : [];
   const recentJournals = Array.isArray(stats.recentJournals) ? stats.recentJournals.filter(Boolean) : [];
   const recentImages = Array.isArray(stats.recentImages) ? stats.recentImages.filter(Boolean) : [];
+  const recentInnerLifeEntries = Array.isArray(stats.recentInnerLifeEntries) ? stats.recentInnerLifeEntries.filter(Boolean) : [];
+
+  const INNER_LIFE_TYPE_LABELS = {
+    private_thought: "Private Thought",
+    unsent_thought: "Unsent Thought",
+    between_message_note: "Between Messages",
+    journal_entry: "Journal",
+    dream: "Dream",
+    micro_repair: "Micro Repair",
+    little_ritual: "Little Ritual",
+    habit_marker: "Habit",
+    taste_marker: "Taste",
+    mood_carryover: "Mood",
+    private_lexicon: "Lexicon",
+    repeated_tell: "Repeated Tell",
+    room_sense: "Room Sense",
+    almost_said: "Almost Said",
+    affection_residue: "Affection",
+    curiosity_seed: "Curiosity",
+  };
+  const INNER_LIFE_STATUS_LABELS = {
+    active: "Active",
+    used_in_prelude: "Used in prelude",
+    archived: "Archived",
+    expired: "Expired",
+  };
   const timezone = String(stats.timezone || "").trim() || "UTC";
   const formatHomeDate = (value) => {
     if (!value) {
@@ -247,7 +273,37 @@ function renderHomePage({ stats, theme = "light", helpers }) {
           ].join("")),
           "</div>",
         ].join("")
-        : "<p class=\"meta\">Recent Heartbeat decisions will show up here once it has started doing things.</p>",
+        : "",
+      recentInnerLifeEntries.length
+        ? [
+          "<div class=\"home-il-section\">",
+          "<div class=\"home-il-section-head\">",
+          `<span class="stat-label">Inner Life</span>`,
+          `<a class="pill" href="${escapeHtml(buildAdminLocation({ path: "/admin/inner-life/entries", theme }))}">All entries →</a>`,
+          "</div>",
+          "<div class=\"home-il-entry-list\">",
+          ...recentInnerLifeEntries.map((entry) => {
+            const typeLabel = INNER_LIFE_TYPE_LABELS[entry.entryType] || entry.entryType;
+            const statusLabel = INNER_LIFE_STATUS_LABELS[entry.status] || entry.status;
+            const content = String(entry.summary || "").trim();
+            const truncated = content.length > 200 ? content.slice(0, 200) + "…" : content;
+            return [
+              "<div class=\"home-il-entry-card\">",
+              "<div class=\"home-il-entry-top\">",
+              `<span class="badge home-il-type-badge">${escapeHtml(typeLabel)}</span>`,
+              `<span class="home-il-entry-time">${escapeHtml(formatHomeDate(entry.createdAt))}</span>`,
+              "</div>",
+              truncated ? `<p class="home-il-entry-content">${escapeHtml(truncated)}</p>` : "",
+              `<span class="badge home-il-status-badge home-il-status-${escapeHtml(entry.status || "active")}">${escapeHtml(statusLabel)}</span>`,
+              "</div>",
+            ].join("");
+          }),
+          "</div>",
+          "</div>",
+        ].join("")
+        : (!recentDecisions.length
+          ? "<p class=\"meta\">Recent Heartbeat decisions and Inner Life entries will appear here.</p>"
+          : ""),
       "</section>",
       "</div>",
       "</section>",
