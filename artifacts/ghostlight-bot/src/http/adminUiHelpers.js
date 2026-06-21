@@ -7,7 +7,7 @@ const MEMORY_CATEGORY_OPTIONS = Object.freeze(
 
 function normalizeTheme(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  return normalized === "dark" ? "dark" : "light";
+  return normalized === "light" ? "light" : "dark";
 }
 
 function escapeHtml(value) {
