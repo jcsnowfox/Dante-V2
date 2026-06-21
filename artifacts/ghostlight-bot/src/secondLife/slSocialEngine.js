@@ -112,7 +112,7 @@ function createSocialEngine({ secondLife = null, config = null, logger = null } 
     // ── Phase 21 — replyPolicy "banned" wins over everything ─────────────────
     const replyPolicy = asText(identity?.replyPolicy || "").toLowerCase();
     if (replyPolicy === "banned" || tier === "blocked") {
-      return { action: "ignore", reason: "banned" };
+      return { action: "ignore", reason: "blocked_or_banned" };
     }
 
     // ── Phase 21 — neverRespond flag wins second ─────────────────────────────
@@ -121,7 +121,7 @@ function createSocialEngine({ secondLife = null, config = null, logger = null } 
     }
 
     if (permissions.chat === false) {
-      return { action: "ignore", reason: "chat_permission_off" };
+      return { action: "ignore", reason: "chat_permission_denied" };
     }
 
     const isOwner = tier === "owner"
@@ -175,12 +175,12 @@ function createSocialEngine({ secondLife = null, config = null, logger = null } 
 
     // "allowed_if_mentioned": only reply when directly addressed.
     if (replyPolicy === "allowed_if_mentioned" && !directlyAddressed && !effectivelyAlways) {
-      return { action: "save_memory_only", reason: "not_mentioned" };
+      return { action: "save_memory_only", reason: "not_directly_addressed" };
     }
 
     // "ambient_only": occasional replies — only when directly addressed.
     if (replyPolicy === "ambient_only" && !directlyAddressed && !effectivelyAlways) {
-      return { action: "react_only", reason: "ambient_only_not_addressed" };
+      return { action: "react_only", reason: "not_directly_addressed" };
     }
 
     // ── Phase 21 — per-identity cooldown ─────────────────────────────────────
@@ -190,37 +190,47 @@ function createSocialEngine({ secondLife = null, config = null, logger = null } 
       if (onCooldown) {
         // Even on cooldown, directly-addressed non-childSafe speakers can break through.
         if (!directlyAddressed || Boolean(identity?.childSafeOnly)) {
-          return { action: "ignore", reason: "cooldown" };
+          return { action: "ignore", reason: "rate_limited" };
         }
         // Directly addressed and not childSafeOnly: allow through with reduced priority.
       }
     }
 
-    // ── Legacy stranger/known handling (when no identity policy overrides) ────
-
-    // Stranger handling — occasional replies only.
-    if (tier === "stranger") {
-      if (!settings.strangerRepliesEnabled) {
-        return {
-          action: directlyAddressed ? "save_memory_only" : "ignore",
-          reason: "strangers_disabled",
-        };
-      }
-      const maxStranger = Number(settings.maxStrangerRepliesPer30Min || 0);
-      if (maxStranger > 0) {
-        const recentStranger = await countRecent(companionId, 30);
-        if (recentStranger >= maxStranger) {
-          return { action: "ignore", reason: "rate_limited_stranger" };
+    // ── Direct-mention shortcut + tier gate ──────────────────────────────────
+    // Directly-addressed speakers bypass the "not addressed" tier gates but still
+    // go through rate-limits. When not directly addressed, the tier gates apply.
+    if (directlyAddressed) {
+      if (tier === "stranger") {
+        if (!settings.strangerRepliesEnabled) {
+          return { action: "save_memory_only", reason: "strangers_disabled" };
         }
+        const maxStranger = Number(settings.maxStrangerRepliesPer30Min || 0);
+        if (maxStranger > 0) {
+          const recentStranger = await countRecent(companionId, 30);
+          if (recentStranger >= maxStranger) {
+            return { action: "ignore", reason: "rate_limited" };
+          }
+        }
+        // Falls through to global rate-limit and reply.
       }
-      if (!directlyAddressed) {
-        return { action: "react_only", reason: "stranger_not_addressed" };
+      // known + directly addressed falls through to rate-limit and reply.
+    } else {
+      if (tier === "stranger") {
+        if (!settings.strangerRepliesEnabled) {
+          return { action: "ignore", reason: "strangers_disabled" };
+        }
+        const maxStranger = Number(settings.maxStrangerRepliesPer30Min || 0);
+        if (maxStranger > 0) {
+          const recentStranger = await countRecent(companionId, 30);
+          if (recentStranger >= maxStranger) {
+            return { action: "ignore", reason: "rate_limited" };
+          }
+        }
+        return { action: "react_only", reason: "not_directly_addressed" };
       }
-    }
-
-    // Known avatars get polite, limited replies — only when addressed.
-    if (tier === "known" && !directlyAddressed && !effectivelyAlways) {
-      return { action: "react_only", reason: "known_not_addressed" };
+      if (tier === "known" && !effectivelyAlways) {
+        return { action: "react_only", reason: "not_directly_addressed" };
+      }
     }
 
     // Shared local reply rate limit (conversation / group chatter cooldown).
@@ -228,7 +238,7 @@ function createSocialEngine({ secondLife = null, config = null, logger = null } 
     if (maxLocal > 0) {
       const recentLocal = await countRecent(companionId, 10);
       if (recentLocal >= maxLocal) {
-        return { action: "ignore", reason: "rate_limited_local" };
+        return { action: "ignore", reason: "rate_limited" };
       }
     }
 

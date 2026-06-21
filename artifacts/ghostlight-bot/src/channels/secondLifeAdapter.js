@@ -841,7 +841,7 @@ function createSecondLifeAdapter({
       if (debug) {
         logger?.info?.("[second-life] Bang command: unknown trigger.", { companionId, commandName: bangCmd.commandName, applied: false });
       }
-      return { handled: true, replied: false, action: "command", commandType: "unknown", applied: false, state: { reason: "unknown_command", commandName: bangCmd.commandName } };
+      return { handled: true, replied: false, action: "command", commandName: bangCmd.commandName, commandType: "unknown", applied: false, state: { reason: "unknown_command" } };
     }
 
     // Denied by permission check — reason string starts with "command_"
@@ -850,7 +850,7 @@ function createSecondLifeAdapter({
       if (debug) {
         logger?.info?.("[second-life] Bang command: denied.", { companionId, commandName: bangCmd.commandName, commandType: commandOutcome.command?.commandType || "unknown", applied: false, state: { reason: denyReason } });
       }
-      return { handled: true, replied: false, action: "command", commandType: commandOutcome.command?.commandType || "unknown", applied: false, state: { reason: denyReason } };
+      return { handled: true, replied: false, action: "command", commandName: bangCmd.commandName, commandType: commandOutcome.command?.commandType || "unknown", applied: false, state: { reason: denyReason } };
     }
 
     // Applied — either a safety control or a queued command.
@@ -894,10 +894,10 @@ function createSecondLifeAdapter({
         null,
         "enqueueCommand(ack)",
       );
-      return { handled: true, replied: Boolean(ackCmd), action: "command", commandType, applied: true, state, responseText: ackText };
+      return { handled: true, replied: Boolean(ackCmd), action: "command", commandName: bangCmd.commandName, commandType, applied: true, state, responseText: ackText };
     }
 
-    return { handled: true, replied: false, action: "command", commandType, applied: true, state };
+    return { handled: true, replied: false, action: "command", commandName: bangCmd.commandName, commandType, applied: true, state };
   }
 
   async function handleConversationalEvent({ companionId, settings, worldState, event }) {
@@ -907,6 +907,9 @@ function createSecondLifeAdapter({
     const sourceType = asText(event.sourceType).trim();
 
     // Phase 21 — resolve using the full identity interface (avatar or object).
+    // Pass ownerAvatarUuid so avatars matching the bridge-settings owner UUID are
+    // treated as owner even when no relationship row exists yet.
+    const ownerAvatarUuid = asText(settings?.ownerAvatarUuid).trim();
     const resolved = await identity.resolve({
       companionId,
       avatarUuid,
@@ -915,6 +918,7 @@ function createSecondLifeAdapter({
       objectName: event.objectName || "",
       objectDescription,
       sourceType,
+      ownerAvatarUuid,
     });
 
     // Phase 21 — mark this avatar/object as seen (safe no-op when no DB).
@@ -977,6 +981,20 @@ function createSecondLifeAdapter({
       },
     });
 
+    const debugSL = process.env.SECOND_LIFE_DEBUG === "true";
+    if (debugSL) {
+      logger?.info?.("[second-life] Local chat policy decision.", {
+        companionId,
+        avatarUuid,
+        tier: resolved.tier,
+        directlyAddressed,
+        action: decision.action,
+        reason: decision.reason,
+        isOwner: resolved.isOwner,
+        replyPolicy: resolved.replyPolicy,
+      });
+    }
+
     if (decision.action !== "reply") {
       if (decision.action === "save_memory_only" || decision.action === "ask_owner_later") {
         await safe(
@@ -1004,7 +1022,6 @@ function createSecondLifeAdapter({
     // Phase 24 — detect factual relationship questions ("who is Jezabelle?") and
     // inject registry context so the model answers about the mentioned entity rather
     // than treating the question as a challenge to its own identity.
-    const debug24 = process.env.SECOND_LIFE_DEBUG === "true";
     const rqIntent = detectRelationshipQuestionIntent(asText(event.messageText));
     let rqMatchedEntity = null;
     if (rqIntent.intent && rqIntent.mentionedName) {
@@ -1077,10 +1094,10 @@ function createSecondLifeAdapter({
 
     const responseText = asText(processed?.outbound?.responseText).trim();
     if (!responseText) {
-      return { handled: true, replied: false, reason: "no_reply_text" };
+      return { handled: true, replied: false, reason: "model_empty_response" };
     }
 
-    if (debug24 && rqIntent.intent) {
+    if (debugSL && rqIntent.intent) {
       logger?.info?.("[second-life] Relationship question response.", {
         companionId,
         relationshipQuestionIntent: rqIntent.intent,
