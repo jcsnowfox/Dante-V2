@@ -114,7 +114,7 @@ function createIdentityResolver({ secondLife = null, config = null, logger = nul
     const resolvedAvatarName = asText(relationship?.avatarName) || asText(avatarName);
     // Preferred identity name: used as the model-facing speaker label.
     // Priority: nickname → preferredDisplayName → displayLabel → raw avatar name.
-    // This lets an alternate-avatar record (e.g. AngelDust Corvinus → Jenna) be
+    // This lets an alternate-avatar record (e.g. a different SL account → preferred name) be
     // recognised correctly without the model seeing only the raw SL account name.
     const displayName = asText(relationship?.nickname)
       || asText(relationship?.preferredDisplayName)

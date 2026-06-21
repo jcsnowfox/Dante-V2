@@ -238,7 +238,7 @@ function createSecondLifeAdapter({
    * (i.e. owners, trusted speakers with private-memory permission). This replaces
    * the terse "Speaker relationship: owner" line with a section that explicitly
    * names the preferred identity so the model uses the right name even when the
-   * SL avatar account name differs (e.g. AngelDust Corvinus → Jenna / JC).
+   * SL avatar account name differs from the person's preferred name.
    */
   function buildKnownSpeakerIdentityBlock(resolved) {
     const displayName = resolved.displayName || resolved.nickname || resolved.name || "";
@@ -1065,7 +1065,7 @@ function createSecondLifeAdapter({
         channelType: "second_life",
         externalUserId: avatarUuid,
         // Use the preferred identity name (nickname/preferredDisplayName/displayLabel)
-        // so the model sees "Jenna" rather than "AngelDust Corvinus" when they differ.
+        // so the model sees the preferred name rather than the raw SL avatar name when they differ.
         userDisplayName: resolved.displayName || event.userDisplayName,
         messageText: event.messageText,
         eventType: event.eventType,
