@@ -137,7 +137,7 @@ async function handleSecondLifeActions({ req, res, url, context, withAdmin }) {
   if (!knownPaths.has(path)) return false;
 
   return withAdmin(async (innerReq, innerRes, innerContext) => {
-    const { fields } = await parseRequestForm(innerReq);
+    const { fields, files } = await parseRequestForm(innerReq);
     const theme = normalizeTheme(fields.theme);
     const returnTo = fieldValue(fields, "returnTo").trim() || RETURN_PATH;
     const store = innerContext.secondLife || null;
@@ -672,15 +672,22 @@ async function handleSecondLifeActions({ req, res, url, context, withAdmin }) {
       }
     }
 
-    // ── Phase 21 — Import Nox family relationships pack ────────────────────────
+    // ── Import relationships pack (generic JSON file upload) ──────────────────
     if (path === "/admin/actions/second-life-import-relationships") {
-      const packName = fieldValue(fields, "pack").trim().toLowerCase();
-      if (packName !== "nox" && companionId !== "nox") {
-        return redirect(innerRes, { returnTo, theme, error: "This import pack is only available for companionId 'nox'." });
+      const uploadedFile = files.packFile;
+      if (!uploadedFile?.content?.trim()) {
+        return redirect(innerRes, { returnTo, theme, error: "No file uploaded. Please select a relationships JSON file." });
+      }
+      let pack;
+      try {
+        pack = JSON.parse(uploadedFile.content);
+      } catch {
+        return redirect(innerRes, { returnTo, theme, error: "Invalid JSON file. Could not parse the uploaded relationships pack." });
+      }
+      if (!Array.isArray(pack.avatars) && !Array.isArray(pack.objects)) {
+        return redirect(innerRes, { returnTo, theme, error: "Invalid pack format. JSON must contain an 'avatars' or 'objects' array." });
       }
       try {
-        const packPath = require("path").join(__dirname, "../../assets/second-life/nox-family-relationships.json");
-        const pack = require(packPath);
         let avatarCount = 0;
         let objectCount = 0;
         if (Array.isArray(pack.avatars)) {
@@ -698,11 +705,11 @@ async function handleSecondLifeActions({ req, res, url, context, withAdmin }) {
         return redirect(innerRes, {
           returnTo,
           theme,
-          message: `Imported Nox family pack: ${avatarCount} avatar(s), ${objectCount} object(s).`,
+          message: `Imported relationships pack: ${avatarCount} avatar(s), ${objectCount} object(s).`,
         });
       } catch (error) {
-        innerContext.logger?.error?.("[second-life] Failed to import Nox family pack.", { error: error.message });
-        return redirect(innerRes, { returnTo, theme, error: "Failed to import Nox family pack." });
+        innerContext.logger?.error?.("[second-life] Failed to import relationships pack.", { error: error.message });
+        return redirect(innerRes, { returnTo, theme, error: "Failed to import relationships pack." });
       }
     }
 
