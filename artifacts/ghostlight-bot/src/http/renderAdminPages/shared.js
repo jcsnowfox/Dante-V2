@@ -1,74 +1,102 @@
-function renderAdminTopnav({ currentSection = "home", theme = "light", themeLinks = null, appVersion = "", imageTag = "", helpers }) {
-  const { escapeHtml, buildAdminLocation, renderIconImage } = helpers;
-  const homeLocation = buildAdminLocation({ path: "/admin", theme });
-  const links = [
+const NAV_GROUPS = [
+  { label: "Core", links: [
     { section: "home", label: "Home", path: "/admin", icon: "home" },
     { section: "companion", label: "Companion", path: "/admin/companion", icon: "companion" },
+  ] },
+  { label: "Self & State", links: [
     { section: "emotionalArc", label: "Emotional Arc", path: "/admin/emotional-arc", icon: "emotionalArc" },
-    { section: "feedbackLearning", label: "Feedback & Learning", path: "/admin/feedback-learning", icon: "feedbackLearning" },
-    { section: "relationalState", label: "Relational State", path: "/admin/relational-state", icon: "relationalState" },
-    { section: "secondLife", label: "Second Life", path: "/admin/second-life", icon: "companion" },
     { section: "innerLife", label: "Inner Life", path: "/admin/inner-life", icon: "emotionalArc" },
-    { section: "continuity", label: "Continuity", path: "/admin/continuity/overview", icon: "automation" },
+    { section: "relationalState", label: "Relational State", path: "/admin/relational-state", icon: "relationalState" },
+    { section: "feedbackLearning", label: "Feedback & Learning", path: "/admin/feedback-learning", icon: "feedbackLearning" },
+  ] },
+  { label: "Memory", links: [
     { section: "memory", label: "Memory", path: "/admin/memory/library", icon: "memories" },
-    { section: "heartbeat", label: "Heartbeat", path: "/admin/heartbeat/timing", icon: "heartbeat" },
-    { section: "schedules", label: "Schedules", path: "/admin/schedules", icon: "automation", child: true },
-    { section: "gallery", label: "Library", path: "/admin/gallery/images", icon: "gallery" },
-    { section: "tools", label: "Tools", path: "/admin/tools/images", icon: "tools" },
+    { section: "continuity", label: "Continuity", path: "/admin/continuity/overview", icon: "automation" },
     { section: "journals", label: "Journals", path: "/admin/journals", icon: "journals" },
+  ] },
+  { label: "World", links: [
+    { section: "secondLife", label: "Second Life", path: "/admin/second-life", icon: "companion" },
+  ] },
+  { label: "Systems", links: [
+    { section: "heartbeat", label: "Heartbeat", path: "/admin/heartbeat/timing", icon: "heartbeat" },
+    { section: "schedules", label: "Schedules", path: "/admin/schedules", icon: "automation" },
+    { section: "gallery", label: "Gallery", path: "/admin/gallery/images", icon: "gallery" },
+    { section: "tools", label: "Tools", path: "/admin/tools/images", icon: "tools" },
+  ] },
+  { label: "Admin", links: [
     { section: "admin", label: "Admin", path: "/admin/admin", icon: "dashboard" },
-  ];
-  const navLinks = links.map((link) => [
-    `<a href="${escapeHtml(buildAdminLocation({ path: link.path, theme }))}"${currentSection === link.section ? " aria-current=\"page\"" : ""}${link.child ? " class=\"topbar-nav-child\"" : ""}>`,
-    `<span class="topbar-nav-icon" aria-hidden="true">${renderIconImage(link.icon, theme, "", "topbar-nav-icon-img")}</span>`,
-    `<span class="topbar-nav-title">${escapeHtml(link.label)}</span>`,
-    "</a>",
-  ].join(""));
+  ] },
+];
+
+function buildSidebarNav({ currentSection, theme, themeLinks, escapeHtml, buildAdminLocation, renderIconImage }) {
+  const groupsMarkup = NAV_GROUPS.map((group) => {
+    const groupLinks = group.links.map((link) => {
+      const href = escapeHtml(buildAdminLocation({ path: link.path, theme }));
+      const active = currentSection === link.section ? " aria-current=\"page\"" : "";
+      const icon = renderIconImage(link.icon, theme, "", "gl-nav-icon-img");
+      return `<a class="gl-nav-link" href="${href}"${active}><span class="gl-nav-icon" aria-hidden="true">${icon}</span><span class="gl-nav-label">${escapeHtml(link.label)}</span></a>`;
+    }).join("");
+    return [
+      "<div class=\"gl-nav-group\">",
+      `<span class="gl-nav-group-label">${escapeHtml(group.label)}</span>`,
+      groupLinks,
+      "</div>",
+    ].join("");
+  }).join("");
+
   const themeToggle = themeLinks
     ? [
-      "<div class=\"theme-switcher\" aria-label=\"Theme toggle\">",
+      "<div class=\"gl-sidebar-theme theme-switcher\" aria-label=\"Theme toggle\">",
       `<a href="${escapeHtml(themeLinks.light)}"${theme === "light" ? " aria-current=\"page\"" : ""}>Light</a>`,
       `<a href="${escapeHtml(themeLinks.dark)}"${theme === "dark" ? " aria-current=\"page\"" : ""}>Dark</a>`,
       "</div>",
     ].join("")
     : "";
-  const navigationMarkup = [
-    "<nav class=\"topbar-nav\" aria-label=\"Ghostlight AI admin navigation\">",
-    ...navLinks,
-    "</nav>",
-  ].join("");
 
-  return [
-    "<header class=\"admin-topbar\">",
-    "<div class=\"topbar-inner\">",
-    "<div class=\"topbar-row topbar-row--top\">",
-    `<a class="topbar-brand" href="${escapeHtml(homeLocation)}">`,
-    "<span class=\"topbar-logo-wrap\" aria-hidden=\"true\"><img class=\"topbar-logo-img\" src=\"/assets/ghostlight-logo.webp\" alt=\"\"></span>",
-    "<strong class=\"topbar-brand-name\">Ghostlight AI</strong>",
+  return { groupsMarkup, themeToggle };
+}
+
+function renderAdminSidebar({ currentSection = "home", theme = "light", themeLinks = null, helpers }) {
+  const { escapeHtml, buildAdminLocation, renderIconImage } = helpers;
+  const homeLocation = escapeHtml(buildAdminLocation({ path: "/admin", theme }));
+  const { groupsMarkup, themeToggle } = buildSidebarNav({ currentSection, theme, themeLinks, escapeHtml, buildAdminLocation, renderIconImage });
+
+  const sidebar = [
+    "<aside class=\"gl-sidebar\">",
+    "<div class=\"gl-sidebar-inner\">",
+    `<a class="gl-sidebar-brand" href="${homeLocation}">`,
+    "<span class=\"gl-sidebar-logo\" aria-hidden=\"true\"><img src=\"/assets/ghostlight-logo.webp\" alt=\"\"></span>",
+    "<span class=\"gl-sidebar-brand-name\">Ghostlight AI</span>",
     "</a>",
-    "<div class=\"topbar-end\">",
+    "<nav class=\"gl-sidebar-nav\" aria-label=\"Ghostlight AI admin navigation\">",
+    groupsMarkup,
+    "</nav>",
+    "<div class=\"gl-sidebar-footer\">",
     themeToggle,
     "</div>",
     "</div>",
-    "<div class=\"topbar-row topbar-row--nav\">",
-    navigationMarkup,
-    "</div>",
-    "</div>",
-    "<details class=\"topbar-mobile\">",
-    "<summary class=\"topbar-mobile-summary\">",
-    `<a class="topbar-brand" href="${escapeHtml(homeLocation)}">`,
-    "<span class=\"topbar-logo-wrap\" aria-hidden=\"true\"><img class=\"topbar-logo-img\" src=\"/assets/ghostlight-logo.webp\" alt=\"\"></span>",
-    "<strong class=\"topbar-brand-name\">Ghostlight AI</strong>",
+    "</aside>",
+  ].join("");
+
+  const mobileNav = [
+    "<details class=\"gl-mobile-nav\">",
+    "<summary class=\"gl-mobile-nav-summary\">",
+    `<a class="gl-mobile-brand" href="${homeLocation}">`,
+    "<img src=\"/assets/ghostlight-logo.webp\" alt=\"\" class=\"gl-mobile-logo\">",
+    "<span>Ghostlight AI</span>",
     "</a>",
-    "<span class=\"topbar-mobile-trigger\">Menu</span>",
+    "<span class=\"gl-mobile-trigger\" aria-hidden=\"true\">&#9776;</span>",
     "</summary>",
-    "<div class=\"topbar-mobile-panel\">",
-    navigationMarkup,
+    "<div class=\"gl-mobile-panel\">",
+    "<nav aria-label=\"Ghostlight AI admin navigation\">",
+    groupsMarkup,
+    "</nav>",
     themeToggle,
     "</div>",
     "</details>",
-    "</header>",
   ].join("");
+
+  return sidebar + mobileNav;
 }
 
 function renderSubnav({ items = [], currentKey = "", theme = "light", helpers }) {
@@ -105,27 +133,26 @@ function renderFieldLabelWithHelp({ forId, label, help }, helpers) {
 }
 
 function renderShell({ currentSection, pageBody, message = "", error = "", theme = "light", themeLinks = null, config = {}, helpers }) {
-  const { renderLayout } = helpers;
+  const { renderLayout, escapeHtml } = helpers;
+  const notice = message ? `<p class="notice success">${escapeHtml(message)}</p>` : "";
+  const warning = error ? `<p class="notice error">${escapeHtml(error)}</p>` : "";
 
   const body = [
-    "<div class=\"admin-shell lite-shell\">",
-    renderAdminTopnav({
-      currentSection,
-      theme,
-      themeLinks,
-      appVersion: config.app?.version || "",
-      imageTag: config.app?.imageTag || "",
-      helpers,
-    }),
-    `<section class="admin-main lite-main">${pageBody}</section>`,
+    "<div class=\"gl-app-shell\">",
+    renderAdminSidebar({ currentSection, theme, themeLinks, helpers }),
+    "<div class=\"gl-app-content lite-main\">",
+    notice,
+    warning,
+    pageBody,
+    "</div>",
     "</div>",
   ].join("");
 
   return renderLayout({
     title: "Ghostlight AI Admin",
     body,
-    message,
-    error,
+    message: "",
+    error: "",
     theme,
     themeLinks,
     hideTitle: true,
@@ -242,7 +269,7 @@ function renderPageIntro({ title, copy }) {
 }
 
 module.exports = {
-  renderAdminSidebar: renderAdminTopnav,
+  renderAdminSidebar,
   renderSubnav,
   renderHelpIcon,
   renderFieldLabelWithHelp,
