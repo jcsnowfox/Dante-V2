@@ -77,7 +77,7 @@ const MEMORY_DELETE_CONFIRMATION_MESSAGE = "Are you sure you want to delete this
 
 function renderIconImage(kind, theme, alt = "", className = "icon-image") {
   if (kind === "logo") {
-    return `<img src="/assets/ghostlight-logo.png" alt="${escapeHtml(alt)}" class="${escapeHtml(className)}">`;
+    return `<img src="/assets/ghostlight-logo.webp" alt="${escapeHtml(alt)}" class="${escapeHtml(className)}">`;
   }
 
   return renderIcon(kind, { className, alt });
