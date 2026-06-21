@@ -2,6 +2,7 @@
 
 const { parseRequestForm } = require("../adminRequestUtils");
 const { normalizeTheme, buildReturnLocation } = require("../adminUiHelpers");
+const { applyRuntimeSettings } = require("../../config/runtimeSettings");
 const { BOOLEAN_FLAGS, NUMERIC_FIELDS, STRING_FIELDS } = require("../../innerLife/innerLifeConfig");
 
 const RETURN_PATH = "/admin/inner-life";
@@ -45,8 +46,16 @@ async function handleInnerLifeActions({ req, res, url, context, withAdmin }) {
         return redirect(innerRes, { returnTo, theme, error: "No database configured — inner life engine is inert." });
       }
 
-      // Settings are config values — apply to the live config object
       const newConfig = buildConfigFromFields(fields);
+      const settingsToSave = Object.fromEntries(
+        Object.entries(newConfig).map(([k, v]) => [`innerLife.${k}`, v]),
+      );
+      try {
+        await innerContext.settingsStore.upsertSettings(settingsToSave);
+      } catch (err) {
+        innerContext.logger?.warn?.("[inner-life] Failed to persist settings", { error: err.message });
+      }
+      applyRuntimeSettings(innerContext.config, settingsToSave);
       Object.assign(engine.config, newConfig);
       return redirect(innerRes, { returnTo, theme, message: "Inner life settings saved." });
     })(req, res, context);
@@ -123,6 +132,13 @@ async function handleInnerLifeActions({ req, res, url, context, withAdmin }) {
       if (!engine) return redirect(innerRes, { returnTo, theme, error: "Engine not available." });
 
       const enable = fieldValue(fields, "enable") === "true";
+      const settingsToSave = { "innerLife.inner_life_enabled": enable };
+      try {
+        await innerContext.settingsStore.upsertSettings(settingsToSave);
+      } catch (err) {
+        innerContext.logger?.warn?.("[inner-life] Failed to persist toggle", { error: err.message });
+      }
+      applyRuntimeSettings(innerContext.config, settingsToSave);
       engine.config.inner_life_enabled = enable;
       return redirect(innerRes, { returnTo, theme, message: enable ? "Inner life enabled." : "Inner life paused." });
     })(req, res, context);

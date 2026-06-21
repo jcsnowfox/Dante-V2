@@ -2,6 +2,7 @@
 
 const { parseRequestForm } = require("../adminRequestUtils");
 const { normalizeTheme, buildReturnLocation } = require("../adminUiHelpers");
+const { applyRuntimeSettings } = require("../../config/runtimeSettings");
 const { BOOLEAN_FLAGS, NUMERIC_FIELDS, STRING_FIELDS } = require("../../continuity/continuityConfig");
 
 const RETURN_PATH = "/admin/continuity";
@@ -46,6 +47,15 @@ async function handleContinuityActions({ req, res, url, context, withAdmin }) {
       }
 
       const newConfig = buildConfigFromFields(fields);
+      const settingsToSave = Object.fromEntries(
+        Object.entries(newConfig).map(([k, v]) => [`continuity.${k}`, v]),
+      );
+      try {
+        await innerContext.settingsStore.upsertSettings(settingsToSave);
+      } catch (err) {
+        innerContext.logger?.warn?.("[continuity] Failed to persist settings", { error: err.message });
+      }
+      applyRuntimeSettings(innerContext.config, settingsToSave);
       Object.assign(engine.config, newConfig);
       return redirect(innerRes, { returnTo, theme, message: "Continuity settings saved." });
     })(req, res, context);
@@ -60,6 +70,13 @@ async function handleContinuityActions({ req, res, url, context, withAdmin }) {
       const engine = innerContext.continuity || null;
       if (!engine) return redirect(innerRes, { returnTo, theme, error: "Engine not available." });
       const enable = fieldValue(fields, "enable") === "true";
+      const settingsToSave = { "continuity.continuity_enabled": enable };
+      try {
+        await innerContext.settingsStore.upsertSettings(settingsToSave);
+      } catch (err) {
+        innerContext.logger?.warn?.("[continuity] Failed to persist toggle", { error: err.message });
+      }
+      applyRuntimeSettings(innerContext.config, settingsToSave);
       engine.config.continuity_enabled = enable;
       return redirect(innerRes, { returnTo, theme, message: enable ? "Continuity enabled." : "Continuity paused." });
     })(req, res, context);
@@ -145,6 +162,13 @@ async function handleContinuityActions({ req, res, url, context, withAdmin }) {
       const returnTo = fieldValue(fields, "returnTo") || RETURN_PATH;
       const engine = innerContext.continuity || null;
       if (!engine) return redirect(innerRes, { returnTo, theme, error: "Engine not available." });
+      const settingsToSave = { "continuity.proactive_followups_enabled": false };
+      try {
+        await innerContext.settingsStore.upsertSettings(settingsToSave);
+      } catch (err) {
+        innerContext.logger?.warn?.("[continuity] Failed to persist pause-followups", { error: err.message });
+      }
+      applyRuntimeSettings(innerContext.config, settingsToSave);
       engine.config.proactive_followups_enabled = false;
       engine.scheduler?.stop?.();
       return redirect(innerRes, { returnTo, theme, message: "Proactive follow-ups paused." });
