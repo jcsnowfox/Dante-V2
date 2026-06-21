@@ -84,7 +84,7 @@ function normalizeReplyPolicy(raw) {
 }
 
 function createIdentityResolver({ secondLife = null, config = null, logger = null } = {}) {
-  async function resolveAvatar({ companionId, avatarUuid, avatarName = "" } = {}) {
+  async function resolveAvatar({ companionId, avatarUuid, avatarName = "", ownerAvatarUuid = "" } = {}) {
     const uuid = asText(avatarUuid).trim();
     let relationship = null;
 
@@ -99,7 +99,15 @@ function createIdentityResolver({ secondLife = null, config = null, logger = nul
       }
     }
 
-    const tier = deriveTier(relationship);
+    let tier = deriveTier(relationship);
+
+    // Owner UUID upgrade: when the bridge settings carry an ownerAvatarUuid and
+    // this avatar matches it but has no relationship row yet, treat them as owner
+    // so safety controls and direct-reply gates work from first interaction.
+    const ownerUuid = asText(ownerAvatarUuid).trim();
+    if (tier === "stranger" && ownerUuid && uuid && uuid === ownerUuid) {
+      tier = "owner";
+    }
     const permissions = derivePermissions(tier, relationship);
     const replyPolicy = relationship ? normalizeReplyPolicy(relationship.replyPolicy) : "allowed_if_mentioned";
 
@@ -268,6 +276,7 @@ function createIdentityResolver({ secondLife = null, config = null, logger = nul
     objectName = "",
     objectDescription = "",
     sourceType = "",
+    ownerAvatarUuid = "",
   } = {}) {
     const resolvedSourceType = asText(sourceType).toLowerCase().trim();
 
@@ -277,7 +286,7 @@ function createIdentityResolver({ secondLife = null, config = null, logger = nul
     }
 
     // Avatar path (default).
-    const result = await resolveAvatar({ companionId, avatarUuid, avatarName });
+    const result = await resolveAvatar({ companionId, avatarUuid, avatarName, ownerAvatarUuid });
 
     // If no avatar record found but we have object fields, try object resolution as fallback.
     if (!result.isKnown && (objectUuid || objectDescription)) {

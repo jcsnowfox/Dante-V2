@@ -78,22 +78,37 @@ function extractSecret(req, body) {
 }
 
 /**
+ * Parse a field value that a LSL script may send as boolean, integer, or string.
+ * Returns true/false for recognised truthy/falsy values, undefined for anything else.
+ */
+function parseTruthy(value) {
+  if (value === true || value === 1) return true;
+  if (value === "true" || value === "1") return true;
+  if (value === false || value === 0) return false;
+  if (value === "false" || value === "0") return false;
+  return undefined;
+}
+
+/**
  * Normalize an event body from the Second Life relay.
  *
  * Phase 21 adds LSL field aliases so that scripts sending snake_case or
  * alternate field names are normalized to the canonical event shape:
  *
- *   companion_slug  → companionId (resolved at auth time, not here)
- *   speaker_key     → avatarUuid / externalUserId
- *   speaker_name    → avatarName / userDisplayName
- *   speaker_desc    → objectDescription
- *   object_key      → objectUuid
- *   object_name     → objectName
- *   source_type     → sourceType
- *   message         → messageText (existing)
- *   context_last_10 → contextLast10
- *   recentContext   → contextLast10 (alternate)
- *   is_direct_mention → directlyAddressed
+ *   companion_slug    → companionId (resolved at auth time, not here)
+ *   speaker_key       → avatarUuid / externalUserId
+ *   speaker_name      → avatarName / userDisplayName
+ *   speaker_desc      → objectDescription
+ *   object_key        → objectUuid
+ *   object_name       → objectName
+ *   source_type       → sourceType
+ *   message           → messageText (existing)
+ *   context_last_10   → contextLast10
+ *   recentContext     → contextLast10 (alternate)
+ *
+ * directlyAddressed is true when any of the following are truthy/set:
+ *   directlyAddressed / is_direct_mention / direct_mention / mentioned / direct
+ *   OR trigger is "name_mention" or "private_666"
  */
 function normalizeEventFromBody(body, fallbackType) {
   // LSL alias resolution for avatarUuid / speaker
@@ -125,10 +140,16 @@ function normalizeEventFromBody(body, fallbackType) {
     : body.source_type != null ? String(body.source_type)
     : "";
 
-  // directlyAddressed
-  const directlyAddressedRaw = body.directlyAddressed !== undefined ? body.directlyAddressed
-    : body.is_direct_mention !== undefined ? body.is_direct_mention
-    : undefined;
+  // directlyAddressed — handle all LSL field aliases and string/integer truthy forms.
+  const rawTrigger = body.trigger != null ? String(body.trigger).trim() : "";
+  const directlyAddressedFromTrigger = rawTrigger === "name_mention" || rawTrigger === "private_666";
+  const directlyAddressedRaw =
+    parseTruthy(body.directlyAddressed) ??
+    parseTruthy(body.is_direct_mention) ??
+    parseTruthy(body.direct_mention) ??
+    parseTruthy(body.mentioned) ??
+    parseTruthy(body.direct) ??
+    (directlyAddressedFromTrigger ? true : undefined);
   const directlyAddressed = directlyAddressedRaw !== undefined ? Boolean(directlyAddressedRaw) : undefined;
 
   // context_last_10 — recent local chat context lines
@@ -352,4 +373,4 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
   }
 }
 
-module.exports = { handleSecondLifeApiRequest, API_PREFIX };
+module.exports = { handleSecondLifeApiRequest, normalizeEventFromBody, parseTruthy, API_PREFIX };
