@@ -161,6 +161,9 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
     });
     return [];
   });
+  const recentInnerLifeEntries = innerContext.innerLife?.storeWrapper
+    ? await innerContext.innerLife.storeWrapper.list({ status: "active", limit: 6 }).catch(() => [])
+    : [];
   const recentImages = await innerContext.generatedImages.listImages({
     userScope: innerContext.config.memory.userScope,
     limit: HOME_IMAGE_POOL_LIMIT,
@@ -310,6 +313,14 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
           entryId: entry.entryId,
           title: entry.title || "Journal entry",
           content: entry.content || "",
+          createdAt: entry.createdAt || "",
+        })),
+        recentInnerLifeEntries: recentInnerLifeEntries.map((entry) => ({
+          id: String(entry.id || ""),
+          entryType: entry.entryType || "",
+          title: entry.title || "",
+          summary: entry.summary || entry.body || "",
+          status: entry.status || "active",
           createdAt: entry.createdAt || "",
         })),
         recentImages: homeCarouselImages

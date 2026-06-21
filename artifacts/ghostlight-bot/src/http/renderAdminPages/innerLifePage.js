@@ -24,6 +24,25 @@ const ENTRY_TYPE_LABELS = {
   curiosity_seed: "Curiosity",
 };
 
+const ENTRY_TYPE_DESCRIPTIONS = {
+  private_thought: "Something your companion thought but didn't say — a fleeting impression held privately.",
+  unsent_thought: "Words that were almost sent but held back — a draft that stayed interior.",
+  between_message_note: "A note about the mood and texture of the gap since your last message.",
+  journal_entry: "A private journal reflection written after a conversation or event.",
+  dream: "A dream-like image or reflection generated during quiet time.",
+  micro_repair: "A small note about friction or a repair moment — something noticed and registered quietly.",
+  little_ritual: "A small repeated behaviour that's become part of how your companion shows up.",
+  habit_marker: "Something that's settling into a pattern — a repeated action or tendency.",
+  taste_marker: "Something your companion has developed a private taste for or affinity with.",
+  mood_carryover: "Emotional tone carried forward from a previous exchange, fading naturally over time.",
+  private_lexicon: "A word, phrase, or name your companion has formed a private relationship with.",
+  repeated_tell: "Something that keeps returning — a theme, topic, or feeling that has come up before.",
+  room_sense: "An awareness of the channel's context, who's around, and what the mood of the space feels like.",
+  almost_said: "Something on the tip of the tongue that stayed unsaid — a held-back thought.",
+  affection_residue: "Warmth that lingered after a previous exchange — a trace of closeness carried forward.",
+  curiosity_seed: "A question or thought still growing — something your companion finds itself wondering about.",
+};
+
 const ALL_ENTRY_TYPES = Object.keys(ENTRY_TYPE_LABELS);
 
 const STATUS_LABELS = {
@@ -130,26 +149,33 @@ function renderEntriesTab({ entries, entryTypeFilter, statusFilter, theme, helpe
     "</form>",
   ].join("");
 
-  const tableMarkup = entries && entries.length
+  const cardsMarkup = entries && entries.length
     ? [
-      "<div class=\"model-table-wrap\"><table class=\"model-table\">",
-      "<thead><tr><th>Type</th><th>Title</th><th>Summary</th><th>Status</th><th>Created</th><th></th></tr></thead>",
-      "<tbody>",
+      "<div class=\"il-entries-grid\">",
       entries.map((e) => {
         const typeLabel = ENTRY_TYPE_LABELS[e.entryType] || e.entryType;
+        const typeDesc = ENTRY_TYPE_DESCRIPTIONS[e.entryType] || "";
         const statusLabel = STATUS_LABELS[e.status] || e.status;
-        const created = e.createdAt ? new Date(e.createdAt).toLocaleDateString("en-GB") : "—";
-        const summary = (e.summary || e.body || "").slice(0, 120);
-        const truncated = (e.summary || e.body || "").length > 120;
+        const isWarning = e.status === "blocked" || e.status === "expired";
+        const isUsed = e.status === "used_in_prelude";
+        const content = String(e.summary || e.body || "").trim();
+        const created = e.createdAt
+          ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(e.createdAt))
+          : "—";
         return [
-          "<tr>",
-          `<td data-label="Type"><span class="badge">${escapeHtml(typeLabel)}</span></td>`,
-          `<td data-label="Title">${escapeHtml(e.title || "—")}</td>`,
-          `<td data-label="Summary" class="table-detail-cell">${escapeHtml(summary)}${truncated ? "…" : ""}</td>`,
-          `<td data-label="Status"><span class="badge${e.status === "blocked" || e.status === "expired" ? " action-health-warning" : ""}">${escapeHtml(statusLabel)}</span></td>`,
-          `<td data-label="Created" class="meta">${escapeHtml(created)}</td>`,
-          "<td data-label=\"\">",
-          "<div style=\"display:flex;gap:6px;justify-content:flex-end\">",
+          `<article class="il-entry-card${isWarning ? " il-entry-card--warning" : ""}${isUsed ? " il-entry-card--used" : ""}">`,
+          "<header class=\"il-entry-card-header\">",
+          `<span class="badge il-entry-type-badge">${escapeHtml(typeLabel)}</span>`,
+          `<span class="badge il-entry-status-badge${isWarning ? " action-health-warning" : ""}${isUsed ? " il-entry-status-used" : ""}">${escapeHtml(statusLabel)}</span>`,
+          `<time class="il-entry-time">${escapeHtml(created)}</time>`,
+          "</header>",
+          content
+            ? `<p class="il-entry-content">${escapeHtml(content)}</p>`
+            : `<p class="il-entry-content il-entry-content--empty">No content recorded.</p>`,
+          typeDesc
+            ? `<p class="il-entry-type-desc">${escapeHtml(typeDesc)}</p>`
+            : "",
+          "<footer class=\"il-entry-actions\">",
           "<form method=\"POST\" action=\"/admin/actions/inner-life-archive\" style=\"display:contents\">",
           withThemeField(theme),
           `<input type="hidden" name="entryId" value="${escapeHtml(String(e.id))}">`,
@@ -162,16 +188,15 @@ function renderEntriesTab({ entries, entryTypeFilter, statusFilter, theme, helpe
           `<input type="hidden" name="returnTo" value="/admin/inner-life/entries">`,
           "<button type=\"submit\" class=\"secondary\">Delete</button>",
           "</form>",
-          "</div>",
-          "</td>",
-          "</tr>",
+          "</footer>",
+          "</article>",
         ].join("");
       }).join(""),
-      "</tbody></table></div>",
+      "</div>",
     ].join("")
     : `<p class="meta" style="margin-top:1rem">No ${escapeHtml(statusFilter || "active")} entries${entryTypeFilter ? ` of type "${escapeHtml(ENTRY_TYPE_LABELS[entryTypeFilter] || entryTypeFilter)}"` : ""} found.</p>`;
 
-  return [filterBar, tableMarkup].join("");
+  return [filterBar, cardsMarkup].join("");
 }
 
 function renderSettingsTab({ settings, theme, helpers, msg, err }) {

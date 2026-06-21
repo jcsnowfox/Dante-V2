@@ -148,6 +148,35 @@ a{color:var(--accent)}
 .home-decision-copy{min-width:0}
 .home-decision-time{margin:.45rem 0 0;color:var(--text-secondary);font-size:.8rem}
 .home-decision-why{margin:0;color:var(--text);font-size:.94rem;line-height:1.55}
+
+/* ── Home page inner life feed ─────────────────────────────────── */
+.home-il-section{margin-top:.9rem;padding-top:.75rem;border-top:1px solid color-mix(in srgb,var(--border) 45%, transparent)}
+.home-il-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem}
+.home-il-entry-list{display:grid;gap:.6rem}
+.home-il-entry-card{display:grid;gap:.35rem;padding:.65rem .75rem;border-radius:8px;border:1px solid color-mix(in srgb,var(--border) 55%, transparent);background:color-mix(in srgb,var(--surface) 70%, transparent)}
+.home-il-entry-top{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.home-il-entry-content{margin:0;font-size:.88rem;line-height:1.55;color:var(--text)}
+.home-il-entry-time{margin-left:auto;color:var(--text-secondary);font-size:.78rem;white-space:nowrap}
+.home-il-type-badge{background:color-mix(in srgb,var(--accent-secondary) 12%, var(--surface));border:1px solid color-mix(in srgb,var(--accent-secondary) 30%, transparent);color:var(--text)}
+.home-il-status-badge{font-size:.73rem}
+.home-il-status-active{opacity:.7}
+.home-il-status-used_in_prelude{color:var(--accent);opacity:.85}
+
+/* ── Inner life entries page — rich cards ──────────────────────── */
+.il-entries-grid{display:grid;gap:1rem;margin-top:.5rem}
+.il-entry-card{display:grid;gap:.55rem;padding:1.1rem 1.25rem;border-radius:10px;border:1px solid color-mix(in srgb,var(--border) 60%, transparent);background:color-mix(in srgb,var(--surface) 78%, transparent)}
+.il-entry-card--warning{border-color:color-mix(in srgb,var(--error-border) 60%, transparent)}
+.il-entry-card--used{opacity:.78}
+.il-entry-card-header{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.il-entry-type-badge{background:color-mix(in srgb,var(--accent-secondary) 12%, var(--surface));border:1px solid color-mix(in srgb,var(--accent-secondary) 28%, transparent);color:var(--text)}
+.il-entry-status-badge{font-size:.76rem}
+.il-entry-status-used{color:var(--accent)}
+.il-entry-time{margin-left:auto;color:var(--text-secondary);font-size:.8rem;white-space:nowrap}
+.il-entry-content{margin:0;font-size:.93rem;line-height:1.65;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.il-entry-content--empty{color:var(--text-secondary);font-style:italic}
+.il-entry-type-desc{margin:0;font-size:.8rem;color:var(--text-secondary);font-style:italic;padding-top:.1rem;border-top:1px solid color-mix(in srgb,var(--border) 35%, transparent)}
+.il-entry-actions{display:flex;gap:.5rem;align-items:center;padding-top:.25rem}
+
 .home-setup-list{display:grid;grid-template-columns:1fr;gap:.85rem}
 .home-setup-item{display:grid;grid-template-columns:auto minmax(0,1fr);gap:.8rem;align-items:center}
 .home-status-icon{display:grid;place-items:center;width:2.45rem;height:2.45rem;border-radius:999px;background:color-mix(in srgb,var(--surface) 78%, transparent);border:1px solid color-mix(in srgb,var(--border) 58%, transparent)}
@@ -1629,6 +1658,45 @@ html[data-theme="dark"] .home-journal-stream-wrap::after {
 }
 html[data-theme="dark"] .home-decision-card {
   border-bottom-color: rgba(57,215,240,.12);
+}
+
+/* ── Dark mode — inner life entry cards ──────────────────────────── */
+html[data-theme="dark"] .home-il-section {
+  border-top-color: rgba(57,215,240,.10);
+}
+html[data-theme="dark"] .home-il-entry-card {
+  background: linear-gradient(160deg, rgba(8,11,20,.88), rgba(3,4,10,.80));
+  border-color: rgba(57,215,240,.10);
+}
+html[data-theme="dark"] .home-il-type-badge {
+  background: rgba(139,92,246,.10);
+  border-color: rgba(139,92,246,.25);
+  color: #c4b5fd;
+}
+html[data-theme="dark"] .home-il-status-used_in_prelude {
+  color: #39D7F0;
+  opacity: 1;
+}
+html[data-theme="dark"] .il-entry-card {
+  background: linear-gradient(160deg, rgba(8,11,20,.90), rgba(3,4,10,.82));
+  border-color: rgba(57,215,240,.10);
+  box-shadow: 0 2px 16px rgba(0,0,0,.35);
+}
+html[data-theme="dark"] .il-entry-card--warning {
+  border-color: rgba(239,68,68,.22);
+  background: linear-gradient(160deg, rgba(20,6,6,.88), rgba(10,3,3,.80));
+}
+html[data-theme="dark"] .il-entry-type-badge {
+  background: rgba(139,92,246,.10);
+  border-color: rgba(139,92,246,.25);
+  color: #c4b5fd;
+}
+html[data-theme="dark"] .il-entry-status-used {
+  color: #39D7F0;
+}
+html[data-theme="dark"] .il-entry-type-desc {
+  border-top-color: rgba(57,215,240,.08);
+  color: rgba(169,176,195,.65);
 }
 
 /* ── Dark mode — code blocks ────────────────────────────────────── */
