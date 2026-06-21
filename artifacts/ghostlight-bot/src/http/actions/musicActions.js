@@ -222,10 +222,16 @@ async function handleMusicActions({
           return;
         }
 
-        const result = await innerContext.musicLibrary.importLikedSongs({
-          userScope,
-          limit,
-        });
+        let result;
+        try {
+          result = await innerContext.musicLibrary.importLikedSongs({
+            userScope,
+            limit,
+          });
+        } catch (err) {
+          redirect(innerRes, buildMusicReturnTo(theme, { error: err.message || "Failed to import liked songs." }));
+          return;
+        }
         const syncNote = result.syncSkipped
           ? " Music search sync was skipped because Qdrant or embeddings are not configured."
           : ` Synced ${result.syncedCount} to music search.`;
@@ -254,11 +260,17 @@ async function handleMusicActions({
         return;
       }
 
-      const result = await innerContext.musicLibrary.importPlaylist({
-        userScope,
-        playlistId,
-        limit,
-      });
+      let result;
+      try {
+        result = await innerContext.musicLibrary.importPlaylist({
+          userScope,
+          playlistId,
+          limit,
+        });
+      } catch (err) {
+        redirect(innerRes, buildMusicReturnTo(theme, { error: err.message || "Failed to import playlist." }));
+        return;
+      }
       const syncNote = result.syncSkipped
         ? " Music search sync was skipped because Qdrant or embeddings are not configured."
         : ` Synced ${result.syncedCount} to music search.`;
@@ -317,11 +329,17 @@ async function handleMusicActions({
         return;
       }
 
-      const result = await innerContext.musicLibrary.importPlaylist({
-        userScope: innerContext.config.memory?.userScope || "user",
-        playlistId,
-        limit,
-      });
+      let result;
+      try {
+        result = await innerContext.musicLibrary.importPlaylist({
+          userScope: innerContext.config.memory?.userScope || "user",
+          playlistId,
+          limit,
+        });
+      } catch (err) {
+        redirect(innerRes, buildMusicReturnTo(theme, { error: err.message || "Failed to import playlist." }));
+        return;
+      }
       const syncNote = result.syncSkipped
         ? " Music search sync was skipped because Qdrant or embeddings are not configured."
         : ` Synced ${result.syncedCount} to music search.`;
