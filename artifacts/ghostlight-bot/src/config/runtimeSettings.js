@@ -4,6 +4,11 @@ const { isFixedOffsetTimezone, normalizeIanaTimezone } = require("./timezones");
 
 const SPOTIFY_CURATION_GUIDANCE_LIMIT = 600;
 
+function normBool(value) {
+  if (typeof value === "boolean") return value;
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
 const EDITABLE_RUNTIME_SETTINGS = Object.freeze([
   {
     key: "llm.chat.model",
@@ -729,6 +734,82 @@ const EDITABLE_RUNTIME_SETTINGS = Object.freeze([
       if (!Number.isFinite(parsed)) return 7;
       return Math.max(0, Math.min(parsed, 23));
     },
+  },
+  // ── Continuity engine ────────────────────────────────────────────────────
+  { key: "continuity.continuity_enabled", path: ["continuity", "continuity_enabled"], normalize: normBool },
+  { key: "continuity.open_loops_enabled", path: ["continuity", "open_loops_enabled"], normalize: normBool },
+  { key: "continuity.future_followups_enabled", path: ["continuity", "future_followups_enabled"], normalize: normBool },
+  { key: "continuity.promise_ledger_enabled", path: ["continuity", "promise_ledger_enabled"], normalize: normBool },
+  { key: "continuity.decision_ledger_enabled", path: ["continuity", "decision_ledger_enabled"], normalize: normBool },
+  { key: "continuity.project_state_enabled", path: ["continuity", "project_state_enabled"], normalize: normBool },
+  { key: "continuity.repair_continuity_enabled", path: ["continuity", "repair_continuity_enabled"], normalize: normBool },
+  { key: "continuity.boundary_continuity_enabled", path: ["continuity", "boundary_continuity_enabled"], normalize: normBool },
+  { key: "continuity.ritual_continuity_enabled", path: ["continuity", "ritual_continuity_enabled"], normalize: normBool },
+  { key: "continuity.absence_reentry_enabled", path: ["continuity", "absence_reentry_enabled"], normalize: normBool },
+  { key: "continuity.media_job_continuity_enabled", path: ["continuity", "media_job_continuity_enabled"], normalize: normBool },
+  { key: "continuity.trust_ledger_enabled", path: ["continuity", "trust_ledger_enabled"], normalize: normBool },
+  { key: "continuity.proactive_followups_enabled", path: ["continuity", "proactive_followups_enabled"], normalize: normBool },
+  { key: "continuity.sensitive_followups_allowed", path: ["continuity", "sensitive_followups_allowed"], normalize: normBool },
+  { key: "continuity.public_channel_followups_allowed", path: ["continuity", "public_channel_followups_allowed"], normalize: normBool },
+  { key: "continuity.quiet_hours_enabled", path: ["continuity", "quiet_hours_enabled"], normalize: normBool },
+  {
+    key: "continuity.max_active_prelude_items",
+    path: ["continuity", "max_active_prelude_items"],
+    normalize: (value) => { const n = Number(value); return Number.isFinite(n) ? Math.max(0, Math.min(12, n)) : 4; },
+  },
+  {
+    key: "continuity.max_followups_per_day",
+    path: ["continuity", "max_followups_per_day"],
+    normalize: (value) => { const n = Number(value); return Number.isFinite(n) ? Math.max(0, Math.min(20, n)) : 2; },
+  },
+  {
+    key: "continuity.max_followups_per_thread",
+    path: ["continuity", "max_followups_per_thread"],
+    normalize: (value) => { const n = Number(value); return Number.isFinite(n) ? Math.max(0, Math.min(10, n)) : 2; },
+  },
+  {
+    key: "continuity.quiet_hours_start",
+    path: ["continuity", "quiet_hours_start"],
+    normalize: (value) => { const s = String(value || "").trim(); return /^\d{2}:\d{2}$/.test(s) ? s : "22:00"; },
+  },
+  {
+    key: "continuity.quiet_hours_end",
+    path: ["continuity", "quiet_hours_end"],
+    normalize: (value) => { const s = String(value || "").trim(); return /^\d{2}:\d{2}$/.test(s) ? s : "08:00"; },
+  },
+  // ── Inner Life engine ────────────────────────────────────────────────────
+  { key: "innerLife.inner_life_enabled", path: ["innerLife", "inner_life_enabled"], normalize: normBool },
+  { key: "innerLife.private_thoughts_enabled", path: ["innerLife", "private_thoughts_enabled"], normalize: normBool },
+  { key: "innerLife.unsent_thoughts_enabled", path: ["innerLife", "unsent_thoughts_enabled"], normalize: normBool },
+  { key: "innerLife.between_messages_enabled", path: ["innerLife", "between_messages_enabled"], normalize: normBool },
+  { key: "innerLife.journal_enabled", path: ["innerLife", "journal_enabled"], normalize: normBool },
+  { key: "innerLife.dreams_enabled", path: ["innerLife", "dreams_enabled"], normalize: normBool },
+  { key: "innerLife.little_rituals_enabled", path: ["innerLife", "little_rituals_enabled"], normalize: normBool },
+  { key: "innerLife.mood_carryover_enabled", path: ["innerLife", "mood_carryover_enabled"], normalize: normBool },
+  { key: "innerLife.alive_texture_enabled", path: ["innerLife", "alive_texture_enabled"], normalize: normBool },
+  { key: "innerLife.private_lexicon_enabled", path: ["innerLife", "private_lexicon_enabled"], normalize: normBool },
+  { key: "innerLife.room_sense_enabled", path: ["innerLife", "room_sense_enabled"], normalize: normBool },
+  { key: "innerLife.micro_repair_enabled", path: ["innerLife", "micro_repair_enabled"], normalize: normBool },
+  { key: "innerLife.proactive_inner_life_enabled", path: ["innerLife", "proactive_inner_life_enabled"], normalize: normBool },
+  { key: "innerLife.journal_delivery_enabled", path: ["innerLife", "journal_delivery_enabled"], normalize: normBool },
+  { key: "innerLife.dream_delivery_enabled", path: ["innerLife", "dream_delivery_enabled"], normalize: normBool },
+  { key: "innerLife.private_entries_visible_in_admin", path: ["innerLife", "private_entries_visible_in_admin"], normalize: normBool },
+  { key: "innerLife.private_entries_require_review", path: ["innerLife", "private_entries_require_review"], normalize: normBool },
+  { key: "innerLife.quiet_hours_enabled", path: ["innerLife", "quiet_hours_enabled"], normalize: normBool },
+  {
+    key: "innerLife.max_inner_life_prelude_items",
+    path: ["innerLife", "max_inner_life_prelude_items"],
+    normalize: (value) => { const n = Number(value); return Number.isFinite(n) ? Math.max(0, Math.min(10, n)) : 3; },
+  },
+  {
+    key: "innerLife.quiet_hours_start",
+    path: ["innerLife", "quiet_hours_start"],
+    normalize: (value) => { const s = String(value || "").trim(); return /^\d{2}:\d{2}$/.test(s) ? s : "22:00"; },
+  },
+  {
+    key: "innerLife.quiet_hours_end",
+    path: ["innerLife", "quiet_hours_end"],
+    normalize: (value) => { const s = String(value || "").trim(); return /^\d{2}:\d{2}$/.test(s) ? s : "08:00"; },
   },
 ]);
 

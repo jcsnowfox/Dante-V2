@@ -1272,6 +1272,230 @@ html[data-theme="dark"] .audio-player{color-scheme:dark}
 .gha-highlight-item img{width:40px;height:40px;padding:8px;border-radius:14px;background:rgba(255,255,255,.68)}
 @media(max-width:1180px){.gha-hero,.gha-main-grid{grid-template-columns:1fr}.gha-right{position:static}}
 @media(max-width:900px){.gha-field-grid,.gha-inline-grid,.gha-save-bar{grid-template-columns:1fr}.gha-table-top{flex-direction:column;align-items:flex-start}}
+
+/* ═══════════════════════════════════════════════════════════════════
+   GHOSTLIGHT GOTHIC DASHBOARD — DARK MODE ATMOSPHERIC REDESIGN
+   Gothic chamber · teal spectral glow · violet haze · dark glass panels
+   Assets: /assets/ghostlight/admin-bg.jpg (wide gothic chamber landscape)
+═══════════════════════════════════════════════════════════════════ */
+
+/* Cinematic gothic chamber body background — fades from image at top to pure dark */
+html[data-theme="dark"] body {
+  background:
+    linear-gradient(180deg,
+      rgba(6,4,12,.25) 0%,
+      rgba(6,4,12,.52) 28%,
+      rgba(6,4,12,.80) 58%,
+      #06040C 82%),
+    url('/assets/ghostlight/admin-bg.jpg') top center / cover no-repeat fixed;
+}
+@media (max-width:860px) {
+  html[data-theme="dark"] body {
+    background:
+      linear-gradient(180deg, rgba(6,4,12,.38) 0%, rgba(6,4,12,.75) 40%, #06040C 70%),
+      url('/assets/ghostlight/admin-bg-mobile.jpg') top center / cover no-repeat fixed;
+  }
+}
+
+/* Topbar — frosted dark glass bleeding into the gothic backdrop */
+html[data-theme="dark"] .admin-topbar {
+  background: linear-gradient(180deg, rgba(4,2,12,.84) 0%, rgba(6,4,16,.78) 100%);
+  border-bottom: 1px solid rgba(16,200,220,.16);
+  backdrop-filter: blur(30px) saturate(1.35);
+  -webkit-backdrop-filter: blur(30px) saturate(1.35);
+  box-shadow:
+    0 1px 0 rgba(16,200,220,.12),
+    0 1px 0 rgba(136,64,204,.08) inset,
+    0 8px 44px rgba(0,0,0,.55);
+}
+
+/* Active nav link — teal spectral glow */
+html[data-theme="dark"] .topbar-nav a[aria-current="page"] {
+  color: #2ED8EC;
+  background: rgba(16,200,220,.09);
+  box-shadow: 0 0 18px rgba(16,200,220,.16);
+  text-shadow: 0 0 14px rgba(16,200,220,.38);
+}
+
+/* Nav hover */
+html[data-theme="dark"] .topbar-nav a:hover {
+  color: #EDE7FF;
+  background: rgba(237,231,255,.06);
+}
+
+/* Brand name — silver shimmer gradient */
+html[data-theme="dark"] .topbar-brand-name {
+  background: linear-gradient(90deg, #EDE7FF 0%, #C8B8E8 50%, #A886C8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Gothic headings — spectral violet haze */
+html[data-theme="dark"] h1 {
+  text-shadow: 0 2px 44px rgba(168,134,200,.30), 0 0 90px rgba(136,64,204,.16);
+}
+html[data-theme="dark"] h2 {
+  text-shadow: 0 1px 28px rgba(168,134,200,.20);
+}
+html[data-theme="dark"] h3 {
+  text-shadow: 0 1px 18px rgba(168,134,200,.13);
+}
+html[data-theme="dark"] .mc-hero-title,
+html[data-theme="dark"] .mc-card-title {
+  text-shadow: 0 2px 36px rgba(168,134,200,.25);
+}
+
+/* Cards — dark glass panels over gothic chamber backdrop */
+html[data-theme="dark"] .card {
+  background: linear-gradient(160deg, rgba(17,9,38,.80) 0%, rgba(6,4,12,.72) 100%);
+  border: 1px solid rgba(44,24,88,.72);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  box-shadow: 0 4px 30px rgba(0,0,0,.42), 0 0 0 1px rgba(136,64,204,.07) inset;
+}
+
+/* Stat cards */
+html[data-theme="dark"] .stat-card {
+  background: linear-gradient(160deg, rgba(17,9,38,.82) 0%, rgba(6,4,12,.74) 100%);
+  border: 1px solid rgba(44,24,88,.76);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 22px rgba(0,0,0,.40);
+}
+
+/* Review cards — cinematic depth with hover teal bloom */
+html[data-theme="dark"] .review-card {
+  background: linear-gradient(180deg, rgba(17,9,38,.80) 0%, rgba(6,4,12,.72) 100%);
+  border-color: rgba(44,24,88,.70);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+html[data-theme="dark"] .review-card:hover,
+html[data-theme="dark"] .review-card:focus-visible {
+  border-color: rgba(16,200,220,.28);
+  box-shadow: 0 8px 32px rgba(16,200,220,.09), 0 18px 52px rgba(0,0,0,.46);
+}
+
+/* Journal cards */
+html[data-theme="dark"] .journal-card {
+  background: linear-gradient(160deg, rgba(17,9,38,.76) 0%, rgba(6,4,12,.70) 100%);
+  border: 1px solid rgba(44,24,88,.68);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* MC curator cards */
+html[data-theme="dark"] .mc-card {
+  background: rgba(15,8,34,.78);
+  border-color: rgba(44,24,88,.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Companion hero panel — violet haze glass */
+html[data-theme="dark"] .companion-hero {
+  background: linear-gradient(135deg, rgba(136,64,204,.15) 0%, rgba(16,200,220,.07) 100%);
+  border-color: rgba(136,64,204,.32);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 4px 34px rgba(136,64,204,.15), 0 0 70px rgba(16,200,220,.05);
+}
+
+/* Primary toolbar buttons — teal spectral gradient */
+html[data-theme="dark"] .toolbar-button:not(.secondary):not(.danger):not([aria-disabled="true"]):not(.is-disabled):not(:disabled) {
+  background: linear-gradient(135deg, #0BBDCF 0%, #0A9BB0 60%, #087888 100%);
+  box-shadow: 0 6px 24px rgba(16,200,220,.28), 0 0 0 1px rgba(78,216,234,.18) inset;
+  text-shadow: 0 1px 4px rgba(0,0,0,.28);
+}
+html[data-theme="dark"] .toolbar-button:not(.secondary):not(.danger):not([aria-disabled="true"]):not(.is-disabled):not(:disabled):hover {
+  background: linear-gradient(135deg, #2ED8EC 0%, #10C8DC 60%, #0BBDCF 100%);
+  box-shadow: 0 10px 34px rgba(16,200,220,.42), 0 0 0 1px rgba(102,230,255,.25) inset;
+}
+
+/* Button links */
+html[data-theme="dark"] .button-link:not(.button-link-secondary) {
+  background: linear-gradient(135deg, #0BBDCF 0%, #0A9BB0 60%);
+  box-shadow: 0 6px 24px rgba(16,200,220,.28);
+}
+html[data-theme="dark"] .button-link:not(.button-link-secondary):hover {
+  background: linear-gradient(135deg, #2ED8EC 0%, #10C8DC 60%);
+  box-shadow: 0 10px 34px rgba(16,200,220,.42);
+  color: white;
+}
+
+/* Input / textarea / select — teal focus ring */
+html[data-theme="dark"] input:focus,
+html[data-theme="dark"] textarea:focus,
+html[data-theme="dark"] select:focus {
+  border-color: rgba(16,200,220,.65);
+  box-shadow: 0 0 0 3px rgba(16,200,220,.15), 0 0 18px rgba(16,200,220,.10);
+  background: rgba(17,9,38,.78);
+}
+
+/* Switch checked — teal spectral glow */
+html[data-theme="dark"] .switch-control input:checked + span {
+  background: rgba(16,200,220,.16);
+  border-color: rgba(16,200,220,.44);
+  box-shadow: 0 0 14px rgba(16,200,220,.22);
+}
+
+/* Notice banners — frosted glass */
+html[data-theme="dark"] .notice.success {
+  background: rgba(5,26,24,.86);
+  border-color: rgba(26,78,72,.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 0 28px rgba(16,200,220,.07);
+}
+html[data-theme="dark"] .notice.error {
+  background: rgba(28,6,24,.86);
+  border-color: rgba(90,30,56,.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Page subnav active — violet glass */
+html[data-theme="dark"] .page-subnav a[aria-current="page"] {
+  background: rgba(17,9,38,.82);
+  border-color: rgba(44,24,88,.90);
+  box-shadow: 0 0 14px rgba(136,64,204,.11);
+}
+
+/* Table headers — deep backdrop */
+html[data-theme="dark"] .memory-table thead th,
+html[data-theme="dark"] .model-table thead th {
+  background: rgba(9,6,22,.92);
+  border-bottom-color: rgba(44,24,88,.88);
+}
+
+/* MC sticky save bar — glass */
+html[data-theme="dark"] .mc-save-bar {
+  background: rgba(6,4,12,.91);
+  border-color: rgba(44,24,88,.86);
+  box-shadow: 0 0 0 1px rgba(16,200,220,.07) inset, 0 -8px 34px rgba(0,0,0,.52);
+}
+
+/* Image/journal stream edge fades — match solid dark bg colour */
+html[data-theme="dark"] .home-image-stream-wrap::before,
+html[data-theme="dark"] .home-journal-stream-wrap::before {
+  background: linear-gradient(90deg, #06040C, transparent);
+}
+html[data-theme="dark"] .home-image-stream-wrap::after,
+html[data-theme="dark"] .home-journal-stream-wrap::after {
+  background: linear-gradient(270deg, #06040C, transparent);
+}
+
+/* Decision card separators — ghosted violet */
+html[data-theme="dark"] .home-decision-card {
+  border-bottom-color: rgba(44,24,88,.40);
+}
+
+/* Code blocks */
+html[data-theme="dark"] code {
+  background: rgba(17,9,38,.82);
+  border: 1px solid rgba(44,24,88,.70);
+}
 `;
 
 
