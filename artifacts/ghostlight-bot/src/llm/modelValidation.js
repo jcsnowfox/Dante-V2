@@ -53,6 +53,11 @@ const MODEL_SETTING_DEFINITIONS = Object.freeze([
 const modelCapabilitiesCache = new Map();
 const MODEL_CAPABILITY_CACHE_TTL_MS = 60 * 60 * 1000;
 
+const RECOMMENDED_MODELS = Object.freeze({
+  dailyCompanion: "anthropic/claude-haiku-4.5",
+  adultPrivate: "xiaomi/mimo-v2.5",
+});
+
 function getModelOutputModalitiesForCapability(capability = "chat") {
   const normalizedCapability = String(capability || "").trim().toLowerCase();
   return MODEL_SETTING_DEFINITIONS.find((definition) => definition.capability === normalizedCapability)
@@ -133,8 +138,18 @@ function formatModelValidationError(invalidModels = []) {
     return "";
   }
 
-  const details = invalidModels.map((entry) => `${entry.label}: ${entry.nextValue}`).join("; ");
-  return `These model changes were not saved because they were not returned by OpenRouter's model availability check for the current API key: ${details}. Check the model slug, account privacy/provider filters, or choose a different model.`;
+  const details = invalidModels
+    .map((entry) => {
+      const fromPart = entry.currentValue ? ` (was: ${entry.currentValue})` : "";
+      return `${entry.label}: tried “${entry.nextValue}”${fromPart}`;
+    })
+    .join("; ");
+
+  return (
+    `These model changes were not saved because the model IDs were not returned by OpenRouter’s availability check for the current API key: ${details}. `
+    + `Possible causes: wrong model slug, model not available for your API key tier, or account-level provider filters are blocking it. `
+    + `Verify the slug at openrouter.ai, check your API key permissions, or choose a different model.`
+  );
 }
 
 function formatModelCapabilityError(unsupportedModels = []) {
@@ -309,6 +324,40 @@ function rememberOpenRouterModelToolSupport({
     supportedParameters: supportsTools ? ["tools"] : [],
   });
   rememberProviderModelCapabilities(providerConfig, cached, { outputModalities, userScoped: true });
+}
+
+function clearModelCapabilitiesCache() {
+  modelCapabilitiesCache.clear();
+}
+
+function getModelCapabilityBadges(config, modelId, capability) {
+  const id = String(modelId || "").trim();
+  if (!config || !id) return [];
+
+  try {
+    const providerConfig = resolveLlmProviderConfig(config, capability);
+    const outputModalities = getModelOutputModalitiesForCapability(capability);
+    const cached = getCachedProviderModelCapabilities(providerConfig, { outputModalities, userScoped: true });
+    if (!cached) return [];
+    const modelCapability = cached.modelCapabilities?.get(id);
+    if (!modelCapability) return [];
+
+    const inputs = new Set(modelCapability.inputModalities || []);
+    const outputs = new Set(modelCapability.outputModalities || []);
+    const badges = [];
+
+    if (outputs.has("text")) badges.push("text");
+    if (outputs.has("embeddings")) badges.push("embeddings");
+    if (inputs.has("image")) badges.push("vision");
+    if (inputs.has("audio")) badges.push("audio");
+    if (inputs.size > 1) badges.push("multimodal");
+    if (modelCapability.supportsTools) badges.push("tools");
+    if (outputs.has("text") && !modelCapability.supportsTools) badges.push("text-only");
+
+    return badges;
+  } catch (_error) {
+    return [];
+  }
 }
 
 function formatToolSupportWarning(model) {
@@ -619,6 +668,7 @@ async function planSettingsSave({
 
 module.exports = {
   MODEL_SETTING_DEFINITIONS,
+  RECOMMENDED_MODELS,
   buildModelsUserUrl,
   splitSettingsByKeys,
   getChangedModelSettings,
@@ -631,6 +681,8 @@ module.exports = {
   fetchAvailableOpenRouterModelIds,
   getCachedOpenRouterModelToolSupport,
   rememberOpenRouterModelToolSupport,
+  clearModelCapabilitiesCache,
+  getModelCapabilityBadges,
   formatToolSupportWarning,
   validateChangedModelSettings,
   planSettingsSave,

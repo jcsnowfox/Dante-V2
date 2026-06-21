@@ -2,7 +2,7 @@ const { applyRuntimeSettings } = require("../../config/runtimeSettings");
 const { registerDiscordCommands } = require("../../bot/registerCommands");
 const { canSyncMemories, syncMemoriesToQdrant } = require("../../memory/syncMemories");
 const { deleteCollection } = require("../../memory/qdrantClient");
-const { planSettingsSave } = require("../../llm/modelValidation");
+const { planSettingsSave, clearModelCapabilitiesCache } = require("../../llm/modelValidation");
 const {
   buildDailyThreadActionRecord,
   loadDailyThreadAutomation,
@@ -435,6 +435,22 @@ async function handleAdminMaintenanceActions({
           }),
         }).end();
       }
+    })(req, res, context);
+  }
+
+  if (req.method === "POST" && url.pathname === "/admin/actions/refresh-openrouter-models") {
+    return withAdmin(async (innerReq, innerRes, _innerContext) => {
+      const { fields } = await parseRequestForm(innerReq);
+      const theme = normalizeTheme(fields.theme);
+      clearModelCapabilitiesCache();
+      return innerRes.writeHead(303, {
+        Location: buildReturnLocation({
+          returnTo: fields.returnTo || fields.view,
+          fallbackPath: "/admin/companion",
+          message: "OpenRouter model cache cleared. The next model save will fetch a fresh model list from OpenRouter.",
+          theme,
+        }),
+      }).end();
     })(req, res, context);
   }
 

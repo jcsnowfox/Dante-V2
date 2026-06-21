@@ -7,6 +7,10 @@ const {
 } = require("./shared");
 const { renderJournalMarkdownPreview } = require("./journalMarkdown");
 const {
+  RECOMMENDED_MODELS,
+  getModelCapabilityBadges,
+} = require("../../llm/modelValidation");
+const {
   CUSTOM_REACTION_EMOJI_LIMIT,
   CUSTOM_REACTION_MOOD_LIMIT,
   customReactionLabel,
@@ -401,6 +405,7 @@ function renderAdultPrivateModeTab({ state, theme, helpers }) {
       help: "Optional model slug to use in the private channel. Leave blank to use the Romance & Intimacy model from the Models tab (recommended), or the standard chat model if that is also not set.",
     }, helpers),
     `<input id="adultPrivateModeModel" name="adultPrivateModeModel" type="text" value="${escapeHtml(state.adultPrivateModeModel)}" placeholder="Leave blank to use Romance &amp; Intimacy model from Models tab">`,
+    `<p class="meta model-recommendation">Recommended for Adult Mode: <code>${escapeHtml(RECOMMENDED_MODELS.adultPrivate)}</code></p>`,
     renderFieldLabelWithHelp({
       forId: "adultPrivateModeSystemPrompt",
       label: "Adult Mode System Prompt",
@@ -475,7 +480,7 @@ function renderCompanionPage({ config, theme = "light", helpers, companionTab = 
 
   const tabContentBody = {
     identity: renderCompanionIdentityTab({ runtimeSettings, theme, helpers }),
-    models: renderBehaviourModelsTab({ state, theme, helpers }),
+    models: renderBehaviourModelsTab({ state, theme, helpers, config }),
     runtime: renderBehaviourRuntimeTab({ state, theme, helpers }),
     emojis: renderBehaviourEmojisTab({ config, theme, helpers, customReactionEmojiOptions }),
     "private-mode": renderAdultPrivateModeTab({ state, theme, helpers }),
@@ -588,8 +593,92 @@ function renderBehaviourFormFields({ theme, tab, helpers }) {
   ].join("");
 }
 
-function renderBehaviourModelsTab({ state, theme, helpers }) {
+function renderBehaviourModelsTab({ state, theme, helpers, config = null }) {
   const { escapeHtml } = helpers;
+
+  const renderBadges = (modelId, capability) => {
+    const badges = getModelCapabilityBadges(config, modelId, capability);
+    if (!badges.length) return "";
+    const LABELS = {
+      text: "Text",
+      embeddings: "Embeddings",
+      vision: "Vision",
+      audio: "Audio",
+      multimodal: "Multimodal",
+      tools: "Tools",
+      "text-only": "Text-only",
+    };
+    return [
+      "<div class=\"model-compat-badges\">",
+      badges.map((b) => `<span class="model-compat-badge model-compat-${escapeHtml(b)}">${LABELS[b] || escapeHtml(b)}</span>`).join(""),
+      "</div>",
+    ].join("");
+  };
+
+  const modelRows = [
+    {
+      id: "chatModel",
+      name: "chatModel",
+      label: "Chat",
+      value: state.chatModelValue,
+      capability: "chat",
+      placeholder: "Enter chat model slug",
+      notes: "The main conversation model used for everyday chat. Tool support is required for GIF and image features.",
+      recommendation: RECOMMENDED_MODELS.dailyCompanion,
+      recommendationLabel: "Recommended for daily use",
+    },
+    {
+      id: "summaryModel",
+      name: "summaryModel",
+      label: "Summaries",
+      value: state.summaryModelValue,
+      capability: "summary",
+      placeholder: "Enter summary model slug",
+      notes: "Used for timeline summaries, imports, and other background continuity work. Text output only; tool support not required.",
+      recommendation: null,
+    },
+    {
+      id: "imageModel",
+      name: "imageModel",
+      label: "Image Analysis",
+      value: state.imageModelValue,
+      capability: "image",
+      placeholder: "Enter image model slug",
+      notes: "Used for analysing images you send to your AI. Model must support image (vision) input.",
+      recommendation: null,
+    },
+    {
+      id: "embeddingModel",
+      name: "embeddingModel",
+      label: "Embeddings",
+      value: state.embeddingModelValue,
+      capability: "embedding",
+      placeholder: "Enter embedding model slug",
+      notes: "Used for memory search and retrieval. Model must support embeddings output.",
+      recommendation: null,
+    },
+    {
+      id: "transcriptionModel",
+      name: "transcriptionModel",
+      label: "Transcription",
+      value: state.transcriptionModelValue,
+      capability: "transcription",
+      placeholder: "Enter transcription model slug",
+      notes: "Used for speech-to-text transcription when you send a voice note. Model must support audio input.",
+      recommendation: null,
+    },
+    {
+      id: "romanceModel",
+      name: "romanceModel",
+      label: "Romance & Intimacy",
+      value: state.romanceModelValue || "",
+      capability: "chat",
+      placeholder: "Enter romance model slug (optional)",
+      notes: "Used for romantic and intimate conversations. Falls back to the main chat model if not set.",
+      recommendation: RECOMMENDED_MODELS.adultPrivate,
+      recommendationLabel: "Recommended for Adult Mode",
+    },
+  ];
 
   return [
     "<form method=\"post\" action=\"/admin/actions/settings-save\">",
@@ -598,28 +687,30 @@ function renderBehaviourModelsTab({ state, theme, helpers }) {
     "<table class=\"model-table\">",
     "<thead><tr><th>Use</th><th>Model</th><th>What it’s for</th></tr></thead>",
     "<tbody>",
-    "<tr><td data-label=\"Use\"><strong>Chat</strong></td>",
-    `<td data-label="Model"><input id="chatModel" name="chatModel" type="text" value="${escapeHtml(state.chatModelValue)}" placeholder="Enter chat model slug"></td>`,
-    "<td data-label=\"What it’s for\" class=\"notes\">The main conversation model Ghostlight uses for everyday chat.</td></tr>",
-    "<tr><td data-label=\"Use\"><strong>Summaries</strong></td>",
-    `<td data-label="Model"><input id="summaryModel" name="summaryModel" type="text" value="${escapeHtml(state.summaryModelValue)}" placeholder="Enter summary model slug"></td>`,
-    "<td data-label=\"What it’s for\" class=\"notes\">Used for timeline summaries, imports, and other background continuity work.</td></tr>",
-    "<tr><td data-label=\"Use\"><strong>Image Analysis</strong></td>",
-    `<td data-label="Model"><input id="imageModel" name="imageModel" type="text" value="${escapeHtml(state.imageModelValue)}" placeholder="Enter image model slug"></td>`,
-    "<td data-label=\"What it’s for\" class=\"notes\">Used for analysing images you send to your AI.</td></tr>",
-    "<tr><td data-label=\"Use\"><strong>Embeddings</strong></td>",
-    `<td data-label="Model"><input id="embeddingModel" name="embeddingModel" type="text" value="${escapeHtml(state.embeddingModelValue)}" placeholder="Enter embedding model slug"></td>`,
-    "<td data-label=\"What it’s for\" class=\"notes\">Used for memory search and retrieval.</td></tr>",
-    "<tr><td data-label=\"Use\"><strong>Transcription</strong></td>",
-    `<td data-label="Model"><input id="transcriptionModel" name="transcriptionModel" type="text" value="${escapeHtml(state.transcriptionModelValue)}" placeholder="Enter transcription model slug"></td>`,
-    "<td data-label=\"What it’s for\" class=\"notes\">Used for speech-to-text transcription when you send a voice note to your AI.</td></tr>",
-    "<tr><td data-label=\"Use\"><strong>Romance &amp; Intimacy</strong></td>",
-    `<td data-label="Model"><input id="romanceModel" name="romanceModel" type="text" value="${escapeHtml(state.romanceModelValue || "")}" placeholder="Enter romance model slug (optional)"></td>`,
-    "<td data-label=\"What it’s for\" class=\"notes\">Used for romantic and intimate conversations. Falls back to the main chat model if not set.</td></tr>",
+    ...modelRows.map(({ id, name, label, value, capability, placeholder, notes, recommendation, recommendationLabel }) => [
+      "<tr>",
+      `<td data-label="Use"><strong>${escapeHtml(label)}</strong></td>`,
+      "<td data-label=\"Model\">",
+      `<input id="${escapeHtml(id)}" name="${escapeHtml(name)}" type="text" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}">`,
+      renderBadges(value, capability),
+      recommendation
+        ? `<p class="meta model-recommendation">${escapeHtml(recommendationLabel || "Recommended")}: <code>${escapeHtml(recommendation)}</code></p>`
+        : "",
+      "</td>",
+      `<td data-label="What it’s for" class="notes">${escapeHtml(notes)}</td>`,
+      "</tr>",
+    ].join("")),
     "</tbody>",
     "</table>",
     "</div>",
     "<div class=\"toolbar\"><button type=\"submit\">Save Models</button></div>",
+    "</form>",
+    "<form method=\"post\" action=\"/admin/actions/refresh-openrouter-models\" class=\"inline-form\">",
+    renderBehaviourFormFields({ theme, tab: "models", helpers }),
+    "<div class=\"toolbar toolbar-secondary\">",
+    "<button type=\"submit\" class=\"secondary\">Refresh OpenRouter Models</button>",
+    "<span class=\"meta\"> Clears the cached model list and forces a fresh availability check on next save.</span>",
+    "</div>",
     "</form>",
   ].join("");
 }
