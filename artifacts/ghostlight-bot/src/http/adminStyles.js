@@ -1276,7 +1276,7 @@ html[data-theme="dark"] .audio-player{color-scheme:dark}
 /* ═══════════════════════════════════════════════════════════════════
    GHOSTLIGHT GOTHIC DASHBOARD — DARK MODE ATMOSPHERIC REDESIGN
    Gothic chamber · teal spectral glow · violet haze · dark glass panels
-   Assets: /assets/ghostlight/admin-bg.jpg (wide gothic chamber landscape)
+   Assets: /assets/ghostlight/admin-bg.webp (gothic corridor landscape)
 ═══════════════════════════════════════════════════════════════════ */
 
 /* Cinematic gothic chamber body background — fades from image at top to pure dark */
@@ -1287,13 +1287,13 @@ html[data-theme="dark"] body {
       rgba(6,4,12,.52) 28%,
       rgba(6,4,12,.80) 58%,
       #06040C 82%),
-    url('/assets/ghostlight/admin-bg.jpg') top center / cover no-repeat fixed;
+    url('/assets/ghostlight/admin-bg.webp') top center / cover no-repeat fixed;
 }
 @media (max-width:860px) {
   html[data-theme="dark"] body {
     background:
       linear-gradient(180deg, rgba(6,4,12,.38) 0%, rgba(6,4,12,.75) 40%, #06040C 70%),
-      url('/assets/ghostlight/admin-bg-mobile.jpg') top center / cover no-repeat fixed;
+      url('/assets/ghostlight/admin-bg-mobile.webp') top center / cover no-repeat fixed;
   }
 }
 
