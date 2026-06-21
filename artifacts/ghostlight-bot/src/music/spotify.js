@@ -302,8 +302,9 @@ async function getSpotifyProfile({ config, accessToken, fetchImpl = globalThis.f
 function mapSpotifySavedTrack(item = {}) {
   const track = item.track || {};
   const spotifyTrackId = String(track.id || "").trim();
+  const title = String(track.name || "").trim();
 
-  if (!spotifyTrackId || track.is_local) {
+  if (!spotifyTrackId || track.is_local || !title) {
     return null;
   }
 
@@ -311,7 +312,7 @@ function mapSpotifySavedTrack(item = {}) {
     spotifyTrackId,
     spotifyUri: String(track.uri || "").trim(),
     spotifyUrl: String(track.external_urls?.spotify || "").trim(),
-    title: String(track.name || "").trim(),
+    title,
     artists: mapSpotifyTrackArtists(track.artists),
     albumName: String(track.album?.name || "").trim(),
     albumReleaseDate: String(track.album?.release_date || "").trim(),
@@ -325,8 +326,9 @@ function mapSpotifySavedTrack(item = {}) {
 
 function mapSpotifyTrack(track = {}, defaults = {}) {
   const spotifyTrackId = String(track.id || "").trim();
+  const title = String(track.name || "").trim();
 
-  if (!spotifyTrackId || track.is_local) {
+  if (!spotifyTrackId || track.is_local || !title) {
     return null;
   }
 
