@@ -533,15 +533,24 @@ async function deleteMusicUserScopePointsFromQdrant({ config, userScope, deps = 
       skipped: false,
     };
   } catch (error) {
+    const msg = error?.message || String(error);
+    // Qdrant 404 means the collection doesn't exist yet — nothing to delete, not an error.
+    if (msg.includes("404") || msg.toLowerCase().includes("doesn't exist") || msg.toLowerCase().includes("does not exist")) {
+      return {
+        deletedCount: 0,
+        skipped: false,
+      };
+    }
+
     logger?.warn?.("[music] Failed to delete music Qdrant points by user scope", {
       userScope: normalizedUserScope,
-      error: error?.message || String(error),
+      error: msg,
     });
 
     return {
       deletedCount: 0,
       skipped: true,
-      error: error?.message || "Failed to delete music search points.",
+      error: msg || "Failed to delete music search points.",
     };
   }
 }
