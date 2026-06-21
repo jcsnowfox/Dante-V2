@@ -11,7 +11,7 @@ function escapeHtml(value) {
 
 function normalizeTheme(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  return normalized === "dark" ? "dark" : "light";
+  return normalized === "light" ? "light" : "dark";
 }
 
 function renderLayout({
