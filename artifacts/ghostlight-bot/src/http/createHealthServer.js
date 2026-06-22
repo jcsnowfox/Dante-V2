@@ -33,6 +33,7 @@ const { handleRelationalStateActions } = require("./actions/relationalStateActio
 const { handleInnerLifeActions } = require("./actions/innerLifeActions");
 const { handleContinuityActions } = require("./actions/continuityActions");
 const { handleCompanionAvatarActions } = require("./actions/companionAvatarActions");
+const { handleGameActions } = require("./actions/gameActions");
 const { handleAdminMaintenanceActions } = require("./actions/adminMaintenanceActions");
 const { handleAdminExportActions } = require("./actions/adminExportActions");
 const { handleSecondLifeApiRequest } = require("./secondLifeApi");
@@ -427,7 +428,8 @@ function createHealthServer({
         url.pathname === "/admin/inner-life" ||
         url.pathname.startsWith("/admin/inner-life/") ||
         url.pathname === "/admin/continuity" ||
-        url.pathname.startsWith("/admin/continuity/")
+        url.pathname.startsWith("/admin/continuity/") ||
+        url.pathname === "/admin/games"
       )) {
         return withAdmin(async (_req, innerRes, innerContext) => {
           setThemeCookie(innerRes, resolvedTheme);
@@ -641,6 +643,19 @@ function createHealthServer({
 
       {
         const handled = await handleContinuityActions({
+          req,
+          res,
+          url,
+          context,
+          withAdmin,
+        });
+        if (handled !== false) {
+          return handled;
+        }
+      }
+
+      {
+        const handled = await handleGameActions({
           req,
           res,
           url,

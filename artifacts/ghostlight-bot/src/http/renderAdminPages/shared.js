@@ -18,6 +18,7 @@ const NAV_GROUPS = [
     { section: "secondLife", label: "Second Life", path: "/admin/second-life", icon: "companion" },
   ] },
   { label: "Systems", links: [
+    { section: "games", label: "Games", path: "/admin/games", icon: "tools" },
     { section: "heartbeat", label: "Heartbeat", path: "/admin/heartbeat/timing", icon: "heartbeat" },
     { section: "schedules", label: "Schedules", path: "/admin/schedules", icon: "automation" },
     { section: "gallery", label: "Gallery", path: "/admin/gallery/images", icon: "gallery" },

@@ -84,6 +84,10 @@ function getAdminRouteState(pathname) {
     return { section: "emotionalArc" };
   }
 
+  if (pathname === "/admin/games") {
+    return { section: "games" };
+  }
+
   if (pathname === "/admin/gallery" || pathname === "/admin/gallery/images") {
     return { section: "gallery", tab: "images" };
   }

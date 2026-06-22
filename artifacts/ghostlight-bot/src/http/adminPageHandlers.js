@@ -35,6 +35,7 @@ const { handleRelationalStatePageRequest } = require("./adminPageHandlers/relati
 const { handleSecondLifePageRequest } = require("./adminPageHandlers/secondLifePageHandler");
 const { handleInnerLifePageRequest } = require("./adminPageHandlers/innerLifePageHandler");
 const { handleContinuityPageRequest } = require("./adminPageHandlers/continuityPageHandler");
+const { handleGameAdminPageRequest } = require("../games/http/gameAdminPageHandler");
 
 async function handleAdminPageRequest({
   req = null,
@@ -367,6 +368,11 @@ async function handleAdminPageRequest({
 
   if (route.section === "continuity") {
     await handleContinuityPageRequest({ url, route, innerRes, innerContext, helpers, theme, themeLinks });
+    return;
+  }
+
+  if (route.section === "games") {
+    await handleGameAdminPageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });
     return;
   }
 

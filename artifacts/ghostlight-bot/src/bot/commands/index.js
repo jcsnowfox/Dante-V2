@@ -5,10 +5,11 @@ const userIdCommand = require("./userId");
 const timeContextCommand = require("./timeContext");
 const statusContextCommand = require("./statusContext");
 const readCommand = require("./read");
+const gameCommands = require("../../games/discord/gameCommands");
 
 function loadCommands(config = {}) {
   void config;
-  return [pingCommand, channelIdCommand, userIdCommand, timeContextCommand, statusContextCommand, modeCommand, readCommand];
+  return [pingCommand, channelIdCommand, userIdCommand, timeContextCommand, statusContextCommand, modeCommand, readCommand, gameCommands];
 }
 
 module.exports = {
