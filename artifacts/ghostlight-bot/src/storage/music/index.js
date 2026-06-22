@@ -145,6 +145,14 @@ const CREATE_MUSIC_INDEXES_SQL = [
   "CREATE INDEX IF NOT EXISTS music_playlist_tracks_track_idx ON music_playlist_tracks (music_track_id);",
 ];
 
+const MUSIC_SCHEMA_TABLES = Object.freeze([
+  "music_spotify_connections",
+  "music_tracks",
+  "music_track_affinities",
+  "music_playlists",
+  "music_playlist_tracks",
+]);
+
 const ALTER_SPOTIFY_CONNECTIONS_TABLE_SQL = [
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS user_scope TEXT NOT NULL DEFAULT 'user';",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS spotify_user_id TEXT NOT NULL DEFAULT '';",
@@ -153,16 +161,22 @@ const ALTER_SPOTIFY_CONNECTIONS_TABLE_SQL = [
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS oauth_state TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS oauth_state_created_at TIMESTAMPTZ;",
-  "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS last_import_at TIMESTAMPTZ;",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS connected_at TIMESTAMPTZ;",
+  "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS last_import_at TIMESTAMPTZ;",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
 ];
 
 const ALTER_MUSIC_TRACKS_TABLE_SQL = [
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS id BIGSERIAL;",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS music_track_id UUID;",
   "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS user_scope TEXT NOT NULL DEFAULT 'user';",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS spotify_track_id TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS spotify_uri TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS spotify_url TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS artists JSONB NOT NULL DEFAULT '[]'::jsonb;",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS album_name TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS album_release_date TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS album_release_date_precision TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS release_year INTEGER;",
@@ -179,12 +193,41 @@ const ALTER_MUSIC_TRACKS_TABLE_SQL = [
   "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS musicbrainz_enriched_at TIMESTAMPTZ;",
   "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS musicbrainz_next_fetch_after TIMESTAMPTZ;",
   "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS embedding_dirty_at TIMESTAMPTZ;",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS duration_ms INTEGER NOT NULL DEFAULT 0;",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS explicit BOOLEAN NOT NULL DEFAULT FALSE;",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS liked_at TIMESTAMPTZ;",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'spotify_liked';",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ;",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
+];
+
+const ALTER_MUSIC_TRACK_AFFINITIES_TABLE_SQL = [
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS id BIGSERIAL;",
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS affinity_id UUID;",
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS music_track_id UUID;",
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS user_scope TEXT NOT NULL DEFAULT 'user';",
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS actor_key TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS actor_type TEXT NOT NULL DEFAULT 'user';",
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS actor_display_name TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS reaction TEXT NOT NULL DEFAULT 'neutral';",
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS tags JSONB NOT NULL DEFAULT '[]'::jsonb;",
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS note TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
 ];
 
 const ALTER_MUSIC_PLAYLISTS_TABLE_SQL = [
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS id BIGSERIAL;",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS music_playlist_id UUID;",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS user_scope TEXT NOT NULL DEFAULT 'user';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS spotify_playlist_id TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS spotify_uri TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS spotify_url TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'ai_curated';",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS prompt TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS created_by_actor_key TEXT NOT NULL DEFAULT '';",
@@ -193,14 +236,31 @@ const ALTER_MUSIC_PLAYLISTS_TABLE_SQL = [
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS track_count INTEGER NOT NULL DEFAULT 0;",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS discovery_track_count INTEGER NOT NULL DEFAULT 0;",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS cover_image_id TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS spotify_cover_url TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN NOT NULL DEFAULT FALSE;",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS user_note TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS tags JSONB NOT NULL DEFAULT '[]'::jsonb;",
-  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS spotify_cover_url TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
 ];
 
-const ALTER_MUSIC_TRACK_AFFINITIES_TABLE_SQL = [
-  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS user_scope TEXT NOT NULL DEFAULT 'user';",
+const ALTER_MUSIC_PLAYLIST_TRACKS_TABLE_SQL = [
+  "ALTER TABLE music_playlist_tracks ADD COLUMN IF NOT EXISTS id BIGSERIAL;",
+  "ALTER TABLE music_playlist_tracks ADD COLUMN IF NOT EXISTS music_playlist_id UUID;",
+  "ALTER TABLE music_playlist_tracks ADD COLUMN IF NOT EXISTS music_track_id UUID;",
+  "ALTER TABLE music_playlist_tracks ADD COLUMN IF NOT EXISTS spotify_track_id TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_playlist_tracks ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0;",
+  "ALTER TABLE music_playlist_tracks ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_playlist_tracks ADD COLUMN IF NOT EXISTS added_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
+  "ALTER TABLE music_playlist_tracks ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
+  "ALTER TABLE music_playlist_tracks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
+];
+
+const MUSIC_SCHEMA_BACKFILL_SQL = [
+  "UPDATE music_tracks SET updated_at = COALESCE(updated_at, created_at, NOW()), created_at = COALESCE(created_at, NOW()) WHERE updated_at IS NULL OR created_at IS NULL;",
+  "UPDATE music_track_affinities SET updated_at = COALESCE(updated_at, created_at, NOW()), created_at = COALESCE(created_at, NOW()) WHERE updated_at IS NULL OR created_at IS NULL;",
+  "UPDATE music_playlists SET updated_at = COALESCE(updated_at, created_at, NOW()), created_at = COALESCE(created_at, NOW()) WHERE updated_at IS NULL OR created_at IS NULL;",
+  "UPDATE music_playlist_tracks SET updated_at = COALESCE(updated_at, created_at, added_at, NOW()), created_at = COALESCE(created_at, added_at, NOW()), added_at = COALESCE(added_at, created_at, NOW()) WHERE updated_at IS NULL OR created_at IS NULL OR added_at IS NULL;",
 ];
 
 function normalizeText(value = "", { maxLength = 0 } = {}) {
@@ -850,10 +910,19 @@ function createMusicStore({ config, logger }) {
         await pool.query(statement);
       }
       await pool.query(CREATE_MUSIC_PLAYLIST_TRACKS_TABLE_SQL);
+      for (const statement of ALTER_MUSIC_PLAYLIST_TRACKS_TABLE_SQL) {
+        await pool.query(statement);
+      }
+      for (const statement of MUSIC_SCHEMA_BACKFILL_SQL) {
+        await pool.query(statement);
+      }
       for (const statement of CREATE_MUSIC_INDEXES_SQL) {
         await pool.query(statement);
       }
 
+      logger.info?.("[db:migration] music schema ensured", {
+        tables: MUSIC_SCHEMA_TABLES,
+      });
       logger.debug?.("[music] Music store ready", {
         provider: "postgres",
       });
