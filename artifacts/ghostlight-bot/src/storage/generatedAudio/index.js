@@ -44,6 +44,61 @@ const CREATE_GENERATED_AUDIO_INDEXES_SQL = [
   "CREATE INDEX IF NOT EXISTS generated_audio_custom_tags_gin_idx ON generated_audio USING GIN (custom_tags);",
 ];
 
+const ALTER_GENERATED_AUDIO_TABLE_SQL = [
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS audio_id UUID;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS user_scope TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS source_surface TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS display_name TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS conversation_id TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS channel_id TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS discord_message_id TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS source_message_id TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS prompt TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS spoken_text TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS caption TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS voice_id TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS model TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS output_format TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS mime_type TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS file_size_bytes INTEGER NOT NULL DEFAULT 0;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS storage_key TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS custom_tags JSONB NOT NULL DEFAULT '[]'::jsonb;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN NOT NULL DEFAULT FALSE;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS status TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS error_message TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;",
+];
+
+const BACKFILL_GENERATED_AUDIO_TABLE_SQL = [
+  "UPDATE generated_audio SET audio_id = COALESCE(audio_id, md5(random()::text || clock_timestamp()::text)::uuid);",
+  "UPDATE generated_audio SET user_scope = COALESCE(NULLIF(user_scope, ''), 'user');",
+  "UPDATE generated_audio SET source_surface = COALESCE(NULLIF(source_surface, ''), 'chat');",
+  "UPDATE generated_audio SET display_name = COALESCE(NULLIF(display_name, ''), 'Generated audio');",
+  "UPDATE generated_audio SET prompt = COALESCE(prompt, '');",
+  "UPDATE generated_audio SET spoken_text = COALESCE(spoken_text, '');",
+  "UPDATE generated_audio SET voice_id = COALESCE(voice_id, '');",
+  "UPDATE generated_audio SET model = COALESCE(model, '');",
+  "UPDATE generated_audio SET output_format = COALESCE(output_format, '');",
+  "UPDATE generated_audio SET mime_type = COALESCE(mime_type, 'audio/mpeg');",
+  "UPDATE generated_audio SET storage_key = COALESCE(NULLIF(storage_key, ''), audio_id::text);",
+  "UPDATE generated_audio SET status = COALESCE(NULLIF(status, ''), 'completed');",
+  "UPDATE generated_audio SET created_at = COALESCE(created_at, NOW());",
+  "ALTER TABLE generated_audio ALTER COLUMN audio_id SET NOT NULL;",
+  "ALTER TABLE generated_audio ALTER COLUMN user_scope SET NOT NULL;",
+  "ALTER TABLE generated_audio ALTER COLUMN source_surface SET NOT NULL;",
+  "ALTER TABLE generated_audio ALTER COLUMN display_name SET NOT NULL;",
+  "ALTER TABLE generated_audio ALTER COLUMN prompt SET NOT NULL;",
+  "ALTER TABLE generated_audio ALTER COLUMN spoken_text SET NOT NULL;",
+  "ALTER TABLE generated_audio ALTER COLUMN voice_id SET NOT NULL;",
+  "ALTER TABLE generated_audio ALTER COLUMN model SET NOT NULL;",
+  "ALTER TABLE generated_audio ALTER COLUMN output_format SET NOT NULL;",
+  "ALTER TABLE generated_audio ALTER COLUMN mime_type SET NOT NULL;",
+  "ALTER TABLE generated_audio ALTER COLUMN storage_key SET NOT NULL;",
+  "ALTER TABLE generated_audio ALTER COLUMN status SET NOT NULL;",
+  "ALTER TABLE generated_audio ALTER COLUMN created_at SET NOT NULL;",
+];
+
 function normalizeText(value, label, { allowEmpty = false } = {}) {
   const normalized = String(value || "").trim();
 
@@ -213,9 +268,21 @@ function createGeneratedAudioStore({ config, logger }) {
     async init() {
       await pool.query(CREATE_GENERATED_AUDIO_TABLE_SQL);
 
+      for (const statement of ALTER_GENERATED_AUDIO_TABLE_SQL) {
+        await pool.query(statement);
+      }
+
+      for (const statement of BACKFILL_GENERATED_AUDIO_TABLE_SQL) {
+        await pool.query(statement);
+      }
+
       for (const statement of CREATE_GENERATED_AUDIO_INDEXES_SQL) {
         await pool.query(statement);
       }
+
+      logger.info?.("[db:migration] generated audio schema ensured", {
+        tables: ["generated_audio"],
+      });
 
       logger.debug?.("[generated-audio] Generated audio store ready", {
         provider: "postgres",

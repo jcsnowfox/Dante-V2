@@ -20,6 +20,42 @@ const CREATE_JOURNAL_ENTRIES_INDEXES_SQL = [
   "CREATE INDEX IF NOT EXISTS journal_entries_automation_created_at_idx ON journal_entries (automation_id, created_at DESC);",
 ];
 
+const ALTER_JOURNAL_ENTRIES_TABLE_SQL = [
+  "ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS entry_id UUID;",
+  "ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS user_scope TEXT;",
+  "ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS automation_id UUID;",
+  "ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS channel_id TEXT;",
+  "ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS guild_id TEXT;",
+  "ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS title TEXT;",
+  "ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS content TEXT;",
+  "ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;",
+];
+
+const BACKFILL_JOURNAL_ENTRIES_TABLE_SQL = [
+  "UPDATE journal_entries SET entry_id = COALESCE(entry_id, md5(random()::text || clock_timestamp()::text)::uuid);",
+  "UPDATE journal_entries SET user_scope = COALESCE(NULLIF(user_scope, ''), 'user');",
+  "UPDATE journal_entries SET title = COALESCE(NULLIF(title, ''), 'Journal entry');",
+  "UPDATE journal_entries SET content = COALESCE(content, '');",
+  "UPDATE journal_entries SET created_at = COALESCE(created_at, NOW());",
+  "ALTER TABLE journal_entries ALTER COLUMN entry_id SET NOT NULL;",
+  "ALTER TABLE journal_entries ALTER COLUMN user_scope SET NOT NULL;",
+  "ALTER TABLE journal_entries ALTER COLUMN title SET NOT NULL;",
+  "ALTER TABLE journal_entries ALTER COLUMN content SET NOT NULL;",
+  "ALTER TABLE journal_entries ALTER COLUMN created_at SET NOT NULL;",
+  `DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'journal_entries'::regclass
+          AND conname = 'journal_entries_entry_id_unique'
+      ) THEN
+        ALTER TABLE journal_entries ADD CONSTRAINT journal_entries_entry_id_unique UNIQUE (entry_id);
+      END IF;
+    END
+  $$;`,
+];
+
 function normalizeText(value, label, { allowEmpty = false } = {}) {
   const normalized = String(value || "").trim();
 
@@ -118,9 +154,21 @@ function createJournalStore({ config, logger }) {
     async init() {
       await pool.query(CREATE_JOURNAL_ENTRIES_TABLE_SQL);
 
+      for (const statement of ALTER_JOURNAL_ENTRIES_TABLE_SQL) {
+        await pool.query(statement);
+      }
+
+      for (const statement of BACKFILL_JOURNAL_ENTRIES_TABLE_SQL) {
+        await pool.query(statement);
+      }
+
       for (const statement of CREATE_JOURNAL_ENTRIES_INDEXES_SQL) {
         await pool.query(statement);
       }
+
+      logger.info?.("[db:migration] journal schema ensured", {
+        tables: ["journal_entries"],
+      });
 
       logger.debug?.("[journals] Journal store ready", {
         provider: "postgres",

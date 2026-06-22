@@ -10,7 +10,9 @@
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "verify:conversations-schema": "pnpm --dir artifacts/ghostlight-bot run verify:conversations-schema",
-    "verify:music-schema": "pnpm --dir artifacts/ghostlight-bot run verify:music-schema"
+    "verify:music-schema": "pnpm --dir artifacts/ghostlight-bot run verify:music-schema",
+    "verify:journal-schema": "pnpm --dir artifacts/ghostlight-bot run verify:journal-schema",
+    "verify:startup-schema": "pnpm --dir artifacts/ghostlight-bot run verify:startup-schema"
   },
   "private": true,
   "devDependencies": {
