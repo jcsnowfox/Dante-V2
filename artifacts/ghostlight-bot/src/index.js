@@ -90,7 +90,9 @@ async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
 
 async function runStartupStep(step, logger, action) {
   try {
-    return await action();
+    const result = await action();
+    logger.info("[app] Startup step completed", { step });
+    return result;
   } catch (error) {
     logger.error("[app] Startup step failed", {
       step,

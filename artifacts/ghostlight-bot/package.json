@@ -20,7 +20,8 @@
     "verify:conversations-schema": "node scripts/verify-conversations-schema.mjs",
     "verify:music-schema": "node scripts/verify-music-schema.mjs",
     "verify:journal-schema": "node scripts/verify-journal-schema.mjs",
-    "verify:startup-schema": "node scripts/verify-startup-schema.mjs"
+    "verify:startup-schema": "node scripts/verify-startup-schema.mjs",
+    "inspect:database-source": "node scripts/inspect-database-source.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",
