@@ -16,7 +16,8 @@
     "memories:reset": "node scripts/reset-memory-store.js",
     "staged-memories:list": "node scripts/list-staged-memories.js",
     "staged-memories:promote": "node scripts/promote-staged-memories.js",
-    "verify:second-life-bridge": "node scripts/verify-second-life-bridge.js"
+    "verify:second-life-bridge": "node scripts/verify-second-life-bridge.js",
+    "verify:conversations-schema": "node scripts/verify-conversations-schema.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",
