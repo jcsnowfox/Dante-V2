@@ -44,6 +44,11 @@ async function main() {
   try {
     const tableResult = await pool.query(`
       SELECT to_regclass('conversation_events') AS table_name;
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false } });
+
+  try {
+    const tableResult = await pool.query(`
+      SELECT to_regclass('public.conversation_events') AS table_name;
     `);
 
     if (!tableResult.rows[0]?.table_name) {
@@ -55,6 +60,7 @@ async function main() {
       SELECT column_name, data_type
       FROM information_schema.columns
       WHERE table_schema = current_schema()
+      WHERE table_schema = 'public'
         AND table_name = 'conversation_events';
     `);
     const columns = new Map(columnsResult.rows.map((row) => [row.column_name, row.data_type]));
@@ -72,6 +78,7 @@ async function main() {
       SELECT indexname
       FROM pg_indexes
       WHERE schemaname = current_schema()
+      WHERE schemaname = 'public'
         AND tablename = 'conversation_events';
     `);
     const indexes = new Set(indexesResult.rows.map((row) => row.indexname));
