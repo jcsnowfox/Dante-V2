@@ -18,7 +18,9 @@
     "staged-memories:promote": "node scripts/promote-staged-memories.js",
     "verify:second-life-bridge": "node scripts/verify-second-life-bridge.js",
     "verify:conversations-schema": "node scripts/verify-conversations-schema.mjs",
-    "verify:music-schema": "node scripts/verify-music-schema.mjs"
+    "verify:music-schema": "node scripts/verify-music-schema.mjs",
+    "verify:journal-schema": "node scripts/verify-journal-schema.mjs",
+    "verify:startup-schema": "node scripts/verify-startup-schema.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",
