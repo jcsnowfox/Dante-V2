@@ -128,6 +128,9 @@ const CREATE_MUSIC_PLAYLIST_TRACKS_TABLE_SQL = `
 `;
 
 const CREATE_MUSIC_INDEXES_SQL = [
+  "CREATE UNIQUE INDEX IF NOT EXISTS music_spotify_connections_user_scope_uidx ON music_spotify_connections (user_scope);",
+  "CREATE UNIQUE INDEX IF NOT EXISTS music_tracks_scope_spotify_track_uidx ON music_tracks (user_scope, spotify_track_id);",
+  "CREATE UNIQUE INDEX IF NOT EXISTS music_playlists_scope_spotify_playlist_uidx ON music_playlists (user_scope, spotify_playlist_id);",
   "CREATE INDEX IF NOT EXISTS music_tracks_scope_updated_idx ON music_tracks (user_scope, updated_at DESC);",
   "CREATE INDEX IF NOT EXISTS music_tracks_scope_active_idx ON music_tracks (user_scope, active);",
   "CREATE INDEX IF NOT EXISTS music_tracks_musicbrainz_status_idx ON music_tracks (user_scope, musicbrainz_enrichment_status, musicbrainz_next_fetch_after);",
@@ -143,12 +146,23 @@ const CREATE_MUSIC_INDEXES_SQL = [
 ];
 
 const ALTER_SPOTIFY_CONNECTIONS_TABLE_SQL = [
+  "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS user_scope TEXT NOT NULL DEFAULT 'user';",
+  "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS spotify_user_id TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS spotify_display_name TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS refresh_token TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS oauth_state TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS oauth_state_created_at TIMESTAMPTZ;",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS last_import_at TIMESTAMPTZ;",
+  "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS connected_at TIMESTAMPTZ;",
+  "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
+  "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();",
 ];
 
 const ALTER_MUSIC_TRACKS_TABLE_SQL = [
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS user_scope TEXT NOT NULL DEFAULT 'user';",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS spotify_uri TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS spotify_url TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS album_release_date TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS album_release_date_precision TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS release_year INTEGER;",
@@ -168,10 +182,25 @@ const ALTER_MUSIC_TRACKS_TABLE_SQL = [
 ];
 
 const ALTER_MUSIC_PLAYLISTS_TABLE_SQL = [
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS user_scope TEXT NOT NULL DEFAULT 'user';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS spotify_uri TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS spotify_url TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'ai_curated';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS prompt TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS created_by_actor_key TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS created_by_actor_type TEXT NOT NULL DEFAULT 'ai';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS created_by_display_name TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS track_count INTEGER NOT NULL DEFAULT 0;",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS discovery_track_count INTEGER NOT NULL DEFAULT 0;",
+  "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS cover_image_id TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN NOT NULL DEFAULT FALSE;",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS user_note TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS tags JSONB NOT NULL DEFAULT '[]'::jsonb;",
   "ALTER TABLE music_playlists ADD COLUMN IF NOT EXISTS spotify_cover_url TEXT NOT NULL DEFAULT '';",
+];
+
+const ALTER_MUSIC_TRACK_AFFINITIES_TABLE_SQL = [
+  "ALTER TABLE music_track_affinities ADD COLUMN IF NOT EXISTS user_scope TEXT NOT NULL DEFAULT 'user';",
 ];
 
 function normalizeText(value = "", { maxLength = 0 } = {}) {
@@ -813,6 +842,9 @@ function createMusicStore({ config, logger }) {
         await pool.query(statement);
       }
       await pool.query(CREATE_MUSIC_TRACK_AFFINITIES_TABLE_SQL);
+      for (const statement of ALTER_MUSIC_TRACK_AFFINITIES_TABLE_SQL) {
+        await pool.query(statement);
+      }
       await pool.query(CREATE_MUSIC_PLAYLISTS_TABLE_SQL);
       for (const statement of ALTER_MUSIC_PLAYLISTS_TABLE_SQL) {
         await pool.query(statement);
