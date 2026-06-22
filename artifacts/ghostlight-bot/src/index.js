@@ -56,6 +56,7 @@ const { createMovementEngine } = require("./secondLife/slMovementEngine");
 const { createObjectInteractionEngine } = require("./secondLife/slObjectInteractionEngine");
 const { createLifeEngine } = require("./lifeEngine");
 const { createCompanionEventProcessor } = require("./companion/processCompanionEvent");
+const { createGameSystem } = require("./games");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -221,6 +222,7 @@ async function startApp() {
     movementEngine: secondLifeMovementEngine,
     objectInteractionEngine: secondLifeObjectInteractionEngine,
   });
+  const gameSystem = createGameSystem({ config, logger });
   const client = createDiscordClient({ config });
   const heartbeat = createHeartbeatService({
     client,
@@ -309,6 +311,9 @@ async function startApp() {
     secondLifeObjectInteractionEngine,
     secondLifeLifeEngine,
     companion,
+    gameRegistry: gameSystem.gameRegistry,
+    gameSessionStore: gameSystem.gameSessionStore,
+    gameSettings: {},
     licenseRuntime: license.createInitialRuntime(),
     ready: false,
   };
@@ -345,8 +350,14 @@ async function startApp() {
     secondLifeMovementEngine,
     secondLifeObjectInteractionEngine,
     secondLifeLifeEngine,
+    gameRegistry: gameSystem.gameRegistry,
+    gameSessionStore: gameSystem.gameSessionStore,
+    gameSettings: appContext.gameSettings,
     licenseRuntime: appContext.licenseRuntime,
   };
+
+  const gameButtonHandler = gameSystem.createButtonHandler({ appContext });
+  client.appContext.gameButtonHandler = gameButtonHandler;
 
   createHealthServer({
     port: config.port,
@@ -416,6 +427,13 @@ async function startApp() {
     }
     if (!companionId) return;
     await secondLifeLifeEngine.seed({ companionId });
+  });
+  await runStartupStep("gameSystem.init", logger, () => gameSystem.init());
+  await runStartupStep("gameSettings.load", logger, async () => {
+    const allSettings = await settingsStore.listSettings();
+    const loaded = allSettings?.gameSettings || {};
+    appContext.gameSettings = loaded;
+    client.appContext.gameSettings = loaded;
   });
   await runStartupStep("heartbeat.init", logger, () => heartbeat.init());
   await runStartupStep("musicLibrary.background.start", logger, () => musicLibrary.startBackgroundProcessing?.({

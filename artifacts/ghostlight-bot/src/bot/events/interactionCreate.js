@@ -18,6 +18,21 @@ function createInteractionHandler({ logger }) {
       return;
     }
 
+    if (interaction.isButton()) {
+      const customId = interaction.customId || "";
+      if (customId.startsWith("game_")) {
+        const buttonHandler = interaction.client.appContext?.gameButtonHandler;
+        if (buttonHandler) {
+          try {
+            await buttonHandler(interaction);
+          } catch (error) {
+            logger.error("[bot] Error handling game button", error);
+          }
+        }
+      }
+      return;
+    }
+
     if (!interaction.isChatInputCommand()) {
       return;
     }

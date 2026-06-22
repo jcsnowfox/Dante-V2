@@ -1,0 +1,162 @@
+[
+  {
+    "id": "ml001",
+    "category": "adventure",
+    "title": "The Lost Treasure",
+    "prompts": [
+      { "key": "adj1", "label": "adjective" },
+      { "key": "noun1", "label": "noun (a thing)" },
+      { "key": "verb1", "label": "verb (past tense)" },
+      { "key": "place1", "label": "a place" },
+      { "key": "name1", "label": "a name" },
+      { "key": "adj2", "label": "adjective" },
+      { "key": "animal1", "label": "an animal" },
+      { "key": "verb2", "label": "a verb ending in -ing" }
+    ],
+    "template": "Deep in the {adj1} jungle, a brave explorer named {name1} discovered a {noun1} that had been hidden for centuries. They {verb1} all the way to {place1}, guided by a {adj2} {animal1} who kept {verb2} in the shadows. The treasure was real, and it was absolutely ridiculous."
+  },
+  {
+    "id": "ml002",
+    "category": "romance_safe",
+    "title": "A Very Strange Date",
+    "prompts": [
+      { "key": "name1", "label": "a name" },
+      { "key": "place1", "label": "a romantic place" },
+      { "key": "food1", "label": "a food" },
+      { "key": "adj1", "label": "adjective" },
+      { "key": "verb1", "label": "a verb" },
+      { "key": "noun1", "label": "a noun (an object)" },
+      { "key": "adj2", "label": "adjective" },
+      { "key": "emotion1", "label": "an emotion" }
+    ],
+    "template": "{name1} nervously arrived at {place1} carrying a bouquet of {food1}. Their date looked {adj1}, which made {name1} want to {verb1} immediately. Then, completely out of nowhere, a {adj2} {noun1} fell from the ceiling. Everyone felt overwhelming {emotion1}. It was the best first date ever recorded."
+  },
+  {
+    "id": "ml003",
+    "category": "fantasy",
+    "title": "The Wizard's Dilemma",
+    "prompts": [
+      { "key": "adj1", "label": "adjective" },
+      { "key": "name1", "label": "a wizard's name" },
+      { "key": "noun1", "label": "a magic item" },
+      { "key": "verb1", "label": "a verb (past tense)" },
+      { "key": "animal1", "label": "an animal" },
+      { "key": "adj2", "label": "adjective" },
+      { "key": "place1", "label": "a magical place" },
+      { "key": "number1", "label": "a number" }
+    ],
+    "template": "The {adj1} wizard {name1} accidentally turned their {noun1} into a {animal1} while trying to cast a spell. The {adj2} creature immediately {verb1} through {place1}, knocking over exactly {number1} enchanted candles. The apprentice had warned them about this. Nobody ever listened to apprentices."
+  },
+  {
+    "id": "ml004",
+    "category": "sitcom",
+    "title": "Office Chaos",
+    "prompts": [
+      { "key": "name1", "label": "a coworker's name" },
+      { "key": "noun1", "label": "an office supply" },
+      { "key": "verb1", "label": "a verb (past tense)" },
+      { "key": "adj1", "label": "adjective" },
+      { "key": "food1", "label": "a food" },
+      { "key": "verb2", "label": "a verb ending in -ing" },
+      { "key": "number1", "label": "a number" },
+      { "key": "emotion1", "label": "an emotion" }
+    ],
+    "template": "On Monday morning, {name1} arrived at work and immediately {verb1} a {adj1} {noun1} all over the break room. The {food1} they had been saving in the fridge was gone — again — replaced with {number1} sticky notes that said 'sorry.' By noon, everyone was {verb2} with {emotion1}. HR sent another strongly worded email. Nobody read it."
+  },
+  {
+    "id": "ml005",
+    "category": "horror_lite",
+    "title": "The Haunted House Visit",
+    "prompts": [
+      { "key": "name1", "label": "a name" },
+      { "key": "adj1", "label": "a spooky adjective" },
+      { "key": "noun1", "label": "a creepy noun" },
+      { "key": "verb1", "label": "a verb (past tense)" },
+      { "key": "sound1", "label": "a scary sound" },
+      { "key": "adj2", "label": "adjective" },
+      { "key": "animal1", "label": "an unexpected animal" },
+      { "key": "verb2", "label": "a verb ending in -ing" }
+    ],
+    "template": "When {name1} opened the {adj1} door of the old house, they immediately spotted a {noun1} floating in the corner. They {verb1} backward and made the sound '{sound1}.' From behind the {adj2} curtain appeared... a {animal1}, calmly {verb2} as if nothing was wrong. It had been there the whole time. It had seen everything."
+  },
+  {
+    "id": "ml006",
+    "category": "adventure",
+    "title": "Space Mission Gone Wrong",
+    "prompts": [
+      { "key": "name1", "label": "an astronaut's name" },
+      { "key": "noun1", "label": "a spaceship part" },
+      { "key": "adj1", "label": "adjective" },
+      { "key": "planet1", "label": "a made-up planet name" },
+      { "key": "verb1", "label": "a verb (past tense)" },
+      { "key": "adj2", "label": "adjective" },
+      { "key": "food1", "label": "a food" },
+      { "key": "number1", "label": "a number" }
+    ],
+    "template": "Captain {name1} announced that the {noun1} had stopped working, which was {adj1} news given they were orbiting {planet1}. Mission control {verb1} and suggested they try turning it off and on again. The {adj2} crew survived for {number1} days by eating emergency rations of {food1}. The rescue crew never let them forget it."
+  },
+  {
+    "id": "ml007",
+    "category": "chaotic",
+    "title": "The Unexpected Party",
+    "prompts": [
+      { "key": "number1", "label": "a number" },
+      { "key": "noun1", "label": "a noun (plural)" },
+      { "key": "adj1", "label": "adjective" },
+      { "key": "name1", "label": "a name" },
+      { "key": "verb1", "label": "a verb (past tense)" },
+      { "key": "food1", "label": "a weird food" },
+      { "key": "adj2", "label": "adjective" },
+      { "key": "verb2", "label": "a verb ending in -ing" }
+    ],
+    "template": "Exactly {number1} {noun1} showed up uninvited to the party. It was extremely {adj1}. {name1}, the host, {verb1} immediately and ordered {number1} platters of {food1}. By midnight, everyone was having a {adj2} time despite — or possibly because of — all the {verb2} that had been happening in the backyard since nine PM."
+  },
+  {
+    "id": "ml008",
+    "category": "fantasy",
+    "title": "The Dragon's Request",
+    "prompts": [
+      { "key": "adj1", "label": "adjective" },
+      { "key": "dragon_name", "label": "a dragon's name" },
+      { "key": "noun1", "label": "an unusual item" },
+      { "key": "verb1", "label": "a verb (past tense)" },
+      { "key": "adj2", "label": "adjective" },
+      { "key": "food1", "label": "a food" },
+      { "key": "place1", "label": "a place" },
+      { "key": "emotion1", "label": "an emotion" }
+    ],
+    "template": "The {adj1} dragon {dragon_name} landed outside the village not to cause destruction, but to request a single {noun1}. The villagers {verb1} in confusion. The dragon explained, in a {adj2} voice, that it had a powerful craving for {food1} and had heard this village had the best in all of {place1}. The entire village felt overwhelming {emotion1}. They gave the dragon three."
+  },
+  {
+    "id": "ml009",
+    "category": "sitcom",
+    "title": "The Wrong Delivery",
+    "prompts": [
+      { "key": "name1", "label": "a name" },
+      { "key": "noun1", "label": "something you'd order online" },
+      { "key": "adj1", "label": "adjective" },
+      { "key": "noun2", "label": "a completely different thing" },
+      { "key": "verb1", "label": "a verb (past tense)" },
+      { "key": "number1", "label": "a number" },
+      { "key": "adj2", "label": "adjective" },
+      { "key": "verb2", "label": "a verb" }
+    ],
+    "template": "{name1} ordered a {adj1} {noun1} online, but instead received {number1} {noun2}. The delivery driver looked {adj2} and {verb1} before {name1} could ask any questions. Customer service said this was 'standard procedure.' {name1} decided to {verb2} it and make the best of the situation. It worked out surprisingly well, somehow."
+  },
+  {
+    "id": "ml010",
+    "category": "adventure",
+    "title": "The Cooking Competition",
+    "prompts": [
+      { "key": "name1", "label": "a chef's name" },
+      { "key": "food1", "label": "an ingredient" },
+      { "key": "adj1", "label": "adjective" },
+      { "key": "verb1", "label": "a cooking verb" },
+      { "key": "food2", "label": "another ingredient (unusual)" },
+      { "key": "adj2", "label": "adjective" },
+      { "key": "number1", "label": "a number" },
+      { "key": "emotion1", "label": "an emotion" }
+    ],
+    "template": "Chef {name1} stepped up to the competition station with extreme confidence and a secret weapon: {adj1} {food1}. They began to {verb1} furiously, adding {number1} cups of {food2} at the last second. The judges looked {adj2}. One of them tasted it and made a sound of pure {emotion1}. Chef {name1} was asked to please never compete again, but they won anyway."
+  }
+]
