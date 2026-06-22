@@ -87,7 +87,7 @@ async function handleGameAdminActions({ req, body, innerContext, redirect, logge
       }
     }
 
-    redirect("/admin/games?saved=1");
+    redirect("/admin/games?message=Game+settings+saved.");
     return;
   }
 
@@ -102,7 +102,7 @@ async function handleGameAdminActions({ req, body, innerContext, redirect, logge
         await gameSessionStore.cancelSession(session.id);
       }
     }
-    redirect("/admin/games?reset=1");
+    redirect("/admin/games?message=All+active+sessions+cancelled.");
     return;
   }
 }
