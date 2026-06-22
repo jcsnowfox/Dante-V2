@@ -48,6 +48,7 @@ const CREATE_MEMORIES_TABLE_SQL = `
 `;
 
 const CREATE_MEMORIES_INDEXES_SQL = [
+  "CREATE UNIQUE INDEX IF NOT EXISTS memories_memory_id_unique_idx ON memories (memory_id);",
   "CREATE INDEX IF NOT EXISTS memories_user_scope_active_idx ON memories (user_scope, active);",
   "CREATE INDEX IF NOT EXISTS memories_memory_type_idx ON memories (memory_type);",
   "CREATE INDEX IF NOT EXISTS memories_domain_idx ON memories (domain);",
@@ -70,8 +71,112 @@ const CREATE_MEMORY_USAGE_EVENTS_INDEXES_SQL = [
 ];
 
 const ALTER_MEMORIES_TABLE_SQL = [
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS id BIGSERIAL;",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS memory_id UUID;",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS title TEXT;",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS content TEXT;",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS memory_type TEXT;",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS domain TEXT;",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS sensitivity TEXT;",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS source TEXT;",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE;",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS importance INTEGER;",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS user_scope TEXT;",
   "ALTER TABLE memories ADD COLUMN IF NOT EXISTS reference_date DATE;",
-  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS use_count INTEGER NOT NULL DEFAULT 0;",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;",
+  "ALTER TABLE memories ADD COLUMN IF NOT EXISTS use_count INTEGER DEFAULT 0;",
+];
+
+const BACKFILL_MEMORIES_REQUIRED_COLUMNS_SQL = `
+  UPDATE memories
+  SET
+    memory_id = COALESCE(
+      memory_id,
+      (
+        SUBSTRING(MD5(RANDOM()::text || CLOCK_TIMESTAMP()::text), 1, 8) || '-' ||
+        SUBSTRING(MD5(RANDOM()::text || CLOCK_TIMESTAMP()::text), 1, 4) || '-' ||
+        '4' || SUBSTRING(MD5(RANDOM()::text || CLOCK_TIMESTAMP()::text), 1, 3) || '-' ||
+        SUBSTRING('89ab', (FLOOR(RANDOM() * 4)::integer + 1), 1) ||
+        SUBSTRING(MD5(RANDOM()::text || CLOCK_TIMESTAMP()::text), 1, 3) || '-' ||
+        SUBSTRING(MD5(RANDOM()::text || CLOCK_TIMESTAMP()::text), 1, 12)
+      )::uuid
+    ),
+    title = COALESCE(NULLIF(title, ''), 'Untitled memory'),
+    content = COALESCE(content, ''),
+    memory_type = COALESCE(NULLIF(memory_type, ''), 'anchor'),
+    domain = COALESCE(NULLIF(domain, ''), 'general'),
+    sensitivity = COALESCE(NULLIF(sensitivity, ''), 'medium'),
+    source = COALESCE(NULLIF(source, ''), 'legacy'),
+    active = COALESCE(active, TRUE),
+    importance = COALESCE(importance, 3),
+    user_scope = COALESCE(NULLIF(user_scope, ''), 'default'),
+    created_at = COALESCE(created_at, NOW()),
+    updated_at = COALESCE(updated_at, NOW()),
+    use_count = COALESCE(use_count, 0)
+  WHERE memory_id IS NULL
+    OR title IS NULL
+    OR title = ''
+    OR content IS NULL
+    OR memory_type IS NULL
+    OR memory_type = ''
+    OR domain IS NULL
+    OR domain = ''
+    OR sensitivity IS NULL
+    OR sensitivity = ''
+    OR source IS NULL
+    OR source = ''
+    OR active IS NULL
+    OR importance IS NULL
+    OR user_scope IS NULL
+    OR user_scope = ''
+    OR created_at IS NULL
+    OR updated_at IS NULL
+    OR use_count IS NULL;
+`;
+
+const ENFORCE_MEMORIES_NOT_NULL_SQL = [
+  "ALTER TABLE memories ALTER COLUMN memory_id SET NOT NULL;",
+  "ALTER TABLE memories ALTER COLUMN title SET NOT NULL;",
+  "ALTER TABLE memories ALTER COLUMN content SET NOT NULL;",
+  "ALTER TABLE memories ALTER COLUMN memory_type SET NOT NULL;",
+  "ALTER TABLE memories ALTER COLUMN domain SET NOT NULL;",
+  "ALTER TABLE memories ALTER COLUMN sensitivity SET NOT NULL;",
+  "ALTER TABLE memories ALTER COLUMN source SET NOT NULL;",
+  "ALTER TABLE memories ALTER COLUMN active SET DEFAULT TRUE;",
+  "ALTER TABLE memories ALTER COLUMN active SET NOT NULL;",
+  "ALTER TABLE memories ALTER COLUMN importance SET NOT NULL;",
+  "ALTER TABLE memories ALTER COLUMN user_scope SET NOT NULL;",
+  "ALTER TABLE memories ALTER COLUMN created_at SET DEFAULT NOW();",
+  "ALTER TABLE memories ALTER COLUMN created_at SET NOT NULL;",
+  "ALTER TABLE memories ALTER COLUMN updated_at SET DEFAULT NOW();",
+  "ALTER TABLE memories ALTER COLUMN updated_at SET NOT NULL;",
+  "ALTER TABLE memories ALTER COLUMN use_count SET DEFAULT 0;",
+  "ALTER TABLE memories ALTER COLUMN use_count SET NOT NULL;",
+];
+
+const ALTER_MEMORY_USAGE_EVENTS_TABLE_SQL = [
+  "ALTER TABLE memory_usage_events ADD COLUMN IF NOT EXISTS id BIGSERIAL;",
+  "ALTER TABLE memory_usage_events ADD COLUMN IF NOT EXISTS memory_id UUID;",
+  "ALTER TABLE memory_usage_events ADD COLUMN IF NOT EXISTS user_scope TEXT;",
+  "ALTER TABLE memory_usage_events ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ DEFAULT NOW();",
+];
+
+const BACKFILL_MEMORY_USAGE_EVENTS_REQUIRED_COLUMNS_SQL = `
+  UPDATE memory_usage_events
+  SET
+    user_scope = COALESCE(NULLIF(user_scope, ''), 'default'),
+    used_at = COALESCE(used_at, NOW())
+  WHERE user_scope IS NULL
+    OR user_scope = ''
+    OR used_at IS NULL;
+`;
+
+const ENFORCE_MEMORY_USAGE_EVENTS_NOT_NULL_SQL = [
+  "ALTER TABLE memory_usage_events ALTER COLUMN user_scope SET NOT NULL;",
+  "ALTER TABLE memory_usage_events ALTER COLUMN used_at SET DEFAULT NOW();",
+  "ALTER TABLE memory_usage_events ALTER COLUMN used_at SET NOT NULL;",
 ];
 
 function normalizeTextValue(value) {
@@ -278,14 +383,34 @@ function createMemoryStore({ config, logger }) {
         await pool.query(statement);
       }
 
+      await pool.query(BACKFILL_MEMORIES_REQUIRED_COLUMNS_SQL);
+
+      for (const statement of ENFORCE_MEMORIES_NOT_NULL_SQL) {
+        await pool.query(statement);
+      }
+
       for (const statement of CREATE_MEMORIES_INDEXES_SQL) {
         await pool.query(statement);
       }
 
       await pool.query(CREATE_MEMORY_USAGE_EVENTS_TABLE_SQL);
+      for (const statement of ALTER_MEMORY_USAGE_EVENTS_TABLE_SQL) {
+        await pool.query(statement);
+      }
+
+      await pool.query(BACKFILL_MEMORY_USAGE_EVENTS_REQUIRED_COLUMNS_SQL);
+
+      for (const statement of ENFORCE_MEMORY_USAGE_EVENTS_NOT_NULL_SQL) {
+        await pool.query(statement);
+      }
+
       for (const statement of CREATE_MEMORY_USAGE_EVENTS_INDEXES_SQL) {
         await pool.query(statement);
       }
+
+      logger.info?.("[db:migration] memory schema ensured", {
+        tables: ["memories", "memory_usage_events"],
+      });
 
       logger.debug?.("[memory] Memory store ready", {
         provider: "postgres",
