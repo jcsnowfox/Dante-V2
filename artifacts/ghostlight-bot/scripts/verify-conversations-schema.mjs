@@ -39,6 +39,11 @@ async function main() {
     return;
   }
 
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+  try {
+    const tableResult = await pool.query(`
+      SELECT to_regclass('conversation_events') AS table_name;
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false } });
 
   try {
@@ -54,6 +59,7 @@ async function main() {
     const columnsResult = await pool.query(`
       SELECT column_name, data_type
       FROM information_schema.columns
+      WHERE table_schema = current_schema()
       WHERE table_schema = 'public'
         AND table_name = 'conversation_events';
     `);
@@ -71,6 +77,7 @@ async function main() {
     const indexesResult = await pool.query(`
       SELECT indexname
       FROM pg_indexes
+      WHERE schemaname = current_schema()
       WHERE schemaname = 'public'
         AND tablename = 'conversation_events';
     `);

@@ -58,6 +58,7 @@ const CREATE_CONVERSATION_EVENTS_TABLE_SQL = `
 `;
 
 const ENSURE_CONVERSATION_EVENTS_COLUMNS_SQL = [
+  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS id BIGSERIAL;",
   "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS conversation_id TEXT;",
   "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS thread_id TEXT;",
   "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS channel_id TEXT;",
