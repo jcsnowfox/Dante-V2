@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
@@ -24,7 +23,7 @@ function fail(message, details = {}) {
 }
 
 function checkRuntimeSettingsRegistration() {
-  const runtimeSettingsPath = join(__dirname, '..', 'src', 'config', 'runtimeSettings.js');
+  const runtimeSettingsPath = join(__dirname, '..', 'artifacts', 'ghostlight-bot', 'src', 'config', 'runtimeSettings.js');
   let source;
   try {
     source = readFileSync(runtimeSettingsPath, 'utf8');
@@ -46,7 +45,7 @@ function checkRuntimeSettingsRegistration() {
 }
 
 function checkAdminSettingsParsers() {
-  const parsersPath = join(__dirname, '..', 'src', 'http', 'adminSettingsParsers.js');
+  const parsersPath = join(__dirname, '..', 'artifacts', 'ghostlight-bot', 'src', 'http', 'adminSettingsParsers.js');
   let source;
   try {
     source = readFileSync(parsersPath, 'utf8');
@@ -61,7 +60,7 @@ function checkAdminSettingsParsers() {
     { label: 'audioTtsProvider radio field handled', pattern: 'audioTtsProvider' },
     { label: 'audioFishVoiceId field handled', pattern: 'audioFishVoiceId' },
     { label: 'audioFishModelId field handled', pattern: 'audioFishModelId' },
-    { label: 'fish provider branch present', pattern: "providerValue === 'fish'" },
+    { label: 'fish provider branch present', pattern: "fish_audio" },
   ];
 
   for (const { label, pattern } of checks) {
@@ -73,9 +72,19 @@ function checkAdminSettingsParsers() {
   }
 }
 
+function checkRenderedDashboardUi() {
+  const pagePath = join(__dirname, '..', 'artifacts', 'ghostlight-bot', 'src', 'http', 'renderAdminPages', 'audioPages.js');
+  const source = readFileSync(pagePath, 'utf8');
+  for (const pattern of ['Voice Provider', 'Disabled / None', 'ElevenLabs', 'Fish Audio', 'audioFishVoiceId', 'audioFishModelId', 'fishAudioKeyConfigured']) {
+    if (source.includes(pattern)) pass(`dashboard UI contains: ${pattern}`);
+    else fail(`dashboard UI missing: ${pattern}`);
+  }
+}
+
 async function main() {
   checkRuntimeSettingsRegistration();
   checkAdminSettingsParsers();
+  checkRenderedDashboardUi();
 
   if (!process.exitCode) {
     console.log('[verify:dashboard-audio-settings] All checks passed.');

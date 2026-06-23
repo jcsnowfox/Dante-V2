@@ -239,6 +239,12 @@ function loadConfig() {
       apiKey: process.env.ELEVENLABS_API_KEY || "",
       baseURL: process.env.ELEVENLABS_BASE_URL || "https://api.elevenlabs.io",
     },
+    fishAudio: {
+      apiKey: process.env.FISH_AUDIO_API_KEY || "",
+      voiceId: String(process.env.FISH_AUDIO_VOICE_ID || "").trim(),
+      modelId: String(process.env.FISH_AUDIO_MODEL_ID || "").trim(),
+      baseURL: process.env.FISH_AUDIO_BASE_URL || "https://api.fish.audio",
+    },
     spotify: {
       enabled: readBoolean(process.env.SPOTIFY_ENABLED, true),
       clientId: process.env.SPOTIFY_CLIENT_ID || "",
@@ -290,8 +296,11 @@ function loadConfig() {
       bucketPrefix: String(process.env.IMAGE_GENERATION_BUCKET_PREFIX || "generated-images").trim() || "generated-images",
     },
     audio: {
+      ttsProvider: String(process.env.AUDIO_TTS_PROVIDER || (readBoolean(process.env.FISH_AUDIO_ENABLED, false) ? "fish_audio" : "elevenlabs")).trim().toLowerCase(),
       ttsEnabled: readBoolean(process.env.AUDIO_TTS_ENABLED, false),
       elevenlabsVoiceId: String(process.env.ELEVENLABS_VOICE_ID || "").trim(),
+      fishVoiceId: String(process.env.FISH_AUDIO_VOICE_ID || "").trim(),
+      fishModelId: String(process.env.FISH_AUDIO_MODEL_ID || "").trim(),
       readAloudModel: String(process.env.AUDIO_READ_ALOUD_MODEL || "eleven_flash_v2_5").trim() || "eleven_flash_v2_5",
       generatedAudioModel: String(process.env.AUDIO_GENERATED_MODEL || "eleven_multilingual_v2").trim() || "eleven_multilingual_v2",
       gallerySavedSourceSurfaces: normalizeAudioGallerySavedSourceSurfaces(process.env.AUDIO_GALLERY_SAVED_SOURCE_SURFACES, { defaultToAll: true }),

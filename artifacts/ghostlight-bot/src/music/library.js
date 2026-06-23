@@ -1568,7 +1568,7 @@ function createMusicLibraryService({
         .map((track) => [String(track.spotifyTrackId || "").trim(), String(track.source || "").trim()])
         .filter(([trackId]) => Boolean(trackId)));
       const spotifyTracks = await spotify.fetchPlaylistTracks({ userScope, playlistId: normalizedPlaylistId, limit });
-      const spotifyPlaylist = spotify.fetchPlaylist
+      const trackedSpotifyPlaylist = spotify.fetchPlaylist
         ? await spotify.fetchPlaylist({ userScope, playlistId: normalizedPlaylistId })
         : null;
       const existingIds = new Set(await store.listExistingSpotifyTrackIds?.(
@@ -1601,7 +1601,7 @@ function createMusicLibraryService({
       const updatedTrackCount = importedTracks.length - newTrackCount;
       const updatedPlaylistRecord = {
         ...storedPlaylist,
-        ...(spotifyPlaylist || {}),
+        ...(trackedSpotifyPlaylist || {}),
         musicPlaylistId: storedPlaylist.musicPlaylistId,
         userScope,
         source: storedPlaylist.source,

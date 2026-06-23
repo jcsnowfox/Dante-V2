@@ -1,7 +1,4 @@
-import 'dotenv/config';
-import pg from 'pg';
-
-const { Pool } = pg;
+import { readFileSync } from 'fs';
 
 const PROVIDER_COLUMNS = new Map([
   ['provider', 'text'],
@@ -91,8 +88,25 @@ async function checkSchema(pool) {
   }
 }
 
+function checkStaticFishIntegration() {
+  const provider = readFileSync(new URL('../artifacts/ghostlight-bot/src/audio/providers/fishAudioProvider.js', import.meta.url), 'utf8');
+  const env = readFileSync(new URL('../artifacts/ghostlight-bot/src/config/env.js', import.meta.url), 'utf8');
+  const runtime = readFileSync(new URL('../artifacts/ghostlight-bot/src/config/runtimeSettings.js', import.meta.url), 'utf8');
+  for (const [label, source, pattern] of [
+    ['Fish provider module', provider, 'generateFishAudioClip'],
+    ['Fish provider auth header', provider, 'Authorization'],
+    ['Fish env API key', env, 'FISH_AUDIO_API_KEY'],
+    ['Fish runtime provider value', runtime, 'fish_audio'],
+  ]) {
+    if (source.includes(pattern)) pass(`${label} contains ${pattern}`);
+    else fail(`${label} missing ${pattern}`);
+  }
+  console.warn('[verify:fish-audio] WARN LIVE FISH API NOT TESTED — static checks and mocked/provider-code checks only.');
+}
+
 async function main() {
   checkEnv();
+  checkStaticFishIntegration();
 
   if (!process.env.DATABASE_URL) {
     console.warn('[verify:fish-audio] DATABASE_URL is not set — skipping schema verification.');
@@ -102,6 +116,8 @@ async function main() {
     return;
   }
 
+  const { default: pg } = await import('../artifacts/ghostlight-bot/node_modules/pg/lib/index.js');
+  const { Pool } = pg;
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
   try {

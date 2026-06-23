@@ -5,17 +5,35 @@ const {
 } = require("../images/bucketStorage");
 const { shouldSaveAudioToGallery } = require("./galleryPolicy");
 const { truncateSpeechText } = require("./text");
+const { generateFishAudioClip } = require("./providers/fishAudioProvider");
 
 const AUDIO_LABEL_MONTHS = Object.freeze(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]);
 const DEFAULT_AUDIO_MIME_TYPE = "audio/mpeg";
 const DEFAULT_AUDIO_OUTPUT_FORMAT = "mp3_44100_128";
 
+function resolveTtsProvider(config = {}) {
+  const provider = String(config.audio?.ttsProvider || "elevenlabs").trim().toLowerCase();
+  return ["elevenlabs", "fish_audio", "none"].includes(provider) ? provider : "elevenlabs";
+}
+
 function canGenerateAudio(config = {}) {
+  const selectedProvider = resolveTtsProvider(config);
+  if (!config.audio?.ttsEnabled || selectedProvider === "none" || !hasStorageConfig(config)) {
+    return false;
+  }
+
+  const provider = selectedProvider;
+
+  if (provider === "fish_audio") {
+    return Boolean(
+      String(config.fishAudio?.apiKey || "").trim()
+      && String(config.audio?.fishVoiceId || config.fishAudio?.voiceId || "").trim()
+    );
+  }
+
   return Boolean(
-    config.audio?.ttsEnabled
-    && String(config.elevenlabs?.apiKey || "").trim()
+    String(config.elevenlabs?.apiKey || "").trim()
     && String(config.audio?.elevenlabsVoiceId || "").trim()
-    && hasStorageConfig(config)
   );
 }
 
@@ -124,7 +142,7 @@ function extensionForMimeType(mimeType = "") {
 function slugifyFilenamePart(value = "", fallback = "clip") {
   const slug = String(value || "")
     .trim()
-    .replace(/['"]/g, "")
+    .replace(/[''"]/g, "")
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
@@ -278,28 +296,20 @@ function createAudioGenerationService({
         throw new Error("A fetch implementation is required for audio generation.");
       }
 
-      const apiKey = String(config.elevenlabs?.apiKey || "").trim();
-      const voiceId = String(config.audio?.elevenlabsVoiceId || "").trim();
-
-      if (!apiKey) {
-        throw new Error("ElevenLabs credentials are not configured.");
+      const provider = resolveTtsProvider(config);
+      logger.info?.(`[audio] provider selected provider="${provider}"`);
+      if (provider === "fish_audio") {
+        logger.info?.("[audio] fish config", {
+          keyConfigured: Boolean(String(config.fishAudio?.apiKey || "").trim()),
+          voiceConfigured: Boolean(String(config.audio?.fishVoiceId || config.fishAudio?.voiceId || "").trim()),
+        });
       }
-
-      if (!voiceId) {
-        throw new Error("No ElevenLabs voice ID is configured.");
-      }
-
       const baseSpokenText = truncateSpeechText(text);
 
       if (!baseSpokenText) {
         throw new Error("Text is required to generate audio.");
       }
 
-      const selectedModel = String(model || config.audio?.generatedAudioModel || "eleven_multilingual_v2").trim();
-      const spokenText = truncateSpeechText(applyV3DeliveryTags(baseSpokenText, {
-        model: selectedModel,
-        config,
-      }));
       const outputFormat = DEFAULT_AUDIO_OUTPUT_FORMAT;
       const mimeType = resolveAudioMimeType(outputFormat);
       const sourceSurface = context.sourceSurface || "chat";
@@ -314,45 +324,103 @@ function createAudioGenerationService({
         now,
       });
 
-      logger.debug?.("[audio] Generating audio", {
-        model: selectedModel,
-        voiceId,
-        sourceSurface,
-        gallerySaved: shouldPersist,
-        textLength: spokenText.length,
-        displayName,
-      });
+      let audioBuffer;
+      let resolvedVoiceId;
+      let resolvedModel;
+      let resolvedSpokenText = baseSpokenText;
 
-      const requestUrl = `${resolveElevenLabsBaseUrl(config)}/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${encodeURIComponent(outputFormat)}`;
-      const voiceSettings = resolveElevenLabsVoiceSettings(config);
-      const requestBody = {
-        text: spokenText,
-        model_id: selectedModel,
-      };
+      if (provider === "fish_audio") {
+        const fishVoiceId = String(config.audio?.fishVoiceId || config.fishAudio?.voiceId || "").trim();
+        const fishModelId = String(config.audio?.fishModelId || config.fishAudio?.modelId || "").trim();
 
-      if (voiceSettings) {
-        requestBody.voice_settings = voiceSettings;
-      }
+        if (!String(config.fishAudio?.apiKey || "").trim()) {
+          throw new Error("Fish Audio credentials are not configured.");
+        }
 
-      const response = await fetchImpl(requestUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "xi-api-key": apiKey,
-        },
-        body: JSON.stringify(requestBody),
-      });
+        if (!fishVoiceId) {
+          throw new Error("No Fish Audio voice ID is configured.");
+        }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(formatElevenLabsRequestError({
-          status: response.status,
-          errorText,
+        resolvedVoiceId = fishVoiceId;
+        resolvedModel = fishModelId || "fish-speech";
+
+        logger.debug?.("[audio] Generating Fish Audio clip", {
+          provider: "fish_audio",
+          voiceId: fishVoiceId,
+          sourceSurface,
+          gallerySaved: shouldPersist,
+          textLength: baseSpokenText.length,
+          displayName,
+        });
+
+        audioBuffer = await generateFishAudioClip({
+          config,
+          text: baseSpokenText,
+          fetchImpl,
+        });
+      } else {
+        const apiKey = String(config.elevenlabs?.apiKey || "").trim();
+        const voiceId = String(config.audio?.elevenlabsVoiceId || "").trim();
+
+        if (!apiKey) {
+          throw new Error("ElevenLabs credentials are not configured.");
+        }
+
+        if (!voiceId) {
+          throw new Error("No ElevenLabs voice ID is configured.");
+        }
+
+        resolvedVoiceId = voiceId;
+        const selectedModel = String(model || config.audio?.generatedAudioModel || "eleven_multilingual_v2").trim();
+        resolvedModel = selectedModel;
+
+        const spokenText = truncateSpeechText(applyV3DeliveryTags(baseSpokenText, {
+          model: selectedModel,
+          config,
         }));
+        resolvedSpokenText = spokenText;
+
+        logger.debug?.("[audio] Generating audio", {
+          model: selectedModel,
+          voiceId,
+          sourceSurface,
+          gallerySaved: shouldPersist,
+          textLength: spokenText.length,
+          displayName,
+        });
+
+        const requestUrl = `${resolveElevenLabsBaseUrl(config)}/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${encodeURIComponent(outputFormat)}`;
+        const voiceSettings = resolveElevenLabsVoiceSettings(config);
+        const requestBody = {
+          text: spokenText,
+          model_id: selectedModel,
+        };
+
+        if (voiceSettings) {
+          requestBody.voice_settings = voiceSettings;
+        }
+
+        const response = await fetchImpl(requestUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "xi-api-key": apiKey,
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(formatElevenLabsRequestError({
+            status: response.status,
+            errorText,
+          }));
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        audioBuffer = Buffer.from(arrayBuffer);
       }
 
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = Buffer.from(arrayBuffer);
       let storageKey = "";
       let record = null;
 
@@ -389,15 +457,18 @@ function createAudioGenerationService({
           conversationId: context.conversationId || null,
           channelId: context.channelId || null,
           sourceMessageId: context.sourceMessageId || null,
-          prompt: prompt || spokenText,
-          spokenText,
+          prompt: prompt || resolvedSpokenText,
+          spokenText: resolvedSpokenText,
           caption,
-          voiceId,
-          model: selectedModel,
+          voiceId: resolvedVoiceId,
+          model: resolvedModel,
           outputFormat,
           mimeType,
           fileSizeBytes: audioBuffer.length,
           storageKey,
+          provider,
+          providerVoiceId: resolvedVoiceId,
+          providerModelId: resolvedModel,
           status: "completed",
         }, {
           userScope: context.userScope,
@@ -410,8 +481,9 @@ function createAudioGenerationService({
           mimeType,
           fileSizeBytes: audioBuffer.length,
           storageKey,
-          model: selectedModel,
-          voiceId,
+          model: resolvedModel,
+          voiceId: resolvedVoiceId,
+          provider,
           displayName,
           gallerySaved: Boolean(record),
         },
@@ -427,6 +499,7 @@ function createAudioGenerationService({
 
 module.exports = {
   canGenerateAudio,
+  resolveTtsProvider,
   createAudioGenerationService,
   buildAudioDisplayName,
   buildAudioStorageKey,

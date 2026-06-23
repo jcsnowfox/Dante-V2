@@ -32,6 +32,9 @@ const CREATE_GENERATED_AUDIO_TABLE_SQL = `
     is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
     status TEXT NOT NULL,
     error_message TEXT,
+    provider TEXT NOT NULL DEFAULT 'elevenlabs',
+    provider_voice_id TEXT,
+    provider_model_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMPTZ
   );
@@ -66,6 +69,9 @@ const ALTER_GENERATED_AUDIO_TABLE_SQL = [
   "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN NOT NULL DEFAULT FALSE;",
   "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS status TEXT;",
   "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS error_message TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'elevenlabs';",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS provider_voice_id TEXT;",
+  "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS provider_model_id TEXT;",
   "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;",
   "ALTER TABLE generated_audio ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;",
 ];
@@ -83,6 +89,9 @@ const BACKFILL_GENERATED_AUDIO_TABLE_SQL = [
   "UPDATE generated_audio SET mime_type = COALESCE(mime_type, 'audio/mpeg');",
   "UPDATE generated_audio SET storage_key = COALESCE(NULLIF(storage_key, ''), audio_id::text);",
   "UPDATE generated_audio SET status = COALESCE(NULLIF(status, ''), 'completed');",
+  "UPDATE generated_audio SET provider = COALESCE(NULLIF(provider, ''), 'elevenlabs');",
+  "UPDATE generated_audio SET provider_voice_id = COALESCE(provider_voice_id, voice_id);",
+  "UPDATE generated_audio SET provider_model_id = COALESCE(provider_model_id, model);",
   "UPDATE generated_audio SET created_at = COALESCE(created_at, NOW());",
   "ALTER TABLE generated_audio ALTER COLUMN audio_id SET NOT NULL;",
   "ALTER TABLE generated_audio ALTER COLUMN user_scope SET NOT NULL;",
@@ -190,6 +199,9 @@ function normalizeGeneratedAudioRecord(record = {}, defaults = {}) {
     isFavorite: Boolean(coalesceDefined(record.is_favorite, record.isFavorite, defaults.isFavorite)),
     status: normalizeStatus(record.status || defaults.status || "pending"),
     errorMessage: normalizeText(record.errorMessage || record.error_message || defaults.errorMessage, "Error message", { allowEmpty: true }) || null,
+    provider: normalizeText(record.provider || defaults.provider || "elevenlabs", "Provider"),
+    providerVoiceId: normalizeText(record.providerVoiceId || record.provider_voice_id || defaults.providerVoiceId || record.voiceId || record.voice_id || defaults.voiceId, "Provider voice ID", { allowEmpty: true }) || null,
+    providerModelId: normalizeText(record.providerModelId || record.provider_model_id || defaults.providerModelId || record.model || defaults.model, "Provider model ID", { allowEmpty: true }) || null,
     createdAt: normalizeTimestamp(record.createdAt || record.created_at || defaults.createdAt, "created_at"),
     deletedAt: normalizeTimestamp(record.deletedAt || record.deleted_at || defaults.deletedAt, "deleted_at", { allowEmpty: true }),
   };
@@ -223,6 +235,9 @@ function mapGeneratedAudioRow(row) {
     isFavorite: Boolean(row.is_favorite),
     status: row.status,
     errorMessage: row.error_message,
+    provider: row.provider || "elevenlabs",
+    providerVoiceId: row.provider_voice_id || row.voice_id,
+    providerModelId: row.provider_model_id || row.model,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
   };
@@ -315,10 +330,13 @@ function createGeneratedAudioStore({ config, logger }) {
             is_favorite,
             status,
             error_message,
+            provider,
+            provider_voice_id,
+            provider_model_id,
             created_at,
             deleted_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19, $20, $21, $22, $23)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19, $20, $21, $22, $23, $24, $25, $26)
           RETURNING *
         `,
         [
@@ -343,6 +361,9 @@ function createGeneratedAudioStore({ config, logger }) {
           normalized.isFavorite,
           normalized.status,
           normalized.errorMessage,
+          normalized.provider,
+          normalized.providerVoiceId,
+          normalized.providerModelId,
           normalized.createdAt,
           normalized.deletedAt,
         ],
