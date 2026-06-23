@@ -6,10 +6,7 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "node src/index.js",
-    "start": "node src/index.js",
-    "verify:audio-generation": "node scripts/verify-audio-generation.mjs",
-    "verify:fish-audio": "node scripts/verify-fish-audio.mjs",
-    "verify:dashboard-audio-settings": "node scripts/verify-dashboard-audio-settings.mjs"
+    "start": "node src/index.js"
   },
   "dependencies": {
     "discord.js": "^14.13.0",
