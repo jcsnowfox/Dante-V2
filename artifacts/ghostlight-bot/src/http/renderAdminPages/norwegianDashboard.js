@@ -233,19 +233,50 @@ function renderNorwegianDashboard({
     if (pronunciationAttempts.length === 0) {
       return `
         <div class="nw-empty">
-          <p>📢 Pronunciation coaching comes in Phase 4.</p>
-          <p>This tab will show voice-note attempts, grades, and feedback.</p>
+          <p>No pronunciation attempts yet. Use /norwegian pronounce in Discord to practice.</p>
         </div>`;
     }
 
     const html = pronunciationAttempts.slice(0, 20).map((attempt) => `
       <div class="nw-pronunciation-card">
         <div class="nw-card-header">
-          <h3>${esc(attempt.word_or_phrase)}</h3>
-          <span class="nw-badge-status">${renderSourceStatusBadge(attempt.source_status)}</span>
+          <h3>Attempt #${attempt.attempt_number || 1}</h3>
+          <span class="nw-badge-status">${renderGradeBadge(attempt.grade)}</span>
         </div>
         <div class="nw-card-meta">
           <span class="nw-meta-item">📅 ${new Date(attempt.created_at).toLocaleDateString()}</span>
+          <span class="nw-meta-item">${renderSourceStatusBadge(attempt.source_status)}</span>
+        </div>
+        <div class="nw-pronunciation-details">
+          <div class="nw-pronunciation-row">
+            <strong>Target phrase:</strong>
+            <code>${esc(attempt.target_phrase)}</code>
+          </div>
+          <div class="nw-pronunciation-row">
+            <strong>Transcript:</strong>
+            <code>${esc(attempt.transcript_text)}</code>
+          </div>
+          ${attempt.stt_confidence !== null ? `
+            <div class="nw-pronunciation-row">
+              <strong>Confidence:</strong> ${(attempt.stt_confidence * 100).toFixed(0)}%
+            </div>
+          ` : ''}
+          ${attempt.score !== null ? `
+            <div class="nw-pronunciation-row">
+              <strong>Score:</strong> ${attempt.score}%
+            </div>
+          ` : ''}
+          ${attempt.feedback ? `
+            <div class="nw-pronunciation-feedback">
+              <strong>Feedback:</strong>
+              <div class="nw-feedback-text">${esc(attempt.feedback)}</div>
+            </div>
+          ` : ''}
+          ${attempt.correction_focus ? `
+            <div class="nw-pronunciation-row">
+              <strong>Focus:</strong> ${esc(attempt.correction_focus)}
+            </div>
+          ` : ''}
         </div>
       </div>`).join('');
 
@@ -383,6 +414,14 @@ function renderNorwegianDashboard({
   border-radius: 8px;
   padding: 16px;
 }
+.nw-pronunciation-details { font-size: .85rem; }
+.nw-pronunciation-row { margin-bottom: 12px; }
+.nw-pronunciation-row strong { display: block; font-weight: 600; margin-bottom: 4px; }
+.nw-pronunciation-row code { background: var(--gl-code-bg, #fff); padding: 4px 6px; border-radius: 3px; font-family: monospace; word-break: break-word; }
+.nw-pronunciation-feedback { margin-bottom: 12px; }
+.nw-pronunciation-feedback strong { display: block; font-weight: 600; margin-bottom: 4px; }
+.nw-feedback-text { background: var(--gl-card-alt, #fafafa); padding: 8px; border-radius: 4px; border-left: 3px solid var(--gl-accent, #3d5afe); line-height: 1.4; }
+
 .nw-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .nw-card-header h3 { margin: 0; font-size: .95rem; font-weight: 600; }
 .nw-card-header a { color: var(--gl-accent, #3d5afe); text-decoration: none; }

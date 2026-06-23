@@ -282,7 +282,7 @@ async function sendTypingIndicatorSafely({
   }
 }
 
-function createMessageCreateHandler({ config, logger, chatPipeline, companion, conversations, channelModes, generatedImages, generatedAudio, cache, reactionContext, settingsStore = null }) {
+function createMessageCreateHandler({ config, logger, chatPipeline, companion, conversations, channelModes, generatedImages, generatedAudio, cache, reactionContext, settingsStore = null, norwegianLearning = null }) {
   return async (message) => {
     if (message.author.bot) {
       logger.debug?.("[chat] Ignoring Discord message from another bot", {
@@ -357,6 +357,55 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
         respondToMentionsOnly: true,
       });
       return;
+    }
+
+    // Norwegian pronunciation practice: handle audio attachments
+    if (norwegianLearning && message.attachments.size > 0) {
+      const audioAttachments = message.attachments.filter(att =>
+        att.contentType && (
+          att.contentType.startsWith('audio/') ||
+          att.contentType.includes('wav') ||
+          att.contentType.includes('mpeg') ||
+          att.contentType.includes('webm') ||
+          att.contentType.includes('ogg') ||
+          att.contentType.includes('m4a') ||
+          att.contentType.includes('mp4')
+        )
+      );
+
+      if (audioAttachments.size > 0) {
+        try {
+          const userScope = message.client.appContext?.config?.memory?.userScope || 'user';
+          // Check if user has active pronunciation session before processing audio
+          const session = await norwegianLearning.getPronunciationSession(userScope);
+
+          if (!session || !session.active) {
+            await message.reply({
+              content: '❌ No active pronunciation session. Start with `/norwegian pronounce [phrase]`',
+              flags: 'Ephemeral',
+            });
+            return;
+          }
+
+          const { processPronunciationAudio } = require('../../bot/handlers/norwegianAudioHandler');
+          const attachment = audioAttachments.first();
+
+          await processPronunciationAudio({
+            message,
+            attachment,
+            config,
+            logger,
+            store: norwegianLearning,
+            appContext: message.client.appContext,
+          });
+
+          return;
+        } catch (error) {
+          logger.error('[norwegian-pronunciation] Error processing audio', {
+            error: error.message,
+          });
+        }
+      }
     }
 
     // !adult command — controls Adult Private Mode for the current channel.

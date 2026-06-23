@@ -108,7 +108,16 @@ module.exports = {
     .addSubcommand((sub) =>
       sub
         .setName("review")
-        .setDescription("Review your saved Norwegian learning items.")),
+        .setDescription("Review your saved Norwegian learning items."))
+    .addSubcommand((sub) =>
+      sub
+        .setName("pronounce")
+        .setDescription("Practice pronunciation with a voice note.")
+        .addStringOption((opt) =>
+          opt
+            .setName("phrase")
+            .setDescription("Optional phrase to practice (or send audio note next)")
+            .setRequired(false))),
 
   async execute(interaction) {
     const { norwegianLearning, logger } = interaction.client.appContext;
@@ -166,6 +175,10 @@ module.exports = {
 
       if (subcommand === "review") {
         return await handleNorwegianReview(interaction, norwegianLearning, userScope, logger);
+      }
+
+      if (subcommand === "pronounce") {
+        return await handleNorwegianPronounce(interaction, norwegianLearning, userScope, logger);
       }
 
       await interaction.editReply("That command is not implemented yet.");
@@ -785,4 +798,58 @@ async function handleNorwegianReview(interaction, store, userScope, logger) {
   });
 
   await interaction.editReply(response);
+}
+
+async function handleNorwegianPronounce(interaction, store, userScope, logger) {
+  if (!store.available) {
+    await interaction.editReply(
+      "Pronunciation practice is not available right now. Database not configured."
+    );
+    return;
+  }
+
+  const phraseOption = interaction.options.getString("phrase");
+
+  if (!phraseOption) {
+    await interaction.editReply(
+      "**Pronunciation Practice** 🎤\n\n" +
+      "To get started, use: `/norwegian pronounce [phrase]`\n\n" +
+      "Example: `/norwegian pronounce Jeg vil lære norsk`\n\n" +
+      "Then send me a voice note with your pronunciation, and I'll give you feedback!"
+    );
+    return;
+  }
+
+  const phrase = String(phraseOption || "").trim().slice(0, 500);
+
+  if (phrase.length < 2) {
+    await interaction.editReply("Please provide a phrase to practice (at least 2 characters).");
+    return;
+  }
+
+  try {
+    await store.createPronunciationSession(userScope, phrase);
+
+    const response = truncate(
+      `**Pronunciation Practice** 🎤\n\n` +
+      `**Target phrase:**\n${phrase}\n\n` +
+      `Now send me a voice note saying this phrase. I'll listen and give you feedback!`
+    );
+
+    logger.info("[norwegian-pronunciation] session created", {
+      userScope,
+      phraseLength: phrase.length,
+    });
+
+    await interaction.editReply(response);
+  } catch (error) {
+    logger.error("[norwegian-pronunciation] Failed to create session", {
+      userScope,
+      error: error.message,
+    });
+
+    await interaction.editReply(
+      "Failed to start pronunciation practice. Try again later."
+    );
+  }
 }

@@ -465,6 +465,7 @@ async function startApp() {
     cache,
     reactionContext,
     settingsStore,
+    norwegianLearning,
   });
 
   if (!config.discord.token) {

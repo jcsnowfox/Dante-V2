@@ -32,10 +32,30 @@ const CREATE_TABLES_SQL = `
   CREATE TABLE IF NOT EXISTS norwegian_pronunciation_attempts (
     id BIGSERIAL PRIMARY KEY,
     user_scope TEXT NOT NULL,
-    word_or_phrase TEXT NOT NULL DEFAULT '',
+    target_phrase TEXT NOT NULL DEFAULT '',
+    -- transcript_text stored for comparison only; never logged to error streams
+    transcript_text TEXT NOT NULL DEFAULT '',
+    stt_confidence NUMERIC(3,2),
+    score INTEGER,
+    grade TEXT,
+    feedback TEXT NOT NULL DEFAULT '',
+    correction_focus TEXT NOT NULL DEFAULT '',
+    attempt_number INTEGER NOT NULL DEFAULT 1,
     source_status TEXT NOT NULL,
-    notes TEXT NOT NULL DEFAULT '',
+    tts_example_provider TEXT,
+    source_channel TEXT,
+    source_message_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE TABLE IF NOT EXISTS norwegian_pronunciation_sessions (
+    user_scope TEXT PRIMARY KEY,
+    target_phrase TEXT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    last_attempt_at TIMESTAMPTZ,
+    active BOOLEAN NOT NULL DEFAULT true,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '30 minutes')
   );
 
   CREATE TABLE IF NOT EXISTS norwegian_vocabulary (
@@ -68,6 +88,41 @@ const CREATE_TABLES_SQL = `
     due_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+`;
+
+const MIGRATION_SQL = `
+  ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
+  ADD COLUMN IF NOT EXISTS target_phrase TEXT NOT NULL DEFAULT '';
+
+  ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
+  ADD COLUMN IF NOT EXISTS transcript_text TEXT NOT NULL DEFAULT '';
+
+  ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
+  ADD COLUMN IF NOT EXISTS stt_confidence NUMERIC(3,2);
+
+  ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
+  ADD COLUMN IF NOT EXISTS score INTEGER;
+
+  ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
+  ADD COLUMN IF NOT EXISTS grade TEXT;
+
+  ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
+  ADD COLUMN IF NOT EXISTS feedback TEXT NOT NULL DEFAULT '';
+
+  ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
+  ADD COLUMN IF NOT EXISTS correction_focus TEXT NOT NULL DEFAULT '';
+
+  ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
+  ADD COLUMN IF NOT EXISTS attempt_number INTEGER NOT NULL DEFAULT 1;
+
+  ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
+  ADD COLUMN IF NOT EXISTS tts_example_provider TEXT;
+
+  ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
+  ADD COLUMN IF NOT EXISTS source_channel TEXT;
+
+  ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
+  ADD COLUMN IF NOT EXISTS source_message_id TEXT;
 `;
 
 function normalizeUserScope(value) {
@@ -112,6 +167,7 @@ function createNorwegianLearningStore({ config, logger }) {
 
     async init() {
       await pool.query(CREATE_TABLES_SQL);
+      await pool.query(MIGRATION_SQL);
       logger.info('[norwegian] storage initialised');
     },
 
@@ -199,15 +255,29 @@ function createNorwegianLearningStore({ config, logger }) {
 
       const { rows } = await pool.query(
         `
-          INSERT INTO norwegian_pronunciation_attempts (user_scope, word_or_phrase, source_status, notes)
-          VALUES ($1, $2, $3, $4)
+          INSERT INTO norwegian_pronunciation_attempts (
+            user_scope, target_phrase, transcript_text, stt_confidence, score, grade,
+            feedback, correction_focus, attempt_number, source_status, tts_example_provider,
+            source_channel, source_message_id, word_or_phrase
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
           RETURNING id
         `,
         [
           scope,
-          String(event.wordOrPhrase || '').slice(0, 500),
+          String(event.targetPhrase || event.wordOrPhrase || '').slice(0, 500),
+          String(event.transcriptText || '').slice(0, 2000),
+          event.sttConfidence !== undefined && event.sttConfidence !== null ? Number(event.sttConfidence) : null,
+          event.score !== undefined && event.score !== null ? Number(event.score) : null,
+          String(event.grade || '').slice(0, 20),
+          String(event.feedback || '').slice(0, 2000),
+          String(event.correctionFocus || '').slice(0, 500),
+          event.attemptNumber !== undefined && event.attemptNumber !== null ? Number(event.attemptNumber) : 1,
           status,
-          String(event.notes || '').slice(0, 1000),
+          String(event.ttsExampleProvider || '').slice(0, 50),
+          String(event.sourceChannel || '').slice(0, 50),
+          String(event.sourceMessageId || '').slice(0, 50),
+          String(event.wordOrPhrase || event.targetPhrase || '').slice(0, 500),
         ],
       );
 
@@ -374,6 +444,59 @@ function createNorwegianLearningStore({ config, logger }) {
         [itemId, scope, updates.dueAt || null, updates.content || null],
       );
       return rows[0] || null;
+    },
+
+    async createPronunciationSession(userScope, targetPhrase) {
+      const scope = normalizeUserScope(userScope);
+      const phrase = String(targetPhrase || '').trim();
+      if (!phrase) throw new Error('[norwegian] Target phrase is required');
+
+      await pool.query(
+        `
+          INSERT INTO norwegian_pronunciation_sessions (user_scope, target_phrase, active, expires_at)
+          VALUES ($1, $2, true, NOW() + INTERVAL '30 minutes')
+          ON CONFLICT (user_scope)
+          DO UPDATE SET target_phrase = $2, started_at = NOW(), attempt_count = 0, active = true, expires_at = NOW() + INTERVAL '30 minutes'
+        `,
+        [scope, phrase.slice(0, 500)],
+      );
+
+      logger.info('[norwegian-pronunciation] session started', { userScope: scope, phraseLength: phrase.length });
+      return { userScope: scope, targetPhrase: phrase };
+    },
+
+    async getPronunciationSession(userScope) {
+      const scope = normalizeUserScope(userScope);
+      const { rows } = await pool.query(
+        `SELECT * FROM norwegian_pronunciation_sessions WHERE user_scope = $1 AND active = true AND expires_at > NOW()`,
+        [scope],
+      );
+      return rows[0] || null;
+    },
+
+    async updatePronunciationSession(userScope, updates) {
+      const scope = normalizeUserScope(userScope);
+      const { rows } = await pool.query(
+        `
+          UPDATE norwegian_pronunciation_sessions
+          SET attempt_count = COALESCE($2, attempt_count + 1),
+              last_attempt_at = NOW(),
+              active = COALESCE($3, active)
+          WHERE user_scope = $1
+          RETURNING *
+        `,
+        [scope, updates.attemptCount !== undefined ? updates.attemptCount : null, updates.active !== undefined ? updates.active : null],
+      );
+      return rows[0] || null;
+    },
+
+    async closePronunciationSession(userScope) {
+      const scope = normalizeUserScope(userScope);
+      await pool.query(
+        `UPDATE norwegian_pronunciation_sessions SET active = false WHERE user_scope = $1`,
+        [scope],
+      );
+      logger.info('[norwegian-pronunciation] session ended', { userScope: scope });
     },
 
     async close() {

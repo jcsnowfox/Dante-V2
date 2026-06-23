@@ -3,7 +3,7 @@ const { handleReady } = require("./events/ready");
 const { createInteractionHandler } = require("./events/interactionCreate");
 const { createMessageCreateHandler } = require("./events/messageCreate");
 
-function registerEventHandlers({ client, config, logger, commands, chatPipeline, companion, conversations, channelModes, generatedImages, generatedAudio, cache, reactionContext, settingsStore }) {
+function registerEventHandlers({ client, config, logger, commands, chatPipeline, companion, conversations, channelModes, generatedImages, generatedAudio, cache, reactionContext, settingsStore, norwegianLearning }) {
   client.commands = new Collection();
 
   for (const command of commands) {
@@ -26,6 +26,7 @@ function registerEventHandlers({ client, config, logger, commands, chatPipeline,
     cache,
     reactionContext,
     settingsStore,
+    norwegianLearning,
   }));
 }
 
