@@ -3,7 +3,31 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { normalizeGiphyItem, isValidDirectGifUrl, normalizeGifResult } = require("../gifUrlNormalizer");
+const {
+  DEFAULT_GIF_SEND_MODE,
+  getGifSendMode,
+  normalizeGiphyItem,
+  isValidDirectGifUrl,
+  normalizeGifResult,
+} = require("../gifUrlNormalizer");
+
+describe("getGifSendMode", () => {
+  it("defaults to Discord embed-image delivery so GIFs render inline", () => {
+    assert.equal(DEFAULT_GIF_SEND_MODE, "embed_image");
+    assert.equal(getGifSendMode({}), "embed_image");
+    assert.equal(getGifSendMode({ gifs: {} }), "embed_image");
+  });
+
+  it("keeps supported explicit modes", () => {
+    assert.equal(getGifSendMode({ gifs: { sendMode: "direct_url" } }), "direct_url");
+    assert.equal(getGifSendMode({ gifs: { sendMode: "disabled" } }), "disabled");
+    assert.equal(getGifSendMode({ gifs: { sendMode: "EMBED_IMAGE" } }), "embed_image");
+  });
+
+  it("falls back to embed-image delivery for unknown modes", () => {
+    assert.equal(getGifSendMode({ gifs: { sendMode: "broken" } }), "embed_image");
+  });
+});
 
 describe("isValidDirectGifUrl", () => {
   it("accepts media.giphy.com direct URLs", () => {
