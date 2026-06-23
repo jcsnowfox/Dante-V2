@@ -401,6 +401,35 @@ function mapSpotifyPlaylist(playlist = {}) {
   };
 }
 
+
+function isSpotifyPlaylistImportForbidden(error) {
+  return Number(error?.status || 0) === 403
+    && String(error?.requestLabel || "").includes("/playlists/");
+}
+
+function buildSpotifyPlaylistImportForbiddenError(playlistId = "") {
+  const suffix = playlistId ? ` (${playlistId})` : "";
+  return new Error(`Spotify will not allow importing that playlist${suffix}. Spotify only exposes playlist items through the API when the connected account owns the playlist or is a collaborator on it. Followed/public playlists can still show in Spotify, but they cannot be imported unless you copy them to your account or make the connected account a collaborator.`);
+}
+
+function markSpotifyPlaylistImportability(playlist, connection = {}) {
+  if (!playlist) {
+    return null;
+  }
+
+  const ownerId = String(playlist.ownerId || "").trim();
+  const spotifyUserId = String(connection.spotifyUserId || connection.spotify_user_id || "").trim();
+  const importable = Boolean((ownerId && spotifyUserId && ownerId === spotifyUserId) || playlist.collaborative);
+
+  return {
+    ...playlist,
+    importable,
+    importUnavailableReason: importable
+      ? ""
+      : "Spotify only allows importing playlists owned by the connected account or playlists where it is a collaborator.",
+  };
+}
+
 function mapSpotifyPlaylistTrackItem(item = {}) {
   return mapSpotifyTrack(item.item || item.track || {}, {
     likedAt: item.added_at || null,
@@ -562,12 +591,20 @@ async function fetchSpotifyPlaylistTracks({
       offset: String(offset),
       additional_types: "track",
     });
-    const response = await spotifyApiRequest({
-      config,
-      accessToken,
-      path: `/playlists/${encodeURIComponent(normalizedPlaylistId)}/items?${params.toString()}`,
-      fetchImpl,
-    });
+    let response;
+    try {
+      response = await spotifyApiRequest({
+        config,
+        accessToken,
+        path: `/playlists/${encodeURIComponent(normalizedPlaylistId)}/items?${params.toString()}`,
+        fetchImpl,
+      });
+    } catch (error) {
+      if (isSpotifyPlaylistImportForbidden(error)) {
+        throw buildSpotifyPlaylistImportForbiddenError(normalizedPlaylistId);
+      }
+      throw error;
+    }
     const items = Array.isArray(response.items) ? response.items : [];
 
     for (const item of items) {
@@ -945,18 +982,20 @@ function createSpotifyService({
     },
 
     async listPlaylists({ userScope, limit = DEFAULT_PLAYLIST_LIST_LIMIT } = {}) {
-      const { accessToken, scope } = await this.getAccessToken({ userScope });
+      const { accessToken, scope, connection } = await this.getAccessToken({ userScope });
 
       if (!hasSpotifyScope(scope, SPOTIFY_PLAYLIST_READ_PRIVATE_SCOPE)) {
         throw new Error("Spotify playlist import requires reconnecting Spotify with playlist read scope.");
       }
 
-      return fetchCurrentUserSpotifyPlaylists({
+      const playlists = await fetchCurrentUserSpotifyPlaylists({
         config,
         accessToken,
         limit,
         fetchImpl,
       });
+
+      return playlists.map((playlist) => markSpotifyPlaylistImportability(playlist, connection));
     },
 
     async fetchPlaylistTracks({ userScope, playlistId, limit = DEFAULT_IMPORT_LIMIT } = {}) {
@@ -1197,5 +1236,6 @@ module.exports = {
   mapSpotifyTrack,
   mapSpotifyPlaylist,
   mapSpotifyPlaylistTrackItem,
+  markSpotifyPlaylistImportability,
   createSpotifyService,
 };
