@@ -121,6 +121,44 @@ const MIGRATION_SQL = `
   ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
   ADD COLUMN IF NOT EXISTS source_channel TEXT;
 
+  -- Phase 5: Norwegian Media Curator and Listening System
+  ALTER TABLE IF EXISTS norwegian_media_links
+  ADD COLUMN IF NOT EXISTS url TEXT;
+
+  ALTER TABLE IF EXISTS norwegian_media_links
+  ADD COLUMN IF NOT EXISTS source_name TEXT NOT NULL DEFAULT '';
+
+  ALTER TABLE IF EXISTS norwegian_media_links
+  ADD COLUMN IF NOT EXISTS topic TEXT NOT NULL DEFAULT '';
+
+  ALTER TABLE IF EXISTS norwegian_media_links
+  ADD COLUMN IF NOT EXISTS level TEXT NOT NULL DEFAULT 'unknown';
+
+  ALTER TABLE IF EXISTS norwegian_media_links
+  ADD COLUMN IF NOT EXISTS reason_recommended TEXT NOT NULL DEFAULT '';
+
+  ALTER TABLE IF EXISTS norwegian_media_links
+  ADD COLUMN IF NOT EXISTS watch_status TEXT NOT NULL DEFAULT 'not_watched';
+
+  ALTER TABLE IF EXISTS norwegian_media_links
+  ADD COLUMN IF NOT EXISTS vocabulary_json TEXT NOT NULL DEFAULT '[]';
+
+  ALTER TABLE IF EXISTS norwegian_media_links
+  ADD COLUMN IF NOT EXISTS availability_note TEXT NOT NULL DEFAULT '';
+
+  ALTER TABLE IF EXISTS norwegian_media_links
+  ADD COLUMN IF NOT EXISTS source_message_id TEXT;
+
+  ALTER TABLE IF EXISTS norwegian_media_links
+  ADD COLUMN IF NOT EXISTS source_channel TEXT;
+
+  ALTER TABLE IF EXISTS norwegian_media_links
+  ADD COLUMN IF NOT EXISTS last_reviewed_at TIMESTAMPTZ;
+
+  ALTER TABLE IF EXISTS norwegian_media_links
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+`;
+
   ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
   ADD COLUMN IF NOT EXISTS source_message_id TEXT;
 `;
@@ -137,6 +175,17 @@ function requireSourceStatus(event, fieldName = 'sourceStatus') {
   return validateSourceStatus(status);
 }
 
+function tryParseJson(jsonString, defaultValue = null) {
+  try {
+    if (typeof jsonString === 'string' && jsonString.trim()) {
+      return JSON.parse(jsonString);
+    }
+    return defaultValue || [];
+  } catch (error) {
+    return defaultValue || [];
+  }
+}
+
 function createNoopNorwegianLearningStore({ logger }) {
   return {
     available: false,
@@ -150,6 +199,9 @@ function createNoopNorwegianLearningStore({ logger }) {
     async savePronunciationAttempt() { throw new Error('[norwegian] Store disabled — no DATABASE_URL.'); },
     async saveVocabularyItem() { throw new Error('[norwegian] Store disabled — no DATABASE_URL.'); },
     async saveMediaLink() { throw new Error('[norwegian] Store disabled — no DATABASE_URL.'); },
+    async updateMediaLinkWatchStatus() { throw new Error('[norwegian] Store disabled — no DATABASE_URL.'); },
+    async listMediaLinks() { return []; },
+    async listNorwegianMediaLinks() { return []; },
     async saveReviewItem() { throw new Error('[norwegian] Store disabled — no DATABASE_URL.'); },
     async getOverview() { return null; },
   };
@@ -310,23 +362,88 @@ function createNorwegianLearningStore({ config, logger }) {
       const status = requireSourceStatus(event);
       const scope = normalizeUserScope(event.userScope);
 
+      // Support both old format (sourceId) and new format (url)
+      const url = String(event.url || event.sourceId || '').slice(0, 500).trim();
+      if (!url) {
+        throw new Error('[norwegian-media] URL is required to save media link');
+      }
+
       const { rows } = await pool.query(
         `
-          INSERT INTO norwegian_media_links (user_scope, title, media_type, source_id, source_status, notes)
-          VALUES ($1, $2, $3, $4, $5, $6)
+          INSERT INTO norwegian_media_links (
+            user_scope, title, url, media_type, source_name, topic, level,
+            reason_recommended, vocabulary_json, source_status, availability_note,
+            source_message_id, source_channel, watch_status
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
           RETURNING id
         `,
         [
           scope,
           String(event.title || '').slice(0, 500),
-          String(event.mediaType || '').slice(0, 50),
-          String(event.sourceId || '').slice(0, 100),
+          url,
+          String(event.mediaType || 'other').slice(0, 50),
+          String(event.sourceName || '').slice(0, 200),
+          String(event.topic || '').slice(0, 200),
+          String(event.level || 'unknown').slice(0, 50),
+          String(event.reasonRecommended || '').slice(0, 1000),
+          JSON.stringify(Array.isArray(event.vocabulary) ? event.vocabulary : []).slice(0, 1000),
           status,
-          String(event.notes || '').slice(0, 1000),
+          String(event.availabilityNote || '').slice(0, 500),
+          String(event.sourceMessageId || '').slice(0, 100),
+          String(event.sourceChannel || '').slice(0, 100),
+          String(event.watchStatus || 'not_watched').slice(0, 50),
         ],
       );
 
+      logger.info('[norwegian-media] link saved', {
+        userScope: scope,
+        mediaType: event.mediaType,
+        sourceStatus: status,
+      });
+
       return { id: rows[0].id };
+    },
+
+    async updateMediaLinkWatchStatus(event) {
+      const scope = normalizeUserScope(event.userScope);
+      const linkId = parseInt(event.id, 10);
+      if (!linkId || isNaN(linkId)) {
+        throw new Error('[norwegian-media] Valid link ID required');
+      }
+
+      const validStatuses = ['not_watched', 'watched', 'not_read', 'read', 'saved_for_later'];
+      const status = String(event.watchStatus || 'not_watched').toLowerCase();
+      if (!validStatuses.includes(status)) {
+        throw new Error(`Invalid watch status: ${status}`);
+      }
+
+      await pool.query(
+        `UPDATE norwegian_media_links SET watch_status = $1, updated_at = NOW() WHERE id = $2 AND user_scope = $3`,
+        [status, linkId, scope],
+      );
+
+      logger.info('[norwegian-media] watch status updated', { id: linkId, status });
+    },
+
+    async listMediaLinks(userScope, { limit = 10, offset = 0 } = {}) {
+      const scope = normalizeUserScope(userScope);
+      const { rows } = await pool.query(
+        `
+          SELECT id, title, url, media_type, source_name, topic, level,
+                 reason_recommended, vocabulary_json, source_status, availability_note,
+                 watch_status, created_at
+          FROM norwegian_media_links
+          WHERE user_scope = $1
+          ORDER BY created_at DESC
+          LIMIT $2 OFFSET $3
+        `,
+        [scope, limit, offset],
+      );
+      return rows.map((row) => ({
+        ...row,
+        vocabulary: tryParseJson(row.vocabulary_json),
+      }));
     },
 
     async saveReviewItem(event) {
@@ -413,10 +530,21 @@ function createNorwegianLearningStore({ config, logger }) {
     async listNorwegianMediaLinks(userScope, limit = 50) {
       const scope = normalizeUserScope(userScope);
       const { rows } = await pool.query(
-        `SELECT id, title, media_type, source_id, source_status, notes, created_at FROM norwegian_media_links WHERE user_scope = $1 ORDER BY created_at DESC LIMIT $2`,
+        `
+          SELECT id, title, url, media_type, source_name, topic, level,
+                 reason_recommended, vocabulary_json, source_status, availability_note,
+                 watch_status, created_at, source_message_id, source_channel
+          FROM norwegian_media_links
+          WHERE user_scope = $1
+          ORDER BY created_at DESC
+          LIMIT $2
+        `,
         [scope, limit],
       );
-      return rows;
+      return rows.map((row) => ({
+        ...row,
+        vocabulary: tryParseJson(row.vocabulary_json),
+      }));
     },
 
     async listNorwegianReviewItems(userScope, limit = 50) {
