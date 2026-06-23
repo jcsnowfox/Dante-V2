@@ -335,6 +335,22 @@ function createChatPipeline({
         && Boolean(adultMode?.channelId)
         && message.channelId === adultMode.channelId;
 
+      const _adultScopeReason = inDevMode
+        ? "dev_mode"
+        : !adultMode?.enabled
+          ? "disabled"
+          : !adultMode?.channelId
+            ? "no_channel_configured"
+            : message.channelId !== adultMode.channelId
+              ? "channel_mismatch"
+              : "active";
+      logger.debug?.("[adult-mode] scope check", {
+        channel: message.channelId,
+        configured: adultMode?.channelId || null,
+        active: adultModeActive,
+        reason: _adultScopeReason,
+      });
+
       let effectiveMode = selectedMode;
       let adultSystemPromptPrefix = null;
 

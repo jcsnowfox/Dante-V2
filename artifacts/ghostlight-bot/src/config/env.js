@@ -91,7 +91,40 @@ function buildCapabilityConfig({
   };
 }
 
+function logDbEnvDiagnostic() {
+  const rawUrl = process.env.DATABASE_URL || "";
+  if (!rawUrl) {
+    console.warn("[db:env] DATABASE_URL is not set — database persistence is disabled");
+    return;
+  }
+
+  try {
+    const url = new URL(rawUrl);
+    const sslMode = process.env.PGSSLMODE || url.searchParams.get("sslmode") || "default";
+    const passwordLength = url.password ? url.password.length : 0;
+    console.info(
+      `[db:env] database url detected host=${url.hostname} port=${url.port || "5432"} user=${url.username} database=${url.pathname.replace(/^\//, "")} passwordLength=${passwordLength} sslMode=${sslMode}`,
+    );
+  } catch {
+    console.warn("[db:env] DATABASE_URL is set but could not be parsed as a URL");
+  }
+
+  // Log presence of related DB env vars (values never logged — only presence)
+  const dbEnvVars = [
+    "DATABASE_URL", "PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE",
+    "PGSSLMODE", "PGSSLCERT", "PGSSLKEY", "PGSSLROOTCERT",
+    "DATABASE_PRIVATE_URL", "DATABASE_PUBLIC_URL",
+  ];
+  const present = dbEnvVars.filter((v) => Boolean(process.env[v]));
+  const absent = dbEnvVars.filter((v) => !process.env[v]);
+  console.info("[db:env] env vars present:", present.join(", ") || "(none)");
+  if (absent.length) {
+    console.info("[db:env] env vars absent:", absent.join(", "));
+  }
+}
+
 function loadConfig() {
+  logDbEnvDiagnostic();
   const llmProvider = readProvider(process.env.LLM_PROVIDER, "openrouter");
   const llmChatModel = process.env.CHAT_LLM_MODEL || process.env.LLM_CHAT_MODEL || process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || "openai/gpt-5.4";
   const llmSummaryModel = process.env.SUMMARY_LLM_MODEL || process.env.LLM_SUMMARY_MODEL || process.env.OPENAI_SUMMARY_MODEL || "openai/gpt-5.4-mini";
@@ -315,11 +348,11 @@ function loadConfig() {
       apiKey: process.env.GIPHY_API_KEY || "",
     },
     bucket: {
-      name: String(process.env.BUCKET || "").trim(),
-      accessKeyId: String(process.env.ACCESS_KEY_ID || "").trim(),
-      secretAccessKey: String(process.env.SECRET_ACCESS_KEY || "").trim(),
-      endpoint: String(process.env.ENDPOINT || "").trim(),
-      region: String(process.env.REGION || "auto").trim() || "auto",
+      name: String(process.env.BUCKET || process.env.BUCKET_NAME || process.env.TIGRIS_BUCKET_NAME || process.env.AWS_BUCKET || "").trim(),
+      accessKeyId: String(process.env.ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || "").trim(),
+      secretAccessKey: String(process.env.SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || "").trim(),
+      endpoint: String(process.env.ENDPOINT || process.env.AWS_ENDPOINT_URL_S3 || "").trim(),
+      region: String(process.env.REGION || process.env.AWS_REGION || "auto").trim() || "auto",
       // Most providers (Tigris/storageapi.dev, AWS, R2) use virtual-hosted-style
       // URLs. Set BUCKET_FORCE_PATH_STYLE=true only for path-style-only providers.
       forcePathStyle: String(process.env.BUCKET_FORCE_PATH_STYLE || "").trim().toLowerCase() === "true",
