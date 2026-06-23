@@ -785,21 +785,30 @@ function createQdrantMemoryProvider({ config, logger, memoryStore = null }) {
         }),
       }));
       const settledLayerResults = await Promise.allSettled(layerSearches.map((item) => item.search));
+      const failedLayers = [];
       const layerResults = settledLayerResults.flatMap((result, index) => {
         if (result.status === "fulfilled") {
           return [result.value];
         }
 
         const failedLayer = layerSearches[index];
-        logger.warn("[memory] Qdrant memory layer failed; continuing with remaining layers", {
+        failedLayers.push({
           lane: failedLayer?.lane || "",
           layer: failedLayer?.layer || "",
           error: result.reason?.message || String(result.reason),
-          userScope: config.memory.userScope,
         });
 
         return [];
       });
+
+      if (failedLayers.length) {
+        logger.warn("[memory] Qdrant memory retrieval failed for one or more layers; continuing without vector memory results", {
+          failedLayerCount: failedLayers.length,
+          failedLayers: failedLayers.map((item) => `${item.lane}/${item.layer}`),
+          error: failedLayers[0]?.error || "",
+          userScope: config.memory.userScope,
+        });
+      }
 
       const rankedHits = mergeRankedHits(layerResults);
       const filteredHits = filterHitsByRelativeScoreWindow(rankedHits);

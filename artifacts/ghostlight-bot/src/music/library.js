@@ -1154,16 +1154,31 @@ function createMusicLibraryService({
         || afterMusicBrainzStatus.pendingTrackCount === 0
         || !canUseMusicBrainz
       );
-    const syncResult = shouldSyncDirty
-      ? await syncDirtyMusicEmbeddings({ userScope, limit: MUSIC_DIRTY_EMBEDDING_BATCH_SIZE })
-      : { syncedCount: 0, skipped: !canSyncMusic(config) };
+    let syncResult = { syncedCount: 0, skipped: !canSyncMusic(config) };
+    if (shouldSyncDirty) {
+      try {
+        syncResult = await syncDirtyMusicEmbeddings({ userScope, limit: MUSIC_DIRTY_EMBEDDING_BATCH_SIZE });
+      } catch (error) {
+        syncResult = {
+          syncedCount: 0,
+          skipped: true,
+          failed: true,
+          error: error?.message || String(error),
+        };
+        logger?.warn?.("[music] Dirty music embedding sync failed; continuing enrichment worker", {
+          userScope,
+          dirtyTrackCount: afterMusicBrainzStatus.dirtyTrackCount || 0,
+          error: syncResult.error,
+        });
+      }
+    }
 
     if (syncResult.syncedCount) {
       afterMusicBrainzStatus = await getMusicEnrichmentWorkStatus({ userScope });
     }
 
     const hasMusicBrainzWork = canUseMusicBrainz && afterMusicBrainzStatus.pendingTrackCount > 0;
-    const hasDirtySyncWork = canSyncMusic(config) && afterMusicBrainzStatus.dirtyTrackCount > 0;
+    const hasDirtySyncWork = canSyncMusic(config) && afterMusicBrainzStatus.dirtyTrackCount > 0 && !syncResult.failed;
     const retryDelay = musicBrainzResult.rateLimited
       ? Math.max(MUSICBRAINZ_ENRICHMENT_DELAY_MS, Number(musicBrainzResult.retryAfterSeconds || 0) * 1000)
       : null;

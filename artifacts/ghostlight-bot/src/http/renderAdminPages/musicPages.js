@@ -68,11 +68,16 @@ function renderMusicToolsPage({
   const message = getMessage && url ? getMessage(url) : "";
   const error = getError && url ? getError(url) : "";
   const playlistOptions = Array.isArray(playlists)
-    ? playlists.map((playlist) => [
-      `<option value="playlist:${escapeHtml(playlist.spotifyPlaylistId)}">`,
-      escapeHtml(`${playlist.name} (${playlist.trackCount || 0} tracks${playlist.ownerDisplayName ? `, ${playlist.ownerDisplayName}` : ""})`),
-      "</option>",
-    ].join(""))
+    ? playlists.map((playlist) => {
+      const importable = playlist.importable !== false;
+      const ownerText = playlist.ownerDisplayName ? `, ${playlist.ownerDisplayName}` : "";
+      const unavailableText = importable ? "" : " — cannot import unless owned/collaborative";
+      return [
+        `<option value="playlist:${escapeHtml(playlist.spotifyPlaylistId)}"${importable ? "" : " disabled"}>`,
+        escapeHtml(`${playlist.name} (${playlist.trackCount || 0} tracks${ownerText})${unavailableText}`),
+        "</option>",
+      ].join("");
+    })
     : [];
   const importSourceOptions = [
     "<option value=\"\">Select a playlist</option>",
