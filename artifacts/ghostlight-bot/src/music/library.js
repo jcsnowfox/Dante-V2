@@ -455,8 +455,47 @@ function buildMusicPlaylistSearchFilter({ userScope, source = "" } = {}) {
   return { must };
 }
 
+function musicEmbeddingsEnabled(config = {}) {
+  const raw = config?.music?.embeddingsEnabled ?? process.env.MUSIC_EMBEDDINGS_ENABLED;
+  return String(raw ?? "true").trim().toLowerCase() !== "false";
+}
+
 function canSyncMusic(config = {}) {
-  return Boolean(config?.qdrant?.url && config?.qdrant?.musicCollection && hasLlmApiKey(config, "embedding"));
+  return Boolean(musicEmbeddingsEnabled(config) && config?.qdrant?.url && config?.qdrant?.musicCollection && hasLlmApiKey(config, "embedding"));
+}
+
+function createSpotifyImportError({ playlistId, stage, status = "", reason = "playlist_import_failed", cause } = {}) {
+  const error = new Error(formatSpotifyImportDashboardError({ stage, status, reason }));
+  error.name = "SpotifyPlaylistImportError";
+  error.playlistId = playlistId;
+  error.stage = stage;
+  error.status = status;
+  error.safeReason = sanitizeSpotifyImportReason(reason);
+  if (cause) error.cause = cause;
+  return error;
+}
+
+function sanitizeSpotifyImportReason(reason = "") {
+  return String(reason || "")
+    .replace(/constraint [\"'`]?[^\s\"'`]+[\"'`]?/gi, "database constraint")
+    .replace(/music_[a-z0-9_]+(?:_[a-z0-9_]+)*/gi, "music table")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [redacted]")
+    .slice(0, 240)
+    .trim() || "playlist_import_failed";
+}
+
+function getSpotifyImportStatus(error) {
+  return Number(error?.status || error?.response?.status || 0) || "";
+}
+
+function formatSpotifyImportDashboardError({ stage = "dashboard_response", status = "", reason = "" } = {}) {
+  const numericStatus = Number(status || 0);
+  if (numericStatus === 403) return "Spotify rejected this playlist with 403. Missing scope or not importable.";
+  if (numericStatus === 429) return "Spotify rate limited the request. Try again later.";
+  if (numericStatus === 401) return "Spotify reconnect required before importing this playlist.";
+  if (stage === "track_upsert" || stage === "playlist_track_upsert") return "Playlist import failed during track save. Check safe logs.";
+  const safeReason = sanitizeSpotifyImportReason(reason);
+  return `Spotify playlist import failed during ${stage}${numericStatus ? ` with ${numericStatus}` : ""}: ${safeReason}.`;
 }
 
 function canDeleteMusicPoints(config = {}) {
@@ -594,6 +633,7 @@ async function syncMusicTracksToQdrant({ config, musicStore, tracks = [], deps =
     const vectors = await embedTextsFn({
       config,
       inputs: pointInputs.map(buildMusicEmbeddingText),
+      logger: deps.logger,
     });
 
     if (!collectionReady) {
@@ -644,6 +684,7 @@ async function syncMusicPlaylistsToQdrant({ config, playlists = [], deps = {} } 
     const vectors = await embedTextsFn({
       config,
       inputs: batch.map((playlist) => buildMusicPlaylistEmbeddingText({ playlist })),
+      logger: deps.logger,
     });
 
     if (!collectionReady) {
@@ -1190,6 +1231,15 @@ function createMusicLibraryService({
   }
 
   async function syncDirtyMusicEmbeddings({ userScope, limit = MUSIC_DIRTY_EMBEDDING_BATCH_SIZE } = {}) {
+    if (!musicEmbeddingsEnabled(config)) {
+      logger?.info?.("[music:embedding] disabled; skipping sync");
+      return {
+        syncedCount: 0,
+        skipped: true,
+        disabled: true,
+      };
+    }
+
     if (!store?.listDirtyMusicTracks || !canSyncMusic(config)) {
       return {
         syncedCount: 0,
@@ -1383,15 +1433,13 @@ function createMusicLibraryService({
       const newTrackCount = importedTracks.filter((track) => !existingIds.has(track.spotifyTrackId)).length;
       const updatedTrackCount = importedTracks.length - newTrackCount;
 
-      const syncResult = await syncMusicTracksToQdrant({
-        config,
-        musicStore: store,
-        tracks: importedTracks,
-        deps,
-      });
-
       await store.markSpotifyImportComplete({ userScope });
-      wakeMusicEnrichment({ userScope });
+      if (musicEmbeddingsEnabled(config)) {
+        wakeMusicEnrichment({ userScope });
+      } else {
+        logger?.info?.("[music:embedding] disabled; skipping sync");
+      }
+      const syncResult = { syncedCount: 0, skipped: true };
 
       logger?.info?.("[music] Imported Spotify liked songs", {
         userScope,
@@ -1423,81 +1471,134 @@ function createMusicLibraryService({
         throw new Error("Spotify playlist ID is required.");
       }
 
-      logger?.info?.("[spotify] playlist import started", { playlistId: normalizedPlaylistId });
-      const spotifyPlaylist = spotify.fetchPlaylist
-        ? await spotify.fetchPlaylist({ userScope, playlistId: normalizedPlaylistId })
-        : null;
-      const spotifyTracks = await spotify.fetchPlaylistTracks({ userScope, playlistId: normalizedPlaylistId, limit });
-      const existingIds = new Set(await store.listExistingSpotifyTrackIds?.(
-        spotifyTracks.map((track) => track.spotifyTrackId),
-        { userScope },
-      ) || []);
-      const importedTracks = [];
-
-      for (const spotifyTrack of spotifyTracks) {
-        importedTracks.push(await store.upsertTrack(spotifyTrack, { userScope, source: "spotify_playlist" }));
-      }
-      const newTrackCount = importedTracks.filter((track) => !existingIds.has(track.spotifyTrackId)).length;
-      const updatedTrackCount = importedTracks.length - newTrackCount;
-
-      let storedPlaylist = null;
-      let storedTracks = [];
-      if (store.upsertPlaylist && store.replacePlaylistTracks) {
-        storedPlaylist = await store.upsertPlaylist({
-          ...(spotifyPlaylist || {}),
-          userScope,
-          spotifyPlaylistId: normalizedPlaylistId,
-          spotifyUri: spotifyPlaylist?.spotifyUri || `spotify:playlist:${normalizedPlaylistId}`,
-          spotifyUrl: spotifyPlaylist?.spotifyUrl || `https://open.spotify.com/playlist/${normalizedPlaylistId}`,
-          name: spotifyPlaylist?.name || `Spotify playlist ${normalizedPlaylistId}`,
-          description: spotifyPlaylist?.description || "",
-          source: "spotify_import",
-          trackCount: importedTracks.length,
-          spotifyCoverUrl: spotifyPlaylist?.spotifyCoverUrl || "",
-        }, { userScope });
-        const importedBySpotifyTrackId = new Map(importedTracks.map((track) => [track.spotifyTrackId, track]));
-        storedTracks = await store.replacePlaylistTracks(storedPlaylist.musicPlaylistId, spotifyTracks
-          .map((track, index) => ({
-            musicTrackId: importedBySpotifyTrackId.get(track.spotifyTrackId)?.musicTrackId,
-            spotifyTrackId: track.spotifyTrackId,
-            position: index,
-            source: "spotify_playlist",
-          }))
-          .filter((track) => track.musicTrackId && track.spotifyTrackId));
-      }
-
-      const syncResult = await syncMusicTracksToQdrant({
-        config,
-        musicStore: store,
-        tracks: importedTracks,
-        deps,
-      });
-      wakeMusicEnrichment({ userScope });
-
-      logger?.info?.("[spotify] playlist import completed", {
-        userScope,
-        playlistId: normalizedPlaylistId,
-        tracksImported: importedTracks.length,
-        skipped: Math.max(0, spotifyTracks.length - importedTracks.length),
-        newTrackCount,
-        updatedTrackCount,
-        storedTrackCount: storedTracks.length,
-        syncedCount: syncResult.syncedCount,
-        syncSkipped: syncResult.skipped,
-      });
-
-      return {
-        playlistId: normalizedPlaylistId,
-        importedCount: importedTracks.length,
-        processedCount: spotifyTracks.length,
-        skippedCount: Math.max(0, spotifyTracks.length - importedTracks.length),
-        musicPlaylistId: storedPlaylist?.musicPlaylistId || "",
-        storedTrackCount: storedTracks.length,
-        newTrackCount,
-        updatedTrackCount,
-        syncedCount: syncResult.syncedCount,
-        syncSkipped: syncResult.skipped,
+      let stage = "token_refresh";
+      const failImport = (error) => {
+        const status = getSpotifyImportStatus(error);
+        const reason = sanitizeSpotifyImportReason(error?.spotifyMessage || error?.message || String(error || "playlist_import_failed"));
+        logger?.warn?.("[spotify] playlist import failed", {
+          playlistId: normalizedPlaylistId,
+          stage,
+          status: status || undefined,
+          reason,
+        });
+        return createSpotifyImportError({ playlistId: normalizedPlaylistId, stage, status, reason, cause: error });
       };
+
+      try {
+        logger?.info?.("[spotify] playlist import started", { playlistId: normalizedPlaylistId });
+
+        const token = spotify.getAccessToken
+          ? await spotify.getAccessToken({ userScope })
+          : null;
+        const accessToken = token?.accessToken || undefined;
+
+        stage = "playlist_metadata_fetch";
+        const spotifyPlaylist = spotify.fetchPlaylist
+          ? await spotify.fetchPlaylist({ userScope, playlistId: normalizedPlaylistId, accessToken, scope: token?.scope })
+          : null;
+
+        stage = "playlist_items_fetch";
+        const spotifyTracks = await spotify.fetchPlaylistTracks({
+          userScope,
+          playlistId: normalizedPlaylistId,
+          limit,
+          accessToken,
+          scope: token?.scope,
+        });
+
+        stage = "pagination";
+        const unavailableSkipped = spotifyTracks.filter((track) => !track?.spotifyTrackId).length;
+        const uniqueSpotifyTracks = [];
+        const seenSpotifyTrackIds = new Set();
+        let duplicatesSkipped = 0;
+        for (const track of spotifyTracks) {
+          const spotifyTrackId = String(track?.spotifyTrackId || "").trim();
+          if (!spotifyTrackId) continue;
+          if (seenSpotifyTrackIds.has(spotifyTrackId)) {
+            duplicatesSkipped += 1;
+            continue;
+          }
+          seenSpotifyTrackIds.add(spotifyTrackId);
+          uniqueSpotifyTracks.push(track);
+        }
+
+        const existingIds = new Set(await store.listExistingSpotifyTrackIds?.(
+          uniqueSpotifyTracks.map((track) => track.spotifyTrackId),
+          { userScope },
+        ) || []);
+        const importedTracks = [];
+
+        stage = "track_upsert";
+        for (const spotifyTrack of uniqueSpotifyTracks) {
+          importedTracks.push(await store.upsertTrack(spotifyTrack, { userScope, source: "spotify_playlist" }));
+        }
+        const newTrackCount = importedTracks.filter((track) => !existingIds.has(track.spotifyTrackId)).length;
+        const updatedTrackCount = importedTracks.length - newTrackCount;
+
+        let storedPlaylist = null;
+        let storedTracks = [];
+        if (store.upsertPlaylist && store.replacePlaylistTracks) {
+          storedPlaylist = await store.upsertPlaylist({
+            ...(spotifyPlaylist || {}),
+            userScope,
+            spotifyPlaylistId: normalizedPlaylistId,
+            spotifyUri: spotifyPlaylist?.spotifyUri || `spotify:playlist:${normalizedPlaylistId}`,
+            spotifyUrl: spotifyPlaylist?.spotifyUrl || `https://open.spotify.com/playlist/${normalizedPlaylistId}`,
+            name: spotifyPlaylist?.name || `Spotify playlist ${normalizedPlaylistId}`,
+            description: spotifyPlaylist?.description || "",
+            source: "spotify_import",
+            trackCount: importedTracks.length,
+            spotifyCoverUrl: spotifyPlaylist?.spotifyCoverUrl || "",
+          }, { userScope });
+          const importedBySpotifyTrackId = new Map(importedTracks.map((track) => [track.spotifyTrackId, track]));
+
+          stage = "playlist_track_upsert";
+          storedTracks = await store.replacePlaylistTracks(storedPlaylist.musicPlaylistId, uniqueSpotifyTracks
+            .map((track, index) => ({
+              musicTrackId: importedBySpotifyTrackId.get(track.spotifyTrackId)?.musicTrackId,
+              spotifyTrackId: track.spotifyTrackId,
+              position: index,
+              source: "spotify_playlist",
+            }))
+            .filter((track) => track.musicTrackId && track.spotifyTrackId));
+        }
+
+        stage = "embedding_enqueue";
+        if (musicEmbeddingsEnabled(config)) {
+          wakeMusicEnrichment({ userScope });
+        } else {
+          logger?.info?.("[music:embedding] disabled; skipping sync");
+        }
+
+        logger?.info?.("[spotify] playlist import completed", {
+          userScope,
+          playlistId: normalizedPlaylistId,
+          tracksImported: newTrackCount,
+          tracksUpdated: updatedTrackCount,
+          duplicatesSkipped,
+          unavailableSkipped,
+          storedTrackCount: storedTracks.length,
+        });
+
+        stage = "dashboard_response";
+        return {
+          playlistId: normalizedPlaylistId,
+          importedCount: importedTracks.length,
+          processedCount: spotifyTracks.length,
+          skippedCount: duplicatesSkipped + unavailableSkipped,
+          duplicatesSkipped,
+          unavailableSkipped,
+          musicPlaylistId: storedPlaylist?.musicPlaylistId || "",
+          storedTrackCount: storedTracks.length,
+          newTrackCount,
+          updatedTrackCount,
+          syncedCount: 0,
+          syncSkipped: true,
+          embeddingQueued: musicEmbeddingsEnabled(config),
+        };
+      } catch (error) {
+        throw failImport(error);
+      }
     },
 
     async syncTrackedPlaylist({ userScope, spotifyPlaylistId, limit = 5000 } = {}) {
@@ -2416,6 +2517,9 @@ module.exports = {
   buildMusicPlaylistQdrantPoint,
   buildMusicPlaylistSearchFilter,
   canSyncMusic,
+  musicEmbeddingsEnabled,
+  sanitizeSpotifyImportReason,
+  formatSpotifyImportDashboardError,
   deleteMusicTrackPointsFromQdrant,
   deleteMusicUserScopePointsFromQdrant,
   syncMusicTracksToQdrant,

@@ -2056,6 +2056,12 @@ function createMusicStore({ config, logger }) {
                 updated_at
               )
               VALUES ($1, $2, $3, $4, $5, NOW())
+              ON CONFLICT (music_playlist_id, spotify_track_id)
+              DO UPDATE SET
+                music_track_id = EXCLUDED.music_track_id,
+                position = LEAST(music_playlist_tracks.position, EXCLUDED.position),
+                source = EXCLUDED.source,
+                updated_at = NOW()
               RETURNING *
             `,
             [

@@ -1030,8 +1030,9 @@ function createSpotifyService({
       return playlists.map((playlist) => markSpotifyPlaylistImportability(playlist, connection));
     },
 
-    async fetchPlaylistTracks({ userScope, playlistId, limit = DEFAULT_IMPORT_LIMIT } = {}) {
-      const { accessToken, scope } = await this.getAccessToken({ userScope });
+    async fetchPlaylistTracks({ userScope, playlistId, limit = DEFAULT_IMPORT_LIMIT, accessToken: providedAccessToken = "", scope: providedScope = "" } = {}) {
+      const token = providedAccessToken ? { accessToken: providedAccessToken, scope: providedScope } : await this.getAccessToken({ userScope });
+      const { accessToken, scope } = token;
 
       if (!hasSpotifyScope(scope, SPOTIFY_PLAYLIST_READ_PRIVATE_SCOPE)) {
         throw new Error("Spotify playlist import requires reconnecting Spotify with playlist read scope.");
@@ -1048,8 +1049,9 @@ function createSpotifyService({
       return tracks;
     },
 
-    async fetchPlaylist({ userScope, playlistId } = {}) {
-      const { accessToken, scope } = await this.getAccessToken({ userScope });
+    async fetchPlaylist({ userScope, playlistId, accessToken: providedAccessToken = "", scope: providedScope = "" } = {}) {
+      const token = providedAccessToken ? { accessToken: providedAccessToken, scope: providedScope } : await this.getAccessToken({ userScope });
+      const { accessToken, scope } = token;
 
       if (!hasSpotifyScope(scope, SPOTIFY_PLAYLIST_READ_PRIVATE_SCOPE)) {
         throw new Error("Spotify playlist import requires reconnecting Spotify with playlist read scope.");
