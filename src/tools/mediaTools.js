@@ -1,3 +1,1 @@
-// Placeholder: mediaTools.js  
-// This file imports resolveTtsProvider and updates createAudioGenerationTool description
-// Also fixes voiceId resolution in error path to be provider-aware
+module.exports = require('../../artifacts/ghostlight-bot/src/tools/mediaTools');

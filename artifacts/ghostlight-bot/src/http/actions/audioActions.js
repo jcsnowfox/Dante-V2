@@ -1,6 +1,7 @@
 const { parseRequestForm } = require("../adminRequestUtils");
 const { normalizeTheme, buildReturnLocation } = require("../adminUiHelpers");
 const { deleteObjectFromBucket, hasStorageConfig } = require("../../images/bucketStorage");
+const { generateFishAudioClip } = require("../../audio/providers/fishAudioProvider");
 
 function normalizeCustomTags(value) {
   return Array.from(new Set(String(value || "")
@@ -222,6 +223,42 @@ async function handleAudioActions({ req, res, url, context, withAdmin }) {
             : `Deleted ${deletedAudioIds.length} audio clips.`,
         }),
       }).end();
+    })(req, res, context);
+  }
+
+  if (req.method === "POST" && url.pathname === "/admin/actions/audio-test-fish") {
+    return withAdmin(async (innerReq, innerRes, innerContext) => {
+      try {
+        const audioBuffer = await generateFishAudioClip({
+          config: innerContext.config,
+          text: "Hello! Fish Audio is working correctly.",
+          fetchImpl: globalThis.fetch,
+          logger: innerContext.logger,
+        });
+
+        innerContext.logger.info("[audio] Fish Audio dashboard test succeeded", {
+          bytes: audioBuffer.length,
+        });
+
+        return innerRes.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+        }).end(JSON.stringify({
+          ok: true,
+          message: `Fish Audio test succeeded — ${audioBuffer.length} bytes generated.`,
+          bytes: audioBuffer.length,
+        }));
+      } catch (error) {
+        innerContext.logger.warn("[audio] Fish Audio dashboard test failed", {
+          error: error.message,
+        });
+
+        return innerRes.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+        }).end(JSON.stringify({
+          ok: false,
+          error: error.message,
+        }));
+      }
     })(req, res, context);
   }
 

@@ -90,17 +90,40 @@ async function checkSchema(pool) {
 
 function checkStaticFishIntegration() {
   const provider = readFileSync(new URL('../artifacts/ghostlight-bot/src/audio/providers/fishAudioProvider.js', import.meta.url), 'utf8');
+  const generateAudio = readFileSync(new URL('../artifacts/ghostlight-bot/src/audio/generateAudio.js', import.meta.url), 'utf8');
+  const registry = readFileSync(new URL('../artifacts/ghostlight-bot/src/tools/registry.js', import.meta.url), 'utf8');
+  const messageCreate = readFileSync(new URL('../artifacts/ghostlight-bot/src/bot/events/messageCreate.js', import.meta.url), 'utf8');
+  const audioActions = readFileSync(new URL('../artifacts/ghostlight-bot/src/http/actions/audioActions.js', import.meta.url), 'utf8');
   const env = readFileSync(new URL('../artifacts/ghostlight-bot/src/config/env.js', import.meta.url), 'utf8');
   const runtime = readFileSync(new URL('../artifacts/ghostlight-bot/src/config/runtimeSettings.js', import.meta.url), 'utf8');
+
   for (const [label, source, pattern] of [
     ['Fish provider module', provider, 'generateFishAudioClip'],
     ['Fish provider auth header', provider, 'Authorization'],
+    ['Fish provider msgpack content-type', provider, 'application/msgpack'],
+    ['Fish provider response status log', provider, '[audio] fish response status='],
+    ['Fish provider failure stage log', provider, '[audio] fish synthesis failed'],
+    ['Fish provider logger param', provider, 'logger = null'],
     ['Fish env API key', env, 'FISH_AUDIO_API_KEY'],
     ['Fish runtime provider value', runtime, 'fish_audio'],
+    ['Fish generate requested log', generateAudio, '[audio] generate requested'],
+    ['Fish synthesis started log', generateAudio, '[audio] fish synthesis started'],
+    ['Fish synthesis completed log', generateAudio, '[audio] fish synthesis completed'],
+    ['Fish generated audio persisted log', generateAudio, '[audio] generated audio persisted'],
+    ['Fish storage failure stage log', generateAudio, 'storage_write'],
+    ['Fish DB insert failure stage log', generateAudio, 'generated_audio_insert'],
+    ['Registration log includes provider field', registry, "provider: selectedAudioProvider"],
+    ['Registration log is provider-aware', registry, "fish_audio"],
+    ['Discord attachment send started log', messageCreate, '[audio] discord attachment send started'],
+    ['Discord attachment sent log', messageCreate, '[audio] discord attachment sent'],
+    ['Discord attachment send failure stage', messageCreate, 'discord_attachment_send'],
+    ['audio-test-fish endpoint', audioActions, 'audio-test-fish'],
+    ['audio-test-fish calls generateFishAudioClip', audioActions, 'generateFishAudioClip'],
   ]) {
-    if (source.includes(pattern)) pass(`${label} contains ${pattern}`);
-    else fail(`${label} missing ${pattern}`);
+    if (source.includes(pattern)) pass(`${label} contains: ${pattern}`);
+    else fail(`${label} missing: ${pattern}`);
   }
+
   console.warn('[verify:fish-audio] WARN LIVE FISH API NOT TESTED — static checks and mocked/provider-code checks only.');
 }
 

@@ -142,7 +142,7 @@ function extensionForMimeType(mimeType = "") {
 function slugifyFilenamePart(value = "", fallback = "clip") {
   const slug = String(value || "")
     .trim()
-    .replace(/[''"]/g, "")
+    .replace(/[''’]/g, "")
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
@@ -297,6 +297,12 @@ function createAudioGenerationService({
       }
 
       const provider = resolveTtsProvider(config);
+
+      logger.info("[audio] generate requested", {
+        provider,
+        textLength: String(text || "").length,
+        sourceSurface: context.sourceSurface || context.surface || "chat",
+      });
       logger.info?.(`[audio] provider selected provider="${provider}"`);
       if (provider === "fish_audio") {
         logger.info?.("[audio] fish config", {
@@ -304,6 +310,7 @@ function createAudioGenerationService({
           voiceConfigured: Boolean(String(config.audio?.fishVoiceId || config.fishAudio?.voiceId || "").trim()),
         });
       }
+
       const baseSpokenText = truncateSpeechText(text);
 
       if (!baseSpokenText) {
@@ -334,15 +341,23 @@ function createAudioGenerationService({
         const fishModelId = String(config.audio?.fishModelId || config.fishAudio?.modelId || "").trim();
 
         if (!String(config.fishAudio?.apiKey || "").trim()) {
+          logger.warn("[audio] fish synthesis failed", { stage: "provider_config", reason: "apiKey not configured" });
           throw new Error("Fish Audio credentials are not configured.");
         }
 
         if (!fishVoiceId) {
+          logger.warn("[audio] fish synthesis failed", { stage: "provider_config", reason: "voiceId not configured" });
           throw new Error("No Fish Audio voice ID is configured.");
         }
 
         resolvedVoiceId = fishVoiceId;
         resolvedModel = fishModelId || "fish-speech";
+
+        logger.info("[audio] fish synthesis started", {
+          voiceId: fishVoiceId,
+          model: resolvedModel,
+          textLength: baseSpokenText.length,
+        });
 
         logger.debug?.("[audio] Generating Fish Audio clip", {
           provider: "fish_audio",
@@ -357,6 +372,11 @@ function createAudioGenerationService({
           config,
           text: baseSpokenText,
           fetchImpl,
+          logger,
+        });
+
+        logger.info("[audio] fish synthesis completed", {
+          bytes: audioBuffer.length,
         });
       } else {
         const apiKey = String(config.elevenlabs?.apiKey || "").trim();
@@ -441,38 +461,58 @@ function createAudioGenerationService({
           now,
         });
 
-        await uploadBufferToBucket({
-          config,
-          key: storageKey,
-          body: audioBuffer,
-          contentType: mimeType,
-          fetchImpl,
+        try {
+          await uploadBufferToBucket({
+            config,
+            key: storageKey,
+            body: audioBuffer,
+            contentType: mimeType,
+            fetchImpl,
+          });
+        } catch (storageError) {
+          if (provider === "fish_audio") {
+            logger.warn("[audio] fish synthesis failed", { stage: "storage_write", error: storageError.message });
+          }
+          throw storageError;
+        }
+
+        logger.info("[audio] generated audio persisted", {
+          provider,
+          bytes: audioBuffer.length,
+          storageKey,
         });
 
-        record = await generatedAudio.recordAudio({
-          audioId,
-          userScope: context.userScope,
-          sourceSurface,
-          displayName,
-          conversationId: context.conversationId || null,
-          channelId: context.channelId || null,
-          sourceMessageId: context.sourceMessageId || null,
-          prompt: prompt || resolvedSpokenText,
-          spokenText: resolvedSpokenText,
-          caption,
-          voiceId: resolvedVoiceId,
-          model: resolvedModel,
-          outputFormat,
-          mimeType,
-          fileSizeBytes: audioBuffer.length,
-          storageKey,
-          provider,
-          providerVoiceId: resolvedVoiceId,
-          providerModelId: resolvedModel,
-          status: "completed",
-        }, {
-          userScope: context.userScope,
-        });
+        try {
+          record = await generatedAudio.recordAudio({
+            audioId,
+            userScope: context.userScope,
+            sourceSurface,
+            displayName,
+            conversationId: context.conversationId || null,
+            channelId: context.channelId || null,
+            sourceMessageId: context.sourceMessageId || null,
+            prompt: prompt || resolvedSpokenText,
+            spokenText: resolvedSpokenText,
+            caption,
+            voiceId: resolvedVoiceId,
+            model: resolvedModel,
+            outputFormat,
+            mimeType,
+            fileSizeBytes: audioBuffer.length,
+            storageKey,
+            provider,
+            providerVoiceId: resolvedVoiceId,
+            providerModelId: resolvedModel,
+            status: "completed",
+          }, {
+            userScope: context.userScope,
+          });
+        } catch (dbError) {
+          if (provider === "fish_audio") {
+            logger.warn("[audio] fish synthesis failed", { stage: "generated_audio_insert", error: dbError.message });
+          }
+          throw dbError;
+        }
       }
 
       return {

@@ -1,2 +1,1 @@
-// Placeholder: registry.js
-// This file imports resolveTtsProvider and updates gate logging for audio tool
+module.exports = require('../../artifacts/ghostlight-bot/src/tools/registry');
