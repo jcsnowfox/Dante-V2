@@ -670,6 +670,85 @@ async function syncMusicPlaylistsToQdrant({ config, playlists = [], deps = {} } 
   };
 }
 
+
+function buildLocalSearchTrackResult(track = {}, score = 0) {
+  return {
+    musicTrackId: track.musicTrackId,
+    spotifyTrackId: track.spotifyTrackId,
+    spotifyUri: track.spotifyUri,
+    spotifyUrl: track.spotifyUrl,
+    title: track.title,
+    artists: Array.isArray(track.artists) ? track.artists : [],
+    albumName: track.albumName,
+    albumReleaseDate: track.albumReleaseDate,
+    releaseYear: track.releaseYear,
+    artistGenres: Array.isArray(track.artistGenres) ? track.artistGenres : [],
+    genreFamilies: Array.isArray(track.genreFamilies) ? track.genreFamilies : [],
+    userGenres: Array.isArray(track.userGenres) ? track.userGenres : [],
+    musicBrainzTags: Array.isArray(track.musicBrainzTags) ? track.musicBrainzTags : [],
+    effectiveGenres: Array.from(new Set([
+      ...(Array.isArray(track.artistGenres) ? track.artistGenres : []),
+      ...(Array.isArray(track.userGenres) ? track.userGenres : []),
+      ...(Array.isArray(track.musicBrainzTags) ? track.musicBrainzTags : []),
+    ].map((item) => String(item || "").trim().toLowerCase()).filter(Boolean))),
+    effectiveGenreFamilies: Array.isArray(track.genreFamilies) ? track.genreFamilies : [],
+    likedAt: track.likedAt,
+    affinities: [],
+    score,
+  };
+}
+
+function localTrackMatchesFilters(track = {}, {
+  genres = [],
+  genreFamilies = [],
+  minReleaseYear = null,
+  maxReleaseYear = null,
+} = {}) {
+  const result = buildLocalSearchTrackResult(track);
+  return payloadGenreIncludesAny(result.effectiveGenres, genres)
+    && payloadArrayIncludesAny(result.effectiveGenreFamilies, genreFamilies)
+    && payloadReleaseYearInRange({ release_year: result.releaseYear }, { minReleaseYear, maxReleaseYear });
+}
+
+async function searchMusicLibraryLocalFallback({
+  store,
+  query,
+  userScope,
+  limit,
+  filters = {},
+  reason = "semantic_search_unavailable",
+} = {}) {
+  if (!store?.listTracks) {
+    throw new Error("Music search requires either Qdrant search or local music storage.");
+  }
+
+  const rows = await store.listTracks({
+    userScope,
+    q: query,
+    limit: Math.max(limit * 4, limit),
+    activeOnly: true,
+    sort: "updated",
+    direction: "desc",
+  });
+  const filteredRows = rows
+    .filter((track) => localTrackMatchesFilters(track, filters))
+    .slice(0, limit);
+
+  return {
+    query,
+    limit,
+    filters,
+    filterFallbackUsed: true,
+    metadataFilterRelaxed: false,
+    localFallbackUsed: true,
+    warnings: [
+      "Music vector search is temporarily unavailable, so Dante used a local imported-library keyword fallback.",
+    ],
+    fallbackReason: reason,
+    tracks: filteredRows.map((track, index) => buildLocalSearchTrackResult(track, Math.max(0, 1 - (index * 0.01)))),
+  };
+}
+
 async function searchMusicLibrary({
   config,
   query,
@@ -742,23 +821,43 @@ async function searchMusicLibrary({
   }
 
   if (!canSyncMusic(config)) {
-    throw new Error("Music search requires Qdrant and an embedding-capable LLM API key.");
+    return searchMusicLibraryLocalFallback({
+      store: deps.store,
+      query: normalizedQuery,
+      userScope,
+      limit: normalizedLimit,
+      filters,
+      reason: "qdrant_or_embeddings_not_configured",
+    });
   }
 
-  const [vector] = await embedTextsFn({
-    config,
-    inputs: [normalizedQuery],
-  });
-  const hits = await searchPointsFn({
-    config,
-    vector,
-    limit: Math.min(normalizedLimit * 3, 30),
-    collectionName: config.qdrant?.musicCollection,
-    filter: buildMusicSearchFilter({
+  let hits;
+  let vector;
+  try {
+    [vector] = await embedTextsFn({
+      config,
+      inputs: [normalizedQuery],
+    });
+    hits = await searchPointsFn({
+      config,
+      vector,
+      limit: Math.min(normalizedLimit * 3, 30),
+      collectionName: config.qdrant?.musicCollection,
+      filter: buildMusicSearchFilter({
+        userScope,
+        ...filters,
+      }),
+    });
+  } catch (error) {
+    return searchMusicLibraryLocalFallback({
+      store: deps.store,
+      query: normalizedQuery,
       userScope,
-      ...filters,
-    }),
-  });
+      limit: normalizedLimit,
+      filters,
+      reason: error?.message || "semantic_search_failed",
+    });
+  }
   let filterFallbackUsed = false;
   let metadataFilterRelaxed = false;
   const warnings = [];
@@ -919,6 +1018,7 @@ function createMusicLibraryService({
   let musicEnrichmentTimer = null;
   let musicEnrichmentRunning = false;
   let musicEnrichmentUserScope = String(config?.memory?.userScope || "user").trim() || "user";
+  let nextDirtyEmbeddingAttemptAt = 0;
 
   async function listAllTracksForMusicSearch({ userScope } = {}) {
     if (!store?.listTracks) {
@@ -1155,7 +1255,7 @@ function createMusicLibraryService({
         || !canUseMusicBrainz
       );
     let syncResult = { syncedCount: 0, skipped: !canSyncMusic(config) };
-    if (shouldSyncDirty) {
+    if (shouldSyncDirty && Date.now() >= nextDirtyEmbeddingAttemptAt) {
       try {
         syncResult = await syncDirtyMusicEmbeddings({ userScope, limit: MUSIC_DIRTY_EMBEDDING_BATCH_SIZE });
       } catch (error) {
@@ -1165,10 +1265,13 @@ function createMusicLibraryService({
           failed: true,
           error: error?.message || String(error),
         };
-        logger?.warn?.("[music] Dirty music embedding sync failed; continuing enrichment worker", {
+        nextDirtyEmbeddingAttemptAt = Date.now() + 5 * 60 * 1000;
+        logger?.warn?.("[music:embedding] sync failed; backing off dirty sync", {
+          provider: config?.llm?.embedding?.provider || config?.llm?.provider || "configured",
           userScope,
           dirtyTrackCount: afterMusicBrainzStatus.dirtyTrackCount || 0,
-          error: syncResult.error,
+          reason: syncResult.error,
+          nextRetryMs: 5 * 60 * 1000,
         });
       }
     }
@@ -1228,7 +1331,7 @@ function createMusicLibraryService({
 
   return {
     canSearch() {
-      return Boolean(store?.persistenceEnabled && canSyncMusic(config));
+      return Boolean(store?.persistenceEnabled && (canSyncMusic(config) || store?.listTracks));
     },
 
     async startBackgroundProcessing({ userScope = config.memory?.userScope || "user" } = {}) {
@@ -1320,6 +1423,10 @@ function createMusicLibraryService({
         throw new Error("Spotify playlist ID is required.");
       }
 
+      logger?.info?.("[spotify] playlist import started", { playlistId: normalizedPlaylistId });
+      const spotifyPlaylist = spotify.fetchPlaylist
+        ? await spotify.fetchPlaylist({ userScope, playlistId: normalizedPlaylistId })
+        : null;
       const spotifyTracks = await spotify.fetchPlaylistTracks({ userScope, playlistId: normalizedPlaylistId, limit });
       const existingIds = new Set(await store.listExistingSpotifyTrackIds?.(
         spotifyTracks.map((track) => track.spotifyTrackId),
@@ -1333,6 +1440,32 @@ function createMusicLibraryService({
       const newTrackCount = importedTracks.filter((track) => !existingIds.has(track.spotifyTrackId)).length;
       const updatedTrackCount = importedTracks.length - newTrackCount;
 
+      let storedPlaylist = null;
+      let storedTracks = [];
+      if (store.upsertPlaylist && store.replacePlaylistTracks) {
+        storedPlaylist = await store.upsertPlaylist({
+          ...(spotifyPlaylist || {}),
+          userScope,
+          spotifyPlaylistId: normalizedPlaylistId,
+          spotifyUri: spotifyPlaylist?.spotifyUri || `spotify:playlist:${normalizedPlaylistId}`,
+          spotifyUrl: spotifyPlaylist?.spotifyUrl || `https://open.spotify.com/playlist/${normalizedPlaylistId}`,
+          name: spotifyPlaylist?.name || `Spotify playlist ${normalizedPlaylistId}`,
+          description: spotifyPlaylist?.description || "",
+          source: "spotify_import",
+          trackCount: importedTracks.length,
+          spotifyCoverUrl: spotifyPlaylist?.spotifyCoverUrl || "",
+        }, { userScope });
+        const importedBySpotifyTrackId = new Map(importedTracks.map((track) => [track.spotifyTrackId, track]));
+        storedTracks = await store.replacePlaylistTracks(storedPlaylist.musicPlaylistId, spotifyTracks
+          .map((track, index) => ({
+            musicTrackId: importedBySpotifyTrackId.get(track.spotifyTrackId)?.musicTrackId,
+            spotifyTrackId: track.spotifyTrackId,
+            position: index,
+            source: "spotify_playlist",
+          }))
+          .filter((track) => track.musicTrackId && track.spotifyTrackId));
+      }
+
       const syncResult = await syncMusicTracksToQdrant({
         config,
         musicStore: store,
@@ -1341,12 +1474,14 @@ function createMusicLibraryService({
       });
       wakeMusicEnrichment({ userScope });
 
-      logger?.info?.("[music] Imported Spotify playlist tracks", {
+      logger?.info?.("[spotify] playlist import completed", {
         userScope,
         playlistId: normalizedPlaylistId,
-        importedCount: importedTracks.length,
+        tracksImported: importedTracks.length,
+        skipped: Math.max(0, spotifyTracks.length - importedTracks.length),
         newTrackCount,
         updatedTrackCount,
+        storedTrackCount: storedTracks.length,
         syncedCount: syncResult.syncedCount,
         syncSkipped: syncResult.skipped,
       });
@@ -1355,6 +1490,9 @@ function createMusicLibraryService({
         playlistId: normalizedPlaylistId,
         importedCount: importedTracks.length,
         processedCount: spotifyTracks.length,
+        skippedCount: Math.max(0, spotifyTracks.length - importedTracks.length),
+        musicPlaylistId: storedPlaylist?.musicPlaylistId || "",
+        storedTrackCount: storedTracks.length,
         newTrackCount,
         updatedTrackCount,
         syncedCount: syncResult.syncedCount,
@@ -1472,7 +1610,6 @@ function createMusicLibraryService({
         musicPlaylistId: storedPlaylist.musicPlaylistId,
         importedCount: importedTracks.length,
         processedCount: spotifyTracks.length,
-        storedTrackCount: storedTracks.length,
         previousStoredTrackCount: previousTracks.length,
         newTrackCount,
         updatedTrackCount,
@@ -2047,7 +2184,7 @@ function createMusicLibraryService({
         reactions,
         minReleaseYear,
         maxReleaseYear,
-        deps,
+        deps: { ...deps, store },
       });
     },
 

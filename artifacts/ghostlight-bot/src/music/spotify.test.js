@@ -25,13 +25,14 @@ test("playlist item 403 explains Spotify owner/collaborator import restriction",
   );
 });
 
-test("playlist importability is true for owned and collaborative playlists only", () => {
+test("playlist importability allows any Spotify playlist returned by the current-user playlists endpoint", () => {
   const connection = { spotifyUserId: "current-user" };
 
   assert.equal(markSpotifyPlaylistImportability({ ownerId: "current-user", collaborative: false }, connection).importable, true);
   assert.equal(markSpotifyPlaylistImportability({ ownerId: "someone-else", collaborative: true }, connection).importable, true);
 
   const followedPublic = markSpotifyPlaylistImportability({ ownerId: "someone-else", collaborative: false }, connection);
-  assert.equal(followedPublic.importable, false);
-  assert.match(followedPublic.importUnavailableReason, /owned by the connected account/);
+  assert.equal(followedPublic.importable, true);
+  assert.equal(followedPublic.importUnavailableReason, "");
+  assert.equal(followedPublic.ownedByConnectedAccount, false);
 });

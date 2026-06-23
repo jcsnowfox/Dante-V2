@@ -31,7 +31,9 @@
     "verify:second-life-bridge": "node scripts/verify-second-life-bridge.mjs",
     "verify:heartbeat-actions": "node scripts/verify-heartbeat-actions.mjs",
     "inspect:database-source": "node scripts/inspect-database-source.mjs",
-    "debug:db-env": "node -e \"process.env.DATABASE_URL && console.log('[db:env] DATABASE_URL is set') || console.log('[db:env] DATABASE_URL is NOT set')\""
+    "debug:db-env": "node -e \"process.env.DATABASE_URL && console.log('[db:env] DATABASE_URL is set') || console.log('[db:env] DATABASE_URL is NOT set')\"",
+    "verify:spotify-config": "node scripts/verify-spotify-config.mjs",
+    "verify:spotify-import": "node scripts/verify-spotify-import-flow.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

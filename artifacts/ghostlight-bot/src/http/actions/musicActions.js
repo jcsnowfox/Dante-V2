@@ -1,5 +1,12 @@
 const { parseRequestForm, redirect, inferSpotifyRedirectUri } = require("../adminRequestUtils");
-const { normalizeImportLimit } = require("../../music/spotify");
+const {
+  normalizeImportLimit,
+  hasSpotifyConfig,
+  hasSpotifyScope,
+  SPOTIFY_PLAYLIST_READ_PRIVATE_SCOPE,
+  SPOTIFY_PLAYLIST_READ_COLLABORATIVE_SCOPE,
+  SPOTIFY_USER_READ_PRIVATE_SCOPE,
+} = require("../../music/spotify");
 
 const MUSIC_GALLERY_PATHS = new Set([
   "/admin/gallery/music",
@@ -131,6 +138,68 @@ async function handleMusicActions({
   context,
   withAdmin,
 }) {
+
+  if (req.method === "GET" && url.pathname === "/api/music/spotify/diagnostics") {
+    return withAdmin(async (innerReq, innerRes, innerContext) => {
+      const userScope = innerContext.config.memory?.userScope || "user";
+      const connection = innerContext.musicStore?.getSpotifyConnection
+        ? await innerContext.musicStore.getSpotifyConnection({ userScope })
+        : null;
+      const requiredScopes = [SPOTIFY_PLAYLIST_READ_PRIVATE_SCOPE, SPOTIFY_PLAYLIST_READ_COLLABORATIVE_SCOPE, SPOTIFY_USER_READ_PRIVATE_SCOPE];
+      const missingScopes = requiredScopes.filter((scope) => !hasSpotifyScope(connection?.scope || "", scope));
+      return sendMusicJson(innerRes, 200, {
+        ok: true,
+        spotifyEnvConfigured: hasSpotifyConfig(innerContext.config, { redirectUri: innerContext.config.spotify?.redirectUri || inferSpotifyRedirectUri(innerReq) }),
+        redirectUriConfigured: Boolean(String(innerContext.config.spotify?.redirectUri || "").trim()),
+        connectionExists: Boolean(connection?.spotifyUserId || connection?.refreshToken),
+        hasRefreshToken: Boolean(connection?.refreshToken),
+        tokenExpired: !connection?.tokenExpiresAt || new Date(connection.tokenExpiresAt).getTime() <= Date.now(),
+        missingScopes,
+        lastFetchStatus: null,
+        lastImportStatus: connection?.lastImportAt ? "completed" : null,
+        lastSafeError: missingScopes.length ? `Reconnect required: missing playlist scopes (${missingScopes.join(", ")})` : "",
+      });
+    })(req, res, context);
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/music/spotify/playlists") {
+    return withAdmin(async (_innerReq, innerRes, innerContext) => {
+      if (!innerContext.spotify?.listPlaylists) {
+        return sendMusicJson(innerRes, 503, { ok: false, error: "Spotify playlist fetch is not available." });
+      }
+      try {
+        const playlists = await innerContext.spotify.listPlaylists({
+          userScope: innerContext.config.memory?.userScope || "user",
+          limit: Number.parseInt(url.searchParams.get("limit") || "50", 10) || 50,
+        });
+        return sendMusicJson(innerRes, 200, {
+          ok: true,
+          playlists: playlists.map((playlist) => ({
+            id: playlist.spotifyPlaylistId,
+            spotifyPlaylistId: playlist.spotifyPlaylistId,
+            name: playlist.name,
+            owner: playlist.ownerDisplayName,
+            trackCount: playlist.trackCount,
+            public: playlist.public,
+            collaborative: playlist.collaborative,
+            image: playlist.spotifyCoverUrl,
+            spotifyUrl: playlist.spotifyUrl,
+            importable: playlist.importable !== false,
+            importUnavailableReason: playlist.importUnavailableReason || "",
+          })),
+        });
+      } catch (error) {
+        const status = Number(error?.status || 0);
+        const code = status === 401 ? "reconnect_required" : status === 403 ? "missing_scope" : status === 429 ? "rate_limited" : "spotify_fetch_failed";
+        return sendMusicJson(innerRes, status === 429 ? 429 : status === 403 ? 403 : status === 401 ? 401 : 502, {
+          ok: false,
+          code,
+          error: error?.message || "Spotify playlists could not be loaded.",
+          retryAfterSeconds: error?.retryAfterSeconds || 0,
+        });
+      }
+    })(req, res, context);
+  }
   if (req.method === "POST" && url.pathname === "/admin/actions/music-spotify-connect") {
     return withAdmin(async (innerReq, innerRes, innerContext) => {
       const { fields } = await parseRequestForm(innerReq);

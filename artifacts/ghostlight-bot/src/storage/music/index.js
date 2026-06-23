@@ -15,6 +15,8 @@ const CREATE_SPOTIFY_CONNECTIONS_TABLE_SQL = `
     spotify_user_id TEXT NOT NULL DEFAULT '',
     spotify_display_name TEXT NOT NULL DEFAULT '',
     refresh_token TEXT NOT NULL DEFAULT '',
+    access_token TEXT NOT NULL DEFAULT '',
+    token_expires_at TIMESTAMPTZ,
     scope TEXT NOT NULL DEFAULT '',
     oauth_state TEXT NOT NULL DEFAULT '',
     oauth_state_created_at TIMESTAMPTZ,
@@ -158,6 +160,8 @@ const ALTER_SPOTIFY_CONNECTIONS_TABLE_SQL = [
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS spotify_user_id TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS spotify_display_name TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS refresh_token TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS access_token TEXT NOT NULL DEFAULT '';",
+  "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMPTZ;",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS oauth_state TEXT NOT NULL DEFAULT '';",
   "ALTER TABLE music_spotify_connections ADD COLUMN IF NOT EXISTS oauth_state_created_at TIMESTAMPTZ;",
@@ -596,6 +600,8 @@ function mapSpotifyConnectionRow(row) {
     spotifyUserId: row.spotify_user_id,
     spotifyDisplayName: row.spotify_display_name,
     refreshToken: row.refresh_token,
+    accessToken: row.access_token || '',
+    tokenExpiresAt: row.token_expires_at || null,
     scope: row.scope,
     oauthState: row.oauth_state,
     oauthStateCreatedAt: row.oauth_state_created_at,
@@ -981,18 +987,22 @@ function createMusicStore({ config, logger }) {
             spotify_user_id,
             spotify_display_name,
             refresh_token,
+            access_token,
+            token_expires_at,
             scope,
             oauth_state,
             oauth_state_created_at,
             connected_at,
             updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, '', NULL, NOW(), NOW())
+          VALUES ($1, $2, $3, $4, $5, $6, $7, '', NULL, NOW(), NOW())
           ON CONFLICT (user_scope)
           DO UPDATE SET
             spotify_user_id = EXCLUDED.spotify_user_id,
             spotify_display_name = EXCLUDED.spotify_display_name,
-            refresh_token = EXCLUDED.refresh_token,
+            refresh_token = COALESCE(NULLIF(EXCLUDED.refresh_token, ''), music_spotify_connections.refresh_token),
+            access_token = EXCLUDED.access_token,
+            token_expires_at = EXCLUDED.token_expires_at,
             scope = EXCLUDED.scope,
             oauth_state = '',
             oauth_state_created_at = NULL,
@@ -1005,6 +1015,8 @@ function createMusicStore({ config, logger }) {
           normalizeText(record.spotifyUserId || record.spotify_user_id, { maxLength: 240 }),
           normalizeText(record.spotifyDisplayName || record.spotify_display_name, { maxLength: 500 }),
           normalizeText(record.refreshToken || record.refresh_token),
+          normalizeText(record.accessToken || record.access_token),
+          normalizeTimestamp(record.tokenExpiresAt || record.token_expires_at, null),
           normalizeText(record.scope, { maxLength: 1000 }),
         ],
       );
