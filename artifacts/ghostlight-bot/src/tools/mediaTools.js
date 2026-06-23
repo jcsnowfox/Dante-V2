@@ -601,7 +601,7 @@ function createAudioGenerationTool({
       type: "function",
       name: "generate_audio",
       description: [
-        "Generate an ElevenLabs audio clip when the user asks for audio, a voice note, a spoken version, or narration.",
+        "Generate an audio clip with the configured voice provider when the user asks for audio, a voice note, a spoken version, or narration.",
         "Write only what should be spoken aloud. Do not include Markdown, code blocks, URLs, image prompts, emoji-only captions, or unspoken stage directions.",
         generatedAudioUsesV3
           ? "Eleven v3 delivery tags like [chuckles], [sighs], [whispers], [pause], or [softly] are allowed sparingly when they help the performance."

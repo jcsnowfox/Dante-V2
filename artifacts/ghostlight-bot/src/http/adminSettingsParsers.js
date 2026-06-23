@@ -179,10 +179,23 @@ function parseSpotifySettingsFields(fields) {
 function parseAudioSettingsFields(fields) {
   const raw = {};
 
-  includeField(raw, fields, "audio.ttsEnabled", "audioTtsEnabled", (value) => {
-    return readBooleanField(value);
-  });
+  if (Object.prototype.hasOwnProperty.call(fields, "audioTtsProvider")) {
+    const providerValue = String(fields.audioTtsProvider || "none").trim().toLowerCase();
+    const selectedProvider = providerValue === "fish_audio"
+      ? "fish_audio"
+      : providerValue === "elevenlabs"
+        ? "elevenlabs"
+        : "none";
+    raw["audio.ttsEnabled"] = selectedProvider !== "none";
+    raw["audio.ttsProvider"] = selectedProvider;
+  } else {
+    includeField(raw, fields, "audio.ttsEnabled", "audioTtsEnabled", (value) => {
+      return readBooleanField(value);
+    });
+  }
   includeField(raw, fields, "audio.elevenlabsVoiceId", "audioElevenlabsVoiceId");
+  includeField(raw, fields, "audio.fishVoiceId", "audioFishVoiceId");
+  includeField(raw, fields, "audio.fishModelId", "audioFishModelId");
   includeField(raw, fields, "audio.readAloudModel", "audioReadAloudModel");
   includeField(raw, fields, "audio.generatedAudioModel", "audioGeneratedAudioModel");
   includeField(raw, fields, "audio.gallerySavedSourceSurfaces", "audioGallerySavedSourceSurfaces", (value) => readListField(value));
