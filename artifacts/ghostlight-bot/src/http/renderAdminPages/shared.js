@@ -17,6 +17,9 @@ const NAV_GROUPS = [
   { label: "World", links: [
     { section: "secondLife", label: "Second Life", path: "/admin/second-life", icon: "companion" },
   ] },
+  { label: "Learning", links: [
+    { section: "norwegian", label: "Norwegian", path: "/admin/norwegian", icon: "feedbackLearning" },
+  ] },
   { label: "Systems", links: [
     { section: "games", label: "Games", path: "/admin/games", icon: "tools" },
     { section: "heartbeat", label: "Heartbeat", path: "/admin/heartbeat/timing", icon: "heartbeat" },

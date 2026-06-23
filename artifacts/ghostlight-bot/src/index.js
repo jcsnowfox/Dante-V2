@@ -57,6 +57,7 @@ const { createObjectInteractionEngine } = require("./secondLife/slObjectInteract
 const { createLifeEngine } = require("./lifeEngine");
 const { createCompanionEventProcessor } = require("./companion/processCompanionEvent");
 const { createGameSystem } = require("./games");
+const { createNorwegianLearningStore } = require("./norwegian");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -225,6 +226,7 @@ async function startApp() {
     objectInteractionEngine: secondLifeObjectInteractionEngine,
   });
   const gameSystem = createGameSystem({ config, logger });
+  const norwegianLearning = createNorwegianLearningStore({ config, logger });
   const client = createDiscordClient({ config });
   const heartbeat = createHeartbeatService({
     client,
@@ -317,6 +319,7 @@ async function startApp() {
     gameSessionStore: gameSystem.gameSessionStore,
     gameSettings: {},
     licenseRuntime: license.createInitialRuntime(),
+    norwegianLearning,
     ready: false,
   };
   client.appContext = {
@@ -356,6 +359,7 @@ async function startApp() {
     gameSessionStore: gameSystem.gameSessionStore,
     gameSettings: appContext.gameSettings,
     licenseRuntime: appContext.licenseRuntime,
+    norwegianLearning,
   };
 
   const gameButtonHandler = gameSystem.createButtonHandler({ appContext });
@@ -431,6 +435,7 @@ async function startApp() {
     await secondLifeLifeEngine.seed({ companionId });
   });
   await runStartupStep("gameSystem.init", logger, () => gameSystem.init());
+  await runStartupStep("norwegianLearning.init", logger, () => norwegianLearning.init());
   await runStartupStep("gameSettings.load", logger, async () => {
     const allSettings = await settingsStore.listSettings();
     const loaded = allSettings?.gameSettings || {};

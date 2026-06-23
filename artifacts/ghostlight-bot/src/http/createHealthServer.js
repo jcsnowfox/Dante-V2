@@ -29,6 +29,7 @@ const { handleHeartbeatActions } = require("./actions/heartbeatActions");
 const { handleChannelModeActions } = require("./actions/channelModeActions");
 const { handleEmotionalArcActions } = require("./actions/emotionalArcActions");
 const { handleFeedbackLearningActions } = require("./actions/feedbackLearningActions");
+const { handleNorwegianActions } = require("./actions/norwegianActions");
 const { handleRelationalStateActions } = require("./actions/relationalStateActions");
 const { handleInnerLifeActions } = require("./actions/innerLifeActions");
 const { handleContinuityActions } = require("./actions/continuityActions");
@@ -429,7 +430,8 @@ function createHealthServer({
         url.pathname.startsWith("/admin/inner-life/") ||
         url.pathname === "/admin/continuity" ||
         url.pathname.startsWith("/admin/continuity/") ||
-        url.pathname === "/admin/games"
+        url.pathname === "/admin/games" ||
+        url.pathname === "/admin/norwegian"
       )) {
         return withAdmin(async (_req, innerRes, innerContext) => {
           setThemeCookie(innerRes, resolvedTheme);
@@ -578,6 +580,19 @@ function createHealthServer({
 
       {
         const handled = await handleFeedbackLearningActions({
+          req,
+          res,
+          url,
+          context,
+          withAdmin,
+        });
+        if (handled !== false) {
+          return handled;
+        }
+      }
+
+      {
+        const handled = await handleNorwegianActions({
           req,
           res,
           url,

@@ -208,6 +208,10 @@ function getAdminRouteState(pathname) {
     return { section: "continuity" };
   }
 
+  if (pathname === "/admin/norwegian" || pathname.startsWith("/admin/norwegian/")) {
+    return { section: "norwegian" };
+  }
+
   return { section: "home" };
 }
 
