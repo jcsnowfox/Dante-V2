@@ -6,6 +6,8 @@ const expectedTables = {
     "spotify_user_id",
     "spotify_display_name",
     "refresh_token",
+    "access_token",
+    "token_expires_at",
     "scope",
     "oauth_state",
     "oauth_state_created_at",

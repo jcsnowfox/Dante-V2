@@ -900,7 +900,7 @@ function createMusicLibrarySearchTool({ config = {}, musicLibrary = null, logger
       if (!musicLibrary.canSearch?.()) {
         return {
           ok: false,
-          error: "Music search is unavailable because the music library, Qdrant, or embeddings are not configured.",
+          error: "Music search is unavailable because no imported local music library is configured yet.",
           query,
           limit,
           filters: {

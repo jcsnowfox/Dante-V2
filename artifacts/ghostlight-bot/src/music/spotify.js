@@ -8,11 +8,13 @@ const SPOTIFY_PLAYLIST_MODIFY_PRIVATE_SCOPE = "playlist-modify-private";
 const SPOTIFY_PLAYLIST_MODIFY_PUBLIC_SCOPE = "playlist-modify-public";
 const SPOTIFY_UGC_IMAGE_UPLOAD_SCOPE = "ugc-image-upload";
 const SPOTIFY_PLAYBACK_MODIFY_SCOPE = "user-modify-playback-state";
+const SPOTIFY_USER_READ_PRIVATE_SCOPE = "user-read-private";
 const SPOTIFY_DEFAULT_SCOPES = Object.freeze([
   SPOTIFY_LIBRARY_SCOPE,
   SPOTIFY_CURRENTLY_PLAYING_SCOPE,
   SPOTIFY_PLAYLIST_READ_PRIVATE_SCOPE,
   SPOTIFY_PLAYLIST_READ_COLLABORATIVE_SCOPE,
+  SPOTIFY_USER_READ_PRIVATE_SCOPE,
   SPOTIFY_PLAYLIST_MODIFY_PRIVATE_SCOPE,
   SPOTIFY_PLAYLIST_MODIFY_PUBLIC_SCOPE,
   SPOTIFY_UGC_IMAGE_UPLOAD_SCOPE,
@@ -419,14 +421,13 @@ function markSpotifyPlaylistImportability(playlist, connection = {}) {
 
   const ownerId = String(playlist.ownerId || "").trim();
   const spotifyUserId = String(connection.spotifyUserId || connection.spotify_user_id || "").trim();
-  const importable = Boolean((ownerId && spotifyUserId && ownerId === spotifyUserId) || playlist.collaborative);
+  const importable = true;
 
   return {
     ...playlist,
     importable,
-    importUnavailableReason: importable
-      ? ""
-      : "Spotify only allows importing playlists owned by the connected account or playlists where it is a collaborator.",
+    importUnavailableReason: "",
+    ownedByConnectedAccount: Boolean(ownerId && spotifyUserId && ownerId === spotifyUserId),
   };
 }
 
@@ -939,12 +940,15 @@ function createSpotifyService({
         spotifyUserId: profile.id || "",
         spotifyDisplayName: profile.display_name || profile.id || "Spotify user",
         refreshToken,
+        accessToken: token.access_token || "",
+        tokenExpiresAt: new Date(Date.now() + Math.max(0, Number(token.expires_in || 3600) - 60) * 1000).toISOString(),
         scope: token.scope || normalizeSpotifyScope(),
       });
 
-      logger?.info?.("[music] Spotify connected", {
+      logger?.info?.("[spotify] connection saved", {
         userScope,
-        spotifyUserId: saved.spotifyUserId || "",
+        hasRefreshToken: Boolean(saved.refreshToken),
+        expiresAt: saved.tokenExpiresAt || "",
       });
 
       return saved;
@@ -954,19 +958,47 @@ function createSpotifyService({
       const connection = await store.getSpotifyConnection({ userScope });
 
       if (!connection?.refreshToken) {
-        throw new Error("Spotify is not connected.");
+        throw new Error("Spotify is not connected. Reconnect Spotify from the Music tools page.");
       }
 
-      const token = await refreshSpotifyAccessToken({
-        config,
-        refreshToken: connection.refreshToken,
-        fetchImpl,
+      const expiresAtMs = connection.tokenExpiresAt ? new Date(connection.tokenExpiresAt).getTime() : 0;
+      if (connection.accessToken && Number.isFinite(expiresAtMs) && expiresAtMs > Date.now() + 120000) {
+        return {
+          accessToken: connection.accessToken,
+          scope: connection.scope || "",
+          connection,
+        };
+      }
+
+      let token;
+      try {
+        token = await refreshSpotifyAccessToken({
+          config,
+          refreshToken: connection.refreshToken,
+          fetchImpl,
+        });
+      } catch (error) {
+        logger?.warn?.("[spotify] token refresh failed", {
+          userScope,
+          status: Number(error?.status || 0) || undefined,
+          reason: error?.spotifyMessage || error?.message || "refresh_failed",
+        });
+        throw new Error("Spotify reconnect required: token refresh failed.");
+      }
+
+      const saved = await store.upsertSpotifyConnection({
+        ...connection,
+        accessToken: token.access_token || "",
+        refreshToken: token.refresh_token || connection.refreshToken,
+        tokenExpiresAt: new Date(Date.now() + Math.max(0, Number(token.expires_in || 3600) - 60) * 1000).toISOString(),
+        scope: token.scope || connection.scope || "",
       });
+      logger?.info?.("[spotify] token refreshed", { userScope });
 
       return {
-        accessToken: token.access_token,
-        scope: token.scope || connection.scope || "",
-        connection,
+        accessToken: saved.accessToken,
+        scope: saved.scope || "",
+        connection: saved,
       };
     },
 
@@ -1200,6 +1232,7 @@ module.exports = {
   SPOTIFY_CURRENTLY_PLAYING_SCOPE,
   SPOTIFY_PLAYLIST_READ_PRIVATE_SCOPE,
   SPOTIFY_PLAYLIST_READ_COLLABORATIVE_SCOPE,
+  SPOTIFY_USER_READ_PRIVATE_SCOPE,
   SPOTIFY_PLAYLIST_MODIFY_PRIVATE_SCOPE,
   SPOTIFY_PLAYLIST_MODIFY_PUBLIC_SCOPE,
   SPOTIFY_UGC_IMAGE_UPLOAD_SCOPE,
