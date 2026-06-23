@@ -313,6 +313,69 @@ function createNorwegianLearningStore({ config, logger }) {
       };
     },
 
+    async listNorwegianLessons(userScope, limit = 50) {
+      const scope = normalizeUserScope(userScope);
+      const { rows } = await pool.query(
+        `SELECT id, topic, level, source_status, notes, created_at FROM norwegian_lessons WHERE user_scope = $1 ORDER BY created_at DESC LIMIT $2`,
+        [scope, limit],
+      );
+      return rows;
+    },
+
+    async listNorwegianCorrections(userScope, limit = 50) {
+      const scope = normalizeUserScope(userScope);
+      const { rows } = await pool.query(
+        `SELECT id, original_text, corrected_text, explanation, source_status, created_at FROM norwegian_corrections WHERE user_scope = $1 ORDER BY created_at DESC LIMIT $2`,
+        [scope, limit],
+      );
+      return rows;
+    },
+
+    async listNorwegianVocabulary(userScope, limit = 100) {
+      const scope = normalizeUserScope(userScope);
+      const { rows } = await pool.query(
+        `SELECT id, word, translation, source_status, notes, created_at FROM norwegian_vocabulary WHERE user_scope = $1 ORDER BY created_at DESC LIMIT $2`,
+        [scope, limit],
+      );
+      return rows;
+    },
+
+    async listNorwegianMediaLinks(userScope, limit = 50) {
+      const scope = normalizeUserScope(userScope);
+      const { rows } = await pool.query(
+        `SELECT id, title, media_type, source_id, source_status, notes, created_at FROM norwegian_media_links WHERE user_scope = $1 ORDER BY created_at DESC LIMIT $2`,
+        [scope, limit],
+      );
+      return rows;
+    },
+
+    async listNorwegianReviewItems(userScope, limit = 50) {
+      const scope = normalizeUserScope(userScope);
+      const { rows } = await pool.query(
+        `SELECT id, item_type, content, source_status, due_at, created_at FROM norwegian_review_items WHERE user_scope = $1 ORDER BY COALESCE(due_at, created_at) DESC LIMIT $2`,
+        [scope, limit],
+      );
+      return rows;
+    },
+
+    async listNorwegianPronunciationAttempts(userScope, limit = 50) {
+      const scope = normalizeUserScope(userScope);
+      const { rows } = await pool.query(
+        `SELECT id, word_or_phrase, source_status, notes, created_at FROM norwegian_pronunciation_attempts WHERE user_scope = $1 ORDER BY created_at DESC LIMIT $2`,
+        [scope, limit],
+      );
+      return rows;
+    },
+
+    async updateNorwegianReviewItem(userScope, itemId, updates) {
+      const scope = normalizeUserScope(userScope);
+      const { rows } = await pool.query(
+        `UPDATE norwegian_review_items SET due_at = COALESCE($3, due_at), content = COALESCE($4, content) WHERE id = $1 AND user_scope = $2 RETURNING *`,
+        [itemId, scope, updates.dueAt || null, updates.content || null],
+      );
+      return rows[0] || null;
+    },
+
     async close() {
       await pool.end();
     },

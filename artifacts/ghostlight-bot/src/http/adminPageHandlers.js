@@ -37,6 +37,7 @@ const { handleInnerLifePageRequest } = require("./adminPageHandlers/innerLifePag
 const { handleContinuityPageRequest } = require("./adminPageHandlers/continuityPageHandler");
 const { handleGameAdminPageRequest } = require("../games/http/gameAdminPageHandler");
 const { handleNorwegianLearningPageRequest } = require("./adminPageHandlers/norwegianLearningPageHandler");
+const { handleNorwegianDashboardRequest } = require("./adminPageHandlers/norwegianDashboardHandler");
 
 async function handleAdminPageRequest({
   req = null,
@@ -378,7 +379,14 @@ async function handleAdminPageRequest({
   }
 
   if (route.section === "norwegian") {
-    await handleNorwegianLearningPageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });
+    const page = url.searchParams.get("page") || "settings";
+    const logger = innerContext.logger || console;
+
+    if (page === "dashboard") {
+      await handleNorwegianDashboardRequest({ url, innerRes, innerContext, helpers, theme, themeLinks, logger });
+    } else {
+      await handleNorwegianLearningPageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });
+    }
     return;
   }
 
@@ -395,4 +403,5 @@ module.exports = {
   handleAdminPageRequest,
   handleGeneratedDetailRequest,
   handleNorwegianLearningPageRequest,
+  handleNorwegianDashboardRequest,
 };
