@@ -1496,6 +1496,33 @@ function createMusicLibraryService({
         const spotifyPlaylist = spotify.fetchPlaylist
           ? await spotify.fetchPlaylist({ userScope, playlistId: normalizedPlaylistId, accessToken, scope: token?.scope })
           : null;
+      logger?.info?.("[spotify] playlist import started", { playlistId: normalizedPlaylistId });
+      const spotifyPlaylist = spotify.fetchPlaylist
+        ? await spotify.fetchPlaylist({ userScope, playlistId: normalizedPlaylistId })
+        : null;
+      const spotifyTracks = await spotify.fetchPlaylistTracks({ userScope, playlistId: normalizedPlaylistId, limit });
+      const availableSpotifyTracks = [];
+      let unavailableSkipped = 0;
+
+      for (const spotifyTrack of spotifyTracks) {
+        if (spotifyTrack?.spotifyTrackId) {
+          availableSpotifyTracks.push(spotifyTrack);
+        } else {
+          unavailableSkipped += 1;
+        }
+      }
+
+      const existingIds = new Set(await store.listExistingSpotifyTrackIds?.(
+        availableSpotifyTracks.map((track) => track.spotifyTrackId),
+        { userScope },
+      ) || []);
+      const importedTracks = [];
+
+      for (const spotifyTrack of availableSpotifyTracks) {
+        importedTracks.push(await store.upsertTrack(spotifyTrack, { userScope, source: "spotify_playlist" }));
+      }
+      const newTrackCount = importedTracks.filter((track) => !existingIds.has(track.spotifyTrackId)).length;
+      const updatedTrackCount = importedTracks.length - newTrackCount;
 
         stage = "playlist_items_fetch";
         const spotifyTracks = await spotify.fetchPlaylistTracks({
@@ -1505,6 +1532,47 @@ function createMusicLibraryService({
           accessToken,
           scope: token?.scope,
         });
+          spotifyPlaylistId: normalizedPlaylistId,
+          spotifyUri: spotifyPlaylist?.spotifyUri || `spotify:playlist:${normalizedPlaylistId}`,
+          spotifyUrl: spotifyPlaylist?.spotifyUrl || `https://open.spotify.com/playlist/${normalizedPlaylistId}`,
+          name: spotifyPlaylist?.name || `Spotify playlist ${normalizedPlaylistId}`,
+          description: spotifyPlaylist?.description || "",
+          source: "spotify_import",
+          trackCount: importedTracks.length,
+          spotifyCoverUrl: spotifyPlaylist?.spotifyCoverUrl || "",
+        }, { userScope });
+        const importedBySpotifyTrackId = new Map(importedTracks.map((track) => [track.spotifyTrackId, track]));
+        const seenPlaylistTrackIds = new Set();
+        const playlistTracks = [];
+        let duplicatesSkipped = 0;
+
+        for (const [index, track] of availableSpotifyTracks.entries()) {
+          if (seenPlaylistTrackIds.has(track.spotifyTrackId)) {
+            duplicatesSkipped += 1;
+            logger?.info?.("[spotify] playlist import duplicate skipped", {
+              playlistId: normalizedPlaylistId,
+              spotifyTrackId: track.spotifyTrackId,
+            });
+            continue;
+          }
+
+          seenPlaylistTrackIds.add(track.spotifyTrackId);
+          playlistTracks.push({
+            musicTrackId: importedBySpotifyTrackId.get(track.spotifyTrackId)?.musicTrackId,
+            spotifyTrackId: track.spotifyTrackId,
+            position: index,
+            source: "spotify_playlist",
+          });
+        }
+
+        storedTracks = await store.replacePlaylistTracks(storedPlaylist.musicPlaylistId, playlistTracks
+          .filter((track) => track.musicTrackId && track.spotifyTrackId));
+        storedTracks.duplicatesSkipped = duplicatesSkipped;
+        storedTracks.unavailableSkipped = unavailableSkipped;
+      } else {
+        storedTracks.duplicatesSkipped = 0;
+        storedTracks.unavailableSkipped = unavailableSkipped;
+      }
 
         stage = "pagination";
         const unavailableSkipped = spotifyTracks.filter((track) => !track?.spotifyTrackId).length;
@@ -1599,6 +1667,37 @@ function createMusicLibraryService({
       } catch (error) {
         throw failImport(error);
       }
+      logger?.info?.("[spotify] playlist import completed", {
+        userScope,
+        playlistId: normalizedPlaylistId,
+        tracksImported: importedTracks.length,
+        tracksUpdated: updatedTrackCount,
+        duplicatesSkipped: Number(storedTracks.duplicatesSkipped || 0),
+        unavailableSkipped,
+        skipped: Math.max(0, spotifyTracks.length - importedTracks.length),
+        newTrackCount,
+        updatedTrackCount,
+        storedTrackCount: storedTracks.length,
+        syncedCount: syncResult.syncedCount,
+        syncSkipped: syncResult.skipped,
+      });
+
+      return {
+        playlistId: normalizedPlaylistId,
+        importedCount: importedTracks.length,
+        processedCount: spotifyTracks.length,
+        skippedCount: Math.max(0, spotifyTracks.length - importedTracks.length),
+        duplicatesSkipped: Number(storedTracks.duplicatesSkipped || 0),
+        unavailableSkipped,
+        tracksImported: importedTracks.length,
+        tracksUpdated: updatedTrackCount,
+        musicPlaylistId: storedPlaylist?.musicPlaylistId || "",
+        storedTrackCount: storedTracks.length,
+        newTrackCount,
+        updatedTrackCount,
+        syncedCount: syncResult.syncedCount,
+        syncSkipped: syncResult.skipped,
+      };
     },
 
     async syncTrackedPlaylist({ userScope, spotifyPlaylistId, limit = 5000 } = {}) {
