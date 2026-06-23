@@ -33,7 +33,8 @@
     "inspect:database-source": "node scripts/inspect-database-source.mjs",
     "debug:db-env": "node -e \"process.env.DATABASE_URL && console.log('[db:env] DATABASE_URL is set') || console.log('[db:env] DATABASE_URL is NOT set')\"",
     "verify:spotify-config": "node scripts/verify-spotify-config.mjs",
-    "verify:spotify-import": "node scripts/verify-spotify-import-flow.mjs"
+    "verify:spotify-import": "node scripts/verify-spotify-import-flow.mjs",
+    "verify:music-embeddings": "node scripts/verify-music-embeddings.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

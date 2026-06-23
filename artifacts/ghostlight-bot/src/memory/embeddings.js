@@ -21,12 +21,19 @@ function isRetryableEmbeddingError(error) {
   return /no successful provider responses|rate limit|temporar|timeout|timed out|overloaded|upstream|provider/i.test(message);
 }
 
+function safeEmbeddingReason(error = {}) {
+  return String(error?.message || error || "embedding_failed")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [redacted]")
+    .slice(0, 240);
+}
+
 async function embedTexts({
   config,
   inputs,
   client: providedClient,
   maxAttempts = 2,
   retryDelayMs = 250,
+  logger = console,
 }) {
   if (!hasLlmApiKey(config, "embedding")) {
     throw new Error("An embedding-capable LLM API key is required for memory embeddings.");
@@ -43,9 +50,19 @@ async function embedTexts({
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
+      logger?.info?.("[music:embedding] request", {
+        provider: "openrouter",
+        model,
+        inputLength: inputs.reduce((total, input) => total + String(input || "").length, 0),
+      });
       const response = await client.embeddings.create({
         model,
         input: inputs,
+      });
+      logger?.info?.("[music:embedding] response", {
+        provider: "openrouter",
+        status: 200,
+        ok: Array.isArray(response?.data),
       });
 
       if (!Array.isArray(response?.data)) {
@@ -57,6 +74,12 @@ async function embedTexts({
         .map((item) => item.embedding);
     } catch (error) {
       lastError = error;
+
+      logger?.warn?.("[music:embedding] failed", {
+        provider: "openrouter",
+        status: Number(error?.status || error?.response?.status || 0) || undefined,
+        reason: safeEmbeddingReason(error),
+      });
 
       if (attempt >= attempts || !isRetryableEmbeddingError(error)) {
         throw error;
@@ -74,4 +97,5 @@ async function embedTexts({
 module.exports = {
   embedTexts,
   isRetryableEmbeddingError,
+  safeEmbeddingReason,
 };
