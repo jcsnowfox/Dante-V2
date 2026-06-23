@@ -38,7 +38,11 @@
     "verify:norwegian-foundation": "node scripts/verify-norwegian-foundation.mjs",
     "verify:norwegian-settings": "node scripts/verify-norwegian-settings.mjs",
     "verify:norwegian-source-policy": "node scripts/verify-norwegian-source-policy.mjs",
-    "verify:norwegian-storage": "node scripts/verify-norwegian-storage.mjs"
+    "verify:norwegian-storage": "node scripts/verify-norwegian-storage.mjs",
+    "verify:norwegian-discord-commands": "node scripts/verify-norwegian-discord-commands.mjs",
+    "verify:norwegian-corrections": "node scripts/verify-norwegian-corrections.mjs",
+    "verify:norwegian-media-commands": "node scripts/verify-norwegian-media-commands.mjs",
+    "verify:norwegian-learning-events": "node scripts/verify-norwegian-learning-events.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",
