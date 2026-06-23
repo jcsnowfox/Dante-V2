@@ -91,7 +91,40 @@ function buildCapabilityConfig({
   };
 }
 
+function logDbEnvDiagnostic() {
+  const rawUrl = process.env.DATABASE_URL || "";
+  if (!rawUrl) {
+    console.warn("[db:env] DATABASE_URL is not set — database persistence is disabled");
+    return;
+  }
+
+  try {
+    const url = new URL(rawUrl);
+    const sslMode = process.env.PGSSLMODE || url.searchParams.get("sslmode") || "default";
+    const passwordLength = url.password ? url.password.length : 0;
+    console.info(
+      `[db:env] database url detected host=${url.hostname} port=${url.port || "5432"} user=${url.username} database=${url.pathname.replace(/^\//, "")} passwordLength=${passwordLength} sslMode=${sslMode}`,
+    );
+  } catch {
+    console.warn("[db:env] DATABASE_URL is set but could not be parsed as a URL");
+  }
+
+  // Log presence of related DB env vars (values never logged — only presence)
+  const dbEnvVars = [
+    "DATABASE_URL", "PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE",
+    "PGSSLMODE", "PGSSLCERT", "PGSSLKEY", "PGSSLROOTCERT",
+    "DATABASE_PRIVATE_URL", "DATABASE_PUBLIC_URL",
+  ];
+  const present = dbEnvVars.filter((v) => Boolean(process.env[v]));
+  const absent = dbEnvVars.filter((v) => !process.env[v]);
+  console.info("[db:env] env vars present:", present.join(", ") || "(none)");
+  if (absent.length) {
+    console.info("[db:env] env vars absent:", absent.join(", "));
+  }
+}
+
 function loadConfig() {
+  logDbEnvDiagnostic();
   const llmProvider = readProvider(process.env.LLM_PROVIDER, "openrouter");
   const llmChatModel = process.env.CHAT_LLM_MODEL || process.env.LLM_CHAT_MODEL || process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || "openai/gpt-5.4";
   const llmSummaryModel = process.env.SUMMARY_LLM_MODEL || process.env.LLM_SUMMARY_MODEL || process.env.OPENAI_SUMMARY_MODEL || "openai/gpt-5.4-mini";

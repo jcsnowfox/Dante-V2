@@ -3,65 +3,68 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
+const TABLE_NAME = 'memories';
 const REQUIRED_COLUMNS = new Map([
   ['id', 'bigint'],
-  ['conversation_id', 'text'],
-  ['thread_id', 'text'],
-  ['channel_id', 'text'],
-  ['guild_id', 'text'],
-  ['discord_message_id', 'text'],
-  ['author_id', 'text'],
-  ['author_name', 'text'],
-  ['role', 'text'],
+  ['memory_id', 'uuid'],
+  ['title', 'text'],
+  ['content', 'text'],
+  ['memory_type', 'text'],
+  ['domain', 'text'],
+  ['sensitivity', 'text'],
   ['source', 'text'],
-  ['event_type', 'text'],
-  ['content_text', 'text'],
-  ['metadata', 'jsonb'],
+  ['active', 'boolean'],
+  ['importance', 'integer'],
+  ['user_scope', 'text'],
+  ['reference_date', 'date'],
   ['created_at', 'timestamp with time zone'],
+  ['updated_at', 'timestamp with time zone'],
+  ['last_used_at', 'timestamp with time zone'],
+  ['use_count', 'integer'],
 ]);
-
 const REQUIRED_INDEXES = [
-  'conversation_events_conversation_created_at_idx',
-  'conversation_events_channel_created_at_idx',
-  'conversation_events_thread_created_at_idx',
-  'conversation_events_discord_message_id_idx',
-  'conversation_events_discord_message_message_unique_idx',
+  'memories_user_scope_active_idx',
+  'memories_memory_type_idx',
+  'memories_domain_idx',
+  'memories_reference_date_idx',
+  'memories_updated_at_idx',
 ];
 
 function pass(message) {
-  console.log(`[verify:conversations-schema] PASS ${message}`);
+  console.log(`[verify:memory-schema] PASS ${message}`);
 }
 
 function fail(message, details = {}) {
-  console.error(`[verify:conversations-schema] FAIL ${message}`, Object.keys(details).length ? details : '');
+  console.error(`[verify:memory-schema] FAIL ${message}`, Object.keys(details).length ? details : '');
   process.exitCode = 1;
 }
 
 async function main() {
   if (!process.env.DATABASE_URL) {
-    console.error('[verify:conversations-schema] DATABASE_URL is not set — skipping schema verification.');
+    console.error('[verify:memory-schema] DATABASE_URL is not set — skipping schema verification.');
     process.exit(1);
   }
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
   try {
+    // Check memories table
     const tableResult = await pool.query(
-      `SELECT to_regclass('public.conversation_events') AS table_name;`,
+      `SELECT to_regclass('public.${TABLE_NAME}') AS table_name;`,
     );
 
     if (!tableResult.rows[0]?.table_name) {
-      fail('conversation_events table is missing');
+      fail(`${TABLE_NAME} table is missing`);
       return;
     }
 
-    pass('conversation_events table exists');
+    pass(`${TABLE_NAME} table exists`);
 
     const columnsResult = await pool.query(`
       SELECT column_name, data_type
       FROM information_schema.columns
       WHERE table_schema = 'public'
-        AND table_name = 'conversation_events';
+        AND table_name = '${TABLE_NAME}';
     `);
     const columns = new Map(columnsResult.rows.map((row) => [row.column_name, row.data_type]));
 
@@ -80,7 +83,7 @@ async function main() {
       SELECT indexname
       FROM pg_indexes
       WHERE schemaname = 'public'
-        AND tablename = 'conversation_events';
+        AND tablename = '${TABLE_NAME}';
     `);
     const indexes = new Set(indexesResult.rows.map((row) => row.indexname));
 
@@ -92,8 +95,19 @@ async function main() {
       }
     }
 
+    // Check memory_usage_events table existence
+    const usageTableResult = await pool.query(
+      `SELECT to_regclass('public.memory_usage_events') AS table_name;`,
+    );
+
+    if (!usageTableResult.rows[0]?.table_name) {
+      fail(`memory_usage_events table is missing`);
+    } else {
+      pass(`memory_usage_events table exists`);
+    }
+
     if (!process.exitCode) {
-      console.log('[verify:conversations-schema] All checks passed.');
+      console.log(`[verify:memory-schema] All checks passed.`);
     }
   } finally {
     await pool.end();
@@ -101,6 +115,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('[verify:conversations-schema] Unexpected error:', error.message);
+  console.error('[verify:memory-schema] Unexpected error:', error.message);
   process.exit(1);
 });

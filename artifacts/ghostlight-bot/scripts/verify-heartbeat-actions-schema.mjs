@@ -3,43 +3,42 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
+const TABLE_NAME = 'heartbeat_actions';
 const REQUIRED_COLUMNS = new Map([
   ['id', 'bigint'],
-  ['conversation_id', 'text'],
-  ['thread_id', 'text'],
-  ['channel_id', 'text'],
-  ['guild_id', 'text'],
-  ['discord_message_id', 'text'],
-  ['author_id', 'text'],
-  ['author_name', 'text'],
-  ['role', 'text'],
-  ['source', 'text'],
-  ['event_type', 'text'],
-  ['content_text', 'text'],
-  ['metadata', 'jsonb'],
+  ['action_id', 'text'],
+  ['user_scope', 'text'],
+  ['label', 'text'],
+  ['executor_type', 'text'],
+  ['target_channel_id', 'text'],
+  ['prompt', 'text'],
+  ['frequency', 'text'],
+  ['quiet_hours_allowed', 'boolean'],
+  ['mention_user', 'boolean'],
+  ['tags', 'text'],
+  ['enabled', 'boolean'],
+  ['is_builtin', 'boolean'],
   ['created_at', 'timestamp with time zone'],
+  ['updated_at', 'timestamp with time zone'],
 ]);
-
 const REQUIRED_INDEXES = [
-  'conversation_events_conversation_created_at_idx',
-  'conversation_events_channel_created_at_idx',
-  'conversation_events_thread_created_at_idx',
-  'conversation_events_discord_message_id_idx',
-  'conversation_events_discord_message_message_unique_idx',
+  'heartbeat_actions_user_scope_idx',
+  'heartbeat_actions_enabled_idx',
+  'heartbeat_actions_builtin_idx',
 ];
 
 function pass(message) {
-  console.log(`[verify:conversations-schema] PASS ${message}`);
+  console.log(`[verify:heartbeat-actions-schema] PASS ${message}`);
 }
 
 function fail(message, details = {}) {
-  console.error(`[verify:conversations-schema] FAIL ${message}`, Object.keys(details).length ? details : '');
+  console.error(`[verify:heartbeat-actions-schema] FAIL ${message}`, Object.keys(details).length ? details : '');
   process.exitCode = 1;
 }
 
 async function main() {
   if (!process.env.DATABASE_URL) {
-    console.error('[verify:conversations-schema] DATABASE_URL is not set — skipping schema verification.');
+    console.error('[verify:heartbeat-actions-schema] DATABASE_URL is not set — skipping schema verification.');
     process.exit(1);
   }
 
@@ -47,21 +46,21 @@ async function main() {
 
   try {
     const tableResult = await pool.query(
-      `SELECT to_regclass('public.conversation_events') AS table_name;`,
+      `SELECT to_regclass('public.${TABLE_NAME}') AS table_name;`,
     );
 
     if (!tableResult.rows[0]?.table_name) {
-      fail('conversation_events table is missing');
+      fail(`${TABLE_NAME} table is missing`);
       return;
     }
 
-    pass('conversation_events table exists');
+    pass(`${TABLE_NAME} table exists`);
 
     const columnsResult = await pool.query(`
       SELECT column_name, data_type
       FROM information_schema.columns
       WHERE table_schema = 'public'
-        AND table_name = 'conversation_events';
+        AND table_name = '${TABLE_NAME}';
     `);
     const columns = new Map(columnsResult.rows.map((row) => [row.column_name, row.data_type]));
 
@@ -80,7 +79,7 @@ async function main() {
       SELECT indexname
       FROM pg_indexes
       WHERE schemaname = 'public'
-        AND tablename = 'conversation_events';
+        AND tablename = '${TABLE_NAME}';
     `);
     const indexes = new Set(indexesResult.rows.map((row) => row.indexname));
 
@@ -93,7 +92,7 @@ async function main() {
     }
 
     if (!process.exitCode) {
-      console.log('[verify:conversations-schema] All checks passed.');
+      console.log(`[verify:heartbeat-actions-schema] All checks passed.`);
     }
   } finally {
     await pool.end();
@@ -101,6 +100,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('[verify:conversations-schema] Unexpected error:', error.message);
+  console.error('[verify:heartbeat-actions-schema] Unexpected error:', error.message);
   process.exit(1);
 });
