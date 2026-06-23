@@ -19,6 +19,39 @@ const {
   buildImageConversationContextSection,
 } = require("./imageConversationState");
 
+function normalizeAdultPrivateChannelId(channelId) {
+  const value = String(channelId || "").trim();
+  return /^\d{17,20}$/.test(value) ? value : null;
+}
+
+function getAdultPrivateModeScope({ adultMode, channelId, inDevMode = false }) {
+  const rawConfiguredChannelId = String(adultMode?.channelId || "").trim();
+  const configuredChannelId = normalizeAdultPrivateChannelId(rawConfiguredChannelId);
+
+  if (inDevMode) {
+    return { active: false, configuredChannelId, reason: "dev_mode" };
+  }
+
+  if (!adultMode?.enabled) {
+    return { active: false, configuredChannelId, reason: "disabled" };
+  }
+
+  if (!rawConfiguredChannelId) {
+    return { active: false, configuredChannelId: "", reason: "missing_private_channel" };
+  }
+
+  if (!configuredChannelId) {
+    return { active: false, configuredChannelId: "", reason: "invalid_private_channel" };
+  }
+
+  const currentChannelId = String(channelId || "").trim();
+  if (currentChannelId !== configuredChannelId) {
+    return { active: false, configuredChannelId, reason: "channel_mismatch" };
+  }
+
+  return { active: true, configuredChannelId, reason: "channel_match" };
+}
+
 function createChatPipeline({
   config,
   logger,
@@ -330,15 +363,31 @@ function createChatPipeline({
       }
 
       const adultMode = config.chat?.adultPrivateMode;
-      const adultModeActive = !inDevMode
-        && Boolean(adultMode?.enabled)
-        && Boolean(adultMode?.channelId)
-        && message.channelId === adultMode.channelId;
+      const adultScope = getAdultPrivateModeScope({
+        adultMode,
+        channelId: message.channelId,
+        inDevMode,
+      });
+
+      logger.info?.(`[adult-mode] scope check channel=${message.channelId || ""} configured=${adultScope.configuredChannelId || ""} active=${adultScope.active ? "true" : "false"} reason=${adultScope.reason}`, {
+        messageId: message.id,
+        channelId: message.channelId || null,
+        configuredChannelId: adultScope.configuredChannelId || null,
+        active: adultScope.active,
+        reason: adultScope.reason,
+      });
+
+      if (adultScope.reason === "missing_private_channel" || adultScope.reason === "invalid_private_channel") {
+        logger.warn?.("[adult-mode] enabled but no private channel configured; adult mode disabled", {
+          messageId: message.id,
+          channelId: message.channelId || null,
+        });
+      }
 
       let effectiveMode = selectedMode;
       let adultSystemPromptPrefix = null;
 
-      if (adultModeActive) {
+      if (adultScope.active) {
         const safeword = String(adultMode.safeword || "red").trim().toLowerCase();
         const messageText = String(input.content || "").trim().toLowerCase();
         const safewordTriggered = safeword && messageText === safeword;
@@ -501,4 +550,5 @@ function createChatPipeline({
 
 module.exports = {
   createChatPipeline,
+  getAdultPrivateModeScope,
 };
