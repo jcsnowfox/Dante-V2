@@ -314,12 +314,15 @@ function loadConfig() {
     giphy: {
       apiKey: process.env.GIPHY_API_KEY || "",
     },
+    // Railway (Tigris) injects AWS-standard variable names; the app's own names
+    // (BUCKET, ACCESS_KEY_ID, etc.) take priority so existing deployments that
+    // already set them are not affected.
     bucket: {
-      name: String(process.env.BUCKET || "").trim(),
-      accessKeyId: String(process.env.ACCESS_KEY_ID || "").trim(),
-      secretAccessKey: String(process.env.SECRET_ACCESS_KEY || "").trim(),
-      endpoint: String(process.env.ENDPOINT || "").trim(),
-      region: String(process.env.REGION || "auto").trim() || "auto",
+      name: String(process.env.BUCKET || process.env.BUCKET_NAME || process.env.TIGRIS_BUCKET_NAME || process.env.AWS_BUCKET || "").trim(),
+      accessKeyId: String(process.env.ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || "").trim(),
+      secretAccessKey: String(process.env.SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || "").trim(),
+      endpoint: String(process.env.ENDPOINT || process.env.AWS_ENDPOINT_URL_S3 || "").trim(),
+      region: String(process.env.REGION || process.env.AWS_REGION || "auto").trim() || "auto",
       // Most providers (Tigris/storageapi.dev, AWS, R2) use virtual-hosted-style
       // URLs. Set BUCKET_FORCE_PATH_STYLE=true only for path-style-only providers.
       forcePathStyle: String(process.env.BUCKET_FORCE_PATH_STYLE || "").trim().toLowerCase() === "true",
