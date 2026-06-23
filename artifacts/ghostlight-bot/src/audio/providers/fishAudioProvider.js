@@ -105,6 +105,7 @@ async function generateFishAudioClip({
   config,
   text,
   fetchImpl = globalThis.fetch,
+  logger = null,
 }) {
   const apiKey = String(config.fishAudio?.apiKey || "").trim();
   const voiceId = String(config.audio?.fishVoiceId || config.fishAudio?.voiceId || "").trim();
@@ -112,10 +113,12 @@ async function generateFishAudioClip({
   const baseUrl = resolveFishAudioBaseUrl(config);
 
   if (!apiKey) {
+    logger?.warn?.("[audio] fish synthesis failed", { stage: "provider_config", reason: "apiKey missing" });
     throw new Error("Fish Audio API key is not configured.");
   }
 
   if (!voiceId) {
+    logger?.warn?.("[audio] fish synthesis failed", { stage: "provider_config", reason: "voiceId missing" });
     throw new Error("Fish Audio voice ID is not configured.");
   }
 
@@ -130,22 +133,52 @@ async function generateFishAudioClip({
     bodyObj.model = modelId;
   }
 
-  const response = await fetchImpl(`${baseUrl}/v1/tts`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/msgpack",
-    },
-    body: packObject(bodyObj),
-  });
+  let body;
+  try {
+    body = packObject(bodyObj);
+  } catch (packError) {
+    logger?.warn?.("[audio] fish synthesis failed", { stage: "request_build", error: packError.message });
+    throw packError;
+  }
+
+  let response;
+  try {
+    response = await fetchImpl(`${baseUrl}/v1/tts`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/msgpack",
+      },
+      body,
+    });
+  } catch (fetchError) {
+    logger?.warn?.("[audio] fish synthesis failed", { stage: "fish_api_request", error: fetchError.message });
+    throw fetchError;
+  }
+
+  logger?.info?.(`[audio] fish response status=${response.status}`);
 
   if (!response.ok) {
     const errorText = typeof response.text === "function" ? await response.text() : "";
-    throw new Error(formatFishAudioRequestError({ status: response.status, errorText }));
+    const errMsg = formatFishAudioRequestError({ status: response.status, errorText });
+    logger?.warn?.("[audio] fish synthesis failed", { stage: "fish_api_response", status: response.status });
+    throw new Error(errMsg);
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  let arrayBuffer;
+  try {
+    arrayBuffer = await response.arrayBuffer();
+  } catch (decodeError) {
+    logger?.warn?.("[audio] fish synthesis failed", { stage: "audio_decode", error: decodeError.message });
+    throw decodeError;
+  }
+
+  try {
+    return Buffer.from(arrayBuffer);
+  } catch (bufferError) {
+    logger?.warn?.("[audio] fish synthesis failed", { stage: "audio_decode", error: bufferError.message });
+    throw bufferError;
+  }
 }
 
 module.exports = {

@@ -128,8 +128,21 @@ async function checkSchema(pool) {
 }
 
 function checkStaticRouting() {
-  const source = readFileSync(new URL('../artifacts/ghostlight-bot/src/audio/generateAudio.js', import.meta.url), 'utf8') + readFileSync(new URL('../artifacts/ghostlight-bot/src/storage/generatedAudio/index.js', import.meta.url), 'utf8');
-  for (const pattern of ['resolveTtsProvider', 'fish_audio', 'generateFishAudioClip', 'provider_voice_id', 'provider_model_id']) {
+  const source = readFileSync(new URL('../artifacts/ghostlight-bot/src/audio/generateAudio.js', import.meta.url), 'utf8')
+    + readFileSync(new URL('../artifacts/ghostlight-bot/src/storage/generatedAudio/index.js', import.meta.url), 'utf8');
+
+  for (const pattern of [
+    'resolveTtsProvider',
+    'fish_audio',
+    'generateFishAudioClip',
+    'provider_voice_id',
+    'provider_model_id',
+    '[audio] generate requested',
+    '[audio] fish synthesis started',
+    '[audio] fish synthesis completed',
+    '[audio] generated audio persisted',
+    '[audio] fish synthesis failed',
+  ]) {
     if (source.includes(pattern)) pass(`audio generation source contains: ${pattern}`);
     else fail(`audio generation source missing: ${pattern}`);
   }

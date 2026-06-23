@@ -1,7 +1,7 @@
 const { createImageGenerationService } = require("../images/generateImage");
 const { createGeneratedImageAnalysisService } = require("../images/analyzeImage");
 const { hasBucketConfig, hasLocalStorageConfig, hasStorageConfig } = require("../images/bucketStorage");
-const { createAudioGenerationService } = require("../audio/generateAudio");
+const { createAudioGenerationService, resolveTtsProvider } = require("../audio/generateAudio");
 const { saveRequestedMemory } = require("../memory/saveRequest");
 const {
   createGiphySearchTool,
@@ -141,8 +141,12 @@ function createToolRegistry({
       },
     );
   } else {
+    const registeredModel = selectedAudioProvider === "fish_audio"
+      ? String(config.audio?.fishModelId || config.fishAudio?.modelId || "fish-speech").trim()
+      : String(config.audio?.generatedAudioModel || "eleven_multilingual_v2").trim();
     logger.info("[tools] generate_audio tool registered", {
-      model: String(config.audio?.generatedAudioModel || "eleven_multilingual_v2").trim(),
+      provider: selectedAudioProvider,
+      model: registeredModel,
     });
   }
 
