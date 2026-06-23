@@ -8,6 +8,17 @@ const DIRECT_GIF_PATTERNS = [
   /^https:\/\/c\.tenor\.com\//i,
 ];
 
+const DEFAULT_GIF_SEND_MODE = "embed_image";
+const SUPPORTED_GIF_SEND_MODES = new Set(["embed_image", "direct_url", "disabled"]);
+
+function getGifSendMode(config = {}) {
+  const configuredMode = String(config.gifs?.sendMode || "").trim().toLowerCase();
+
+  return SUPPORTED_GIF_SEND_MODES.has(configuredMode)
+    ? configuredMode
+    : DEFAULT_GIF_SEND_MODE;
+}
+
 function isValidDirectGifUrl(url) {
   if (!url || typeof url !== "string") {
     return false;
@@ -85,6 +96,8 @@ function normalizeGifResult(rawItem, provider = "giphy") {
 }
 
 module.exports = {
+  DEFAULT_GIF_SEND_MODE,
+  getGifSendMode,
   normalizeGifResult,
   normalizeGiphyItem,
   isValidDirectGifUrl,

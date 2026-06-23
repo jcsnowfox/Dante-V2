@@ -6,6 +6,7 @@ const DISCORD_MESSAGE_MAX_LENGTH = 2000;
 const MAX_OUTGOING_CHUNKS = 5;
 const DEFAULT_TYPING_INDICATOR_TIMEOUT_MS = 2000;
 const STANDALONE_URL_PATTERN = /^https?:\/\/\S+$/i;
+const URL_PATTERN = /https?:\/\/[^\s<>)]+/gi;
 const STANDALONE_MEDIA_URL_PATTERN = /\.(?:gif|webp|png|jpe?g)(?:[?#].*)?$/i;
 // Only match direct media URLs — page URLs (giphy.com/gifs/, tenor.com/view/) cannot embed in Discord.
 const STANDALONE_GIF_PROVIDER_PATTERN = /(?:^https:\/\/media\.giphy\.com\/|^https:\/\/(?:media\.|c\.)?tenor\.com\/)/i;
@@ -19,7 +20,45 @@ const { replaceCustomEmojiLabelsForDiscord } = require("../../reactions/customEm
 const { isDevMode, isLogRequest } = require("../../developer/devUtils");
 const { getLogsForDevReport, formatLogsForDiscord } = require("../../developer/railwayLogs");
 const { applyRuntimeSettings } = require("../../config/runtimeSettings");
-const { isValidDirectGifUrl } = require("../../media/gifUrlNormalizer");
+const { isValidDirectGifUrl, getGifSendMode } = require("../../media/gifUrlNormalizer");
+
+function stripTrailingUrlPunctuation(value) {
+  return String(value || "").replace(/[),.!?]+$/g, "");
+}
+
+function extractEmbeddableGifUrls(text) {
+  const urls = [];
+  const seen = new Set();
+  const content = String(text || "");
+  const matches = content.match(URL_PATTERN) || [];
+
+  for (const match of matches) {
+    const url = stripTrailingUrlPunctuation(match);
+
+    if (isValidDirectGifUrl(url) && !seen.has(url)) {
+      seen.add(url);
+      urls.push(url);
+    }
+  }
+
+  return urls;
+}
+
+function removeUrlsFromText(text, urls = []) {
+  let result = String(text || "");
+
+  for (const url of urls) {
+    const escapedUrl = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(new RegExp(`<?${escapedUrl}>?[),.!?]*`, "g"), "");
+  }
+
+  return result
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 function splitAroundStandaloneUrls(text) {
   const normalizedText = String(text || "").trim();
@@ -512,10 +551,17 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           imageWarnings: Array.isArray(reply.imageWarnings) ? reply.imageWarnings : [],
           internalThought: typeof reply.internalThought === "string" ? reply.internalThought.trim() : "",
         };
-      const outgoingContent = replaceCustomEmojiLabelsForDiscord(
+      const outgoingContentWithUrls = replaceCustomEmojiLabelsForDiscord(
         replyPayload.content,
         config.chat?.customReactionEmojis || [],
       );
+      const gifSendMode = getGifSendMode(config);
+      const gifEmbedUrls = gifSendMode === "embed_image"
+        ? extractEmbeddableGifUrls(outgoingContentWithUrls)
+        : [];
+      const outgoingContent = gifEmbedUrls.length
+        ? removeUrlsFromText(outgoingContentWithUrls, gifEmbedUrls)
+        : outgoingContentWithUrls;
       const replyChunks = splitTextIntoChunks(replyPayload.content);
       const outgoingChunks = splitTextIntoChunks(outgoingContent);
       let sentReply = null;
@@ -560,8 +606,6 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
         }
       }
 
-      const gifSendMode = String(config.gifs?.sendMode || "direct_url").trim().toLowerCase();
-
       for (const [index, chunk] of outgoingChunks.entries()) {
         const isLastChunk = index === outgoingChunks.length - 1;
         const trimmedChunk = chunk.trim();
@@ -604,6 +648,41 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
               imageWarnings: replyPayload.imageWarnings,
             }),
             flags: replyPayload.suppressEmbeds ? ["SuppressEmbeds"] : undefined,
+          });
+        }
+      }
+
+      for (const [index, gifUrl] of gifEmbedUrls.entries()) {
+        const shouldAttachFiles = !outgoingChunks.length && index === gifEmbedUrls.length - 1;
+
+        logger.debug?.("[gif] sending extracted Discord embed image", {
+          url: gifUrl,
+          conversationId,
+        });
+
+        try {
+          sentReply = await message.channel.send({
+            embeds: [{ image: { url: gifUrl } }],
+            files: shouldAttachFiles ? replyPayload.files : undefined,
+          });
+        } catch (error) {
+          if (!shouldAttachFiles || !replyPayload.files.length || !isDiscordEntityTooLargeError(error)) {
+            throw error;
+          }
+
+          const fallbackUrls = await buildGeneratedImageFallbackUrls({
+            generatedImageIds: replyPayload.generatedImageIds,
+            generatedImages,
+            config,
+          });
+
+          sentReply = await message.channel.send({
+            content: buildOversizeFallbackContent({
+              content: "",
+              urls: fallbackUrls,
+              imageWarnings: replyPayload.imageWarnings,
+            }),
+            embeds: [{ image: { url: gifUrl } }],
           });
         }
       }
@@ -705,6 +784,8 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
 
 module.exports = {
   createMessageCreateHandler,
+  extractEmbeddableGifUrls,
+  removeUrlsFromText,
   splitAroundStandaloneUrls,
   splitTextIntoChunks,
 };

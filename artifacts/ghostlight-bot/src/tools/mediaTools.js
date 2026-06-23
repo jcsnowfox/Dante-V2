@@ -12,7 +12,7 @@ const {
   normalizeCustomReactionEmojis,
 } = require("../reactions/customEmojiPalette");
 const { safeJsonParse } = require("./toolUtils");
-const { normalizeGiphyItem } = require("../media/gifUrlNormalizer");
+const { normalizeGiphyItem, getGifSendMode } = require("../media/gifUrlNormalizer");
 
 const DEFAULT_GIF_RESULT_LIMIT = 3;
 const MAX_GIF_RESULT_LIMIT = 5;
@@ -53,6 +53,9 @@ const CHAT_MULTI_IMAGE_REQUEST_PATTERNS = Object.freeze([
   /\b(?:two|2|both|couple|pair|multiple|several|few)\b[\s\S]{0,40}\b(?:images|pics|pictures|portraits|photos|illustrations|versions|variations)\b/i,
   /\b(?:all the|set of|series of|collection of)\b[\s\S]{0,40}\b(?:images|pics|pictures|portraits|photos|illustrations)\b/i,
 ]);
+const IMAGE_REQUEST_PATTERN = /\b(?:send|show|make|create|generate|draw|paint|render|give|get|want|need|see|try)\b[\s\S]{0,80}\b(?:photo|photos|pic|pics|picture|pictures|image|images|portrait|portraits|selfie|snapshot|drawing|render|art)\b/i;
+const IMAGE_WORD_PATTERN = /\b(?:photo|photos|pic|pics|picture|pictures|image|images|portrait|portraits|selfie|snapshot|drawing|render|art)\b/i;
+const GIF_WORD_PATTERN = /\b(?:gif|gifs|giphy|tenor)\b/i;
 
 function normalizeGifQuery(value) {
   return String(value || "")
@@ -61,10 +64,17 @@ function normalizeGifQuery(value) {
     .slice(0, 50);
 }
 
+function isImageGenerationRequest(value = "") {
+  const text = String(value || "");
+
+  return IMAGE_REQUEST_PATTERN.test(text)
+    || (IMAGE_WORD_PATTERN.test(text) && !GIF_WORD_PATTERN.test(text));
+}
+
 function createGiphySearchTool({ config, logger, fetchImpl = globalThis.fetch }) {
   const apiKey = String(config.giphy?.apiKey || "").trim();
   const gifsEnabled = config.gifs?.enabled !== false;
-  const gifSendMode = String(config.gifs?.sendMode || "direct_url").trim().toLowerCase();
+  const gifSendMode = getGifSendMode(config);
 
   if (!apiKey || typeof fetchImpl !== "function" || !gifsEnabled || gifSendMode === "disabled") {
     return null;
@@ -72,11 +82,15 @@ function createGiphySearchTool({ config, logger, fetchImpl = globalThis.fetch })
 
   return {
     name: "search_gifs",
+    isAvailable(context = {}) {
+      return !isImageGenerationRequest(context.currentUserText);
+    },
     definition: {
       type: "function",
       name: "search_gifs",
       description: [
         "Search GIPHY for a short reaction GIF when a GIF would add something to a light, playful, celebratory, or teasing moment.",
+        "Never use this for requests to send, make, show, or generate a photo, picture, image, portrait, selfie, drawing, render, or art; those are image-generation requests, not GIF requests.",
         "Use a 1-3 word search phrase. Choose by emotional fit, using the candidate titles and alt text.",
         "If you use a GIF, reply naturally first, then put the GIF URL on its own line. Do not invent GIF URLs.",
       ].join(" "),
@@ -852,5 +866,6 @@ module.exports = {
   createImageGenerationTool,
   createAudioGenerationTool,
   createAddReactionTool,
+  isImageGenerationRequest,
   shouldAllowAdditionalChatImageCall,
 };

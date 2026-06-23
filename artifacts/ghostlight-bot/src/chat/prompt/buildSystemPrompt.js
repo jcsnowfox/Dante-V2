@@ -218,6 +218,7 @@ function buildGifInstruction({ config, availableToolNames = null }) {
     "Good uses include comic timing, celebratory flourish, affectionate teasing, playful emphasis, or a deliberately dramatic reaction.",
     "Avoid GIFs in serious, vulnerable, logistical, technical, or emotionally delicate moments unless the user's tone clearly invites humour.",
     "Do not use a GIF just because the user used humour; use one only when it adds timing or emphasis that words alone would not.",
+    "Never use GIF search as a substitute for a requested photo, picture, image, portrait, selfie, drawing, render, or art; those requests require image generation if that tool is available.",
     "If the user sent a GIF, do not repost the same GIF or choose a near-identical reaction unless that repetition is clearly the joke.",
     "Only include a GIF URL that was returned by search_gifs in this turn; never invent or handwrite a GIF URL.",
     "If you use a GIF, include any needed words first, then put the GIF URL on its own line in plain text.",
@@ -240,6 +241,7 @@ function buildImageGenerationInstruction({ config, availableToolNames = null }) 
   return [
     "Image generation is available in chat as an occasional creative tool, not a default reply style.",
     "Call generate_image when the current user turn directly asks for an image, picture, drawing, render, visualisation, remake, variation, or another version.",
+    "Requests like 'send me a photo', 'show me a picture', 'send me a photo of us', or 'try the photo again' are image-generation requests; do not satisfy them with GIF search or a text-only promise.",
     "Call generate_image when the user clearly accepts a specific image offer you made in your immediately previous reply.",
     "You may briefly offer an image when a specific visual idea would genuinely add something special, such as a vivid scene, character beat, shared joke, memory, aesthetic concept, object, place, outfit, or emotional image.",
     "For spontaneous visual ideas, offer in words first; do not call generate_image unless the user directly asks or clearly accepts that specific offer.",
