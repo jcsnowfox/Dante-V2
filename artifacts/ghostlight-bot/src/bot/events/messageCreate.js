@@ -579,13 +579,29 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
       }
 
       if (!replyChunks.length && replyPayload.files.length) {
+        const _sendingAudio = replyPayload.generatedAudioIds.length > 0;
+        if (_sendingAudio) {
+          logger.info("[audio] discord attachment send started", {
+            audioIds: replyPayload.generatedAudioIds,
+            conversationId,
+          });
+        }
         try {
           sentReply = await message.channel.send({
             files: replyPayload.files,
             flags: replyPayload.suppressEmbeds ? ["SuppressEmbeds"] : undefined,
           });
+          if (_sendingAudio) {
+            logger.info("[audio] discord attachment sent", {
+              audioIds: replyPayload.generatedAudioIds,
+              discordMessageId: sentReply.id,
+            });
+          }
         } catch (error) {
           if (!isDiscordEntityTooLargeError(error)) {
+            if (_sendingAudio) {
+              logger.warn("[audio] fish synthesis failed", { stage: "discord_attachment_send", error: error.message });
+            }
             throw error;
           }
 
@@ -612,6 +628,14 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
         const isGifEmbedChunk = gifSendMode === "embed_image"
           && STANDALONE_URL_PATTERN.test(trimmedChunk)
           && isValidDirectGifUrl(trimmedChunk);
+        const _lastChunkWithAudio = isLastChunk && replyPayload.generatedAudioIds.length > 0 && replyPayload.files.length > 0;
+
+        if (_lastChunkWithAudio) {
+          logger.info("[audio] discord attachment send started", {
+            audioIds: replyPayload.generatedAudioIds,
+            conversationId,
+          });
+        }
 
         try {
           if (isGifEmbedChunk) {
@@ -630,8 +654,17 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
               flags: replyPayload.suppressEmbeds ? ["SuppressEmbeds"] : undefined,
             });
           }
+          if (_lastChunkWithAudio) {
+            logger.info("[audio] discord attachment sent", {
+              audioIds: replyPayload.generatedAudioIds,
+              discordMessageId: sentReply.id,
+            });
+          }
         } catch (error) {
           if (!isLastChunk || !replyPayload.files.length || !isDiscordEntityTooLargeError(error)) {
+            if (_lastChunkWithAudio && !isDiscordEntityTooLargeError(error)) {
+              logger.warn("[audio] fish synthesis failed", { stage: "discord_attachment_send", error: error.message });
+            }
             throw error;
           }
 
@@ -654,19 +687,36 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
 
       for (const [index, gifUrl] of gifEmbedUrls.entries()) {
         const shouldAttachFiles = !outgoingChunks.length && index === gifEmbedUrls.length - 1;
+        const _gifSendingAudio = shouldAttachFiles && replyPayload.generatedAudioIds.length > 0 && replyPayload.files.length > 0;
 
         logger.debug?.("[gif] sending extracted Discord embed image", {
           url: gifUrl,
           conversationId,
         });
 
+        if (_gifSendingAudio) {
+          logger.info("[audio] discord attachment send started", {
+            audioIds: replyPayload.generatedAudioIds,
+            conversationId,
+          });
+        }
+
         try {
           sentReply = await message.channel.send({
             embeds: [{ image: { url: gifUrl } }],
             files: shouldAttachFiles ? replyPayload.files : undefined,
           });
+          if (_gifSendingAudio) {
+            logger.info("[audio] discord attachment sent", {
+              audioIds: replyPayload.generatedAudioIds,
+              discordMessageId: sentReply.id,
+            });
+          }
         } catch (error) {
           if (!shouldAttachFiles || !replyPayload.files.length || !isDiscordEntityTooLargeError(error)) {
+            if (_gifSendingAudio && !isDiscordEntityTooLargeError(error)) {
+              logger.warn("[audio] fish synthesis failed", { stage: "discord_attachment_send", error: error.message });
+            }
             throw error;
           }
 
