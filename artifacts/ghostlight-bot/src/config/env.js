@@ -347,6 +347,16 @@ function loadConfig() {
     giphy: {
       apiKey: process.env.GIPHY_API_KEY || "",
     },
+    gifs: {
+      enabled: readBoolean(process.env.GIFS_ENABLED, true),
+      provider: String(process.env.GIF_PROVIDER || "giphy").trim().toLowerCase() || "giphy",
+      sendMode: ["direct_url", "embed_image", "disabled"].includes(
+        String(process.env.GIF_SEND_MODE || "").trim().toLowerCase(),
+      )
+        ? String(process.env.GIF_SEND_MODE || "").trim().toLowerCase()
+        : "direct_url",
+      fallbackTextEnabled: readBoolean(process.env.GIF_FALLBACK_TEXT_ENABLED, true),
+    },
     bucket: {
       name: String(process.env.BUCKET || process.env.BUCKET_NAME || process.env.TIGRIS_BUCKET_NAME || process.env.AWS_BUCKET || "").trim(),
       accessKeyId: String(process.env.ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || "").trim(),
