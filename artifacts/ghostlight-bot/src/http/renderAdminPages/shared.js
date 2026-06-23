@@ -174,7 +174,11 @@ function getRuntimeState({ config, dailyThreadAutomation = null, conversationSto
     imageGenerationResolutionValue: runtimeSettings["imageGeneration.resolution"] || config.imageGeneration?.resolution || "1K",
     imageGenerationHomepageFeedModeValue: runtimeSettings["imageGeneration.homepageFeedMode"] || config.imageGeneration?.homepageFeedMode || "randomized",
     audioTtsEnabled: Boolean(runtimeSettings["audio.ttsEnabled"] ?? config.audio?.ttsEnabled),
+    audioTtsProvider: runtimeSettings["audio.ttsProvider"] || config.audio?.ttsProvider || (runtimeSettings["audio.ttsEnabled"] ?? config.audio?.ttsEnabled ? "elevenlabs" : "none"),
     audioElevenlabsVoiceId: runtimeSettings["audio.elevenlabsVoiceId"] || config.audio?.elevenlabsVoiceId || "",
+    audioFishVoiceId: runtimeSettings["audio.fishVoiceId"] || config.audio?.fishVoiceId || config.fishAudio?.voiceId || "",
+    audioFishModelId: runtimeSettings["audio.fishModelId"] || config.audio?.fishModelId || config.fishAudio?.modelId || "",
+    fishAudioKeyConfigured: Boolean(String(config.fishAudio?.apiKey || "").trim()),
     audioReadAloudModel: runtimeSettings["audio.readAloudModel"] || config.audio?.readAloudModel || "eleven_flash_v2_5",
     audioGeneratedAudioModel: runtimeSettings["audio.generatedAudioModel"] || config.audio?.generatedAudioModel || "eleven_multilingual_v2",
     audioGallerySavedSourceSurfaces: Array.isArray(runtimeSettings["audio.gallerySavedSourceSurfaces"])

@@ -85,8 +85,26 @@ const EDITABLE_RUNTIME_SETTINGS = Object.freeze([
     },
   },
   {
+    key: "audio.ttsProvider",
+    path: ["audio", "ttsProvider"],
+    normalize: (value) => {
+      const normalized = String(value || "").trim().toLowerCase();
+      return ["none", "elevenlabs", "fish_audio"].includes(normalized) ? normalized : "elevenlabs";
+    },
+  },
+  {
     key: "audio.elevenlabsVoiceId",
     path: ["audio", "elevenlabsVoiceId"],
+    normalize: (value) => String(value || "").trim(),
+  },
+  {
+    key: "audio.fishVoiceId",
+    path: ["audio", "fishVoiceId"],
+    normalize: (value) => String(value || "").trim(),
+  },
+  {
+    key: "audio.fishModelId",
+    path: ["audio", "fishModelId"],
     normalize: (value) => String(value || "").trim(),
   },
   {

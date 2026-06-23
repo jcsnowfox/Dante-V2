@@ -1,7 +1,7 @@
 {
   "name": "dante-v2",
   "version": "2.0.0",
-  "description": "Dante V2 — Discord AI companion bot workspace",
+  "description": "Dante V2 \u2014 Discord AI companion bot workspace",
   "private": true,
   "license": "UNLICENSED",
   "devDependencies": {
@@ -92,5 +92,11 @@
       "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0",
       "esbuild": "0.27.3"
     }
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "verify:dashboard-audio-settings": "node scripts/verify-dashboard-audio-settings.mjs",
+    "verify:fish-audio": "node scripts/verify-fish-audio.mjs",
+    "verify:audio-generation": "node scripts/verify-audio-generation.mjs"
   }
 }

@@ -114,14 +114,27 @@ function createToolRegistry({
     });
   }
 
+  const selectedAudioProvider = String(config.audio?.ttsProvider || "elevenlabs").trim().toLowerCase();
+  const fishKeyConfigured = Boolean(String(config.fishAudio?.apiKey || "").trim());
+  const fishVoiceConfigured = Boolean(String(config.audio?.fishVoiceId || config.fishAudio?.voiceId || "").trim());
+  logger.info?.(`[audio] provider selected provider="${selectedAudioProvider}"`);
+  logger.info?.("[audio] fish config", {
+    keyConfigured: fishKeyConfigured,
+    voiceConfigured: fishVoiceConfigured,
+  });
+  logger.info?.(`[tools] generate_audio provider check selectedProvider="${selectedAudioProvider}" canGenerate=${Boolean(audioGeneration?.canGenerate?.())}`);
+
   if (!registeredTools.some((tool) => tool.name === "generate_audio")) {
     logger.warn(
       "[tools] generate_audio tool is NOT registered; the bot cannot create voice notes/audio. Check the gates below (all must be true).",
       {
         canGenerate: Boolean(audioGeneration?.canGenerate?.()),
         ttsEnabled: Boolean(config.audio?.ttsEnabled),
+        selectedProvider: selectedAudioProvider,
         elevenlabsKeyConfigured: Boolean(String(config.elevenlabs?.apiKey || "").trim()),
-        voiceIdConfigured: Boolean(String(config.audio?.elevenlabsVoiceId || "").trim()),
+        elevenlabsVoiceIdConfigured: Boolean(String(config.audio?.elevenlabsVoiceId || "").trim()),
+        fishKeyConfigured,
+        fishVoiceConfigured,
         hasStorageConfig: hasStorageConfig(config),
         hasBucketConfig: hasBucketConfig(config),
         hasLocalStorageConfig: hasLocalStorageConfig(config),
