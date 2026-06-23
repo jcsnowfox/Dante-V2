@@ -12,6 +12,7 @@ const {
   normalizeCustomReactionEmojis,
 } = require("../reactions/customEmojiPalette");
 const { safeJsonParse } = require("./toolUtils");
+const { normalizeGiphyItem } = require("../media/gifUrlNormalizer");
 
 const DEFAULT_GIF_RESULT_LIMIT = 3;
 const MAX_GIF_RESULT_LIMIT = 5;
@@ -62,8 +63,10 @@ function normalizeGifQuery(value) {
 
 function createGiphySearchTool({ config, logger, fetchImpl = globalThis.fetch }) {
   const apiKey = String(config.giphy?.apiKey || "").trim();
+  const gifsEnabled = config.gifs?.enabled !== false;
+  const gifSendMode = String(config.gifs?.sendMode || "direct_url").trim().toLowerCase();
 
-  if (!apiKey || typeof fetchImpl !== "function") {
+  if (!apiKey || typeof fetchImpl !== "function" || !gifsEnabled || gifSendMode === "disabled") {
     return null;
   }
 
@@ -136,24 +139,40 @@ function createGiphySearchTool({ config, logger, fetchImpl = globalThis.fetch })
       }
 
       const payload = await response.json();
+
+      logger?.debug?.("[gif] provider result received", {
+        provider: "giphy",
+        query,
+        rawCount: Array.isArray(payload?.data) ? payload.data.length : 0,
+      });
+
       const candidates = Array.isArray(payload?.data)
-        ? payload.data.map((item) => ({
-          id: String(item.id || "").trim(),
-          title: String(item.title || "").trim() || "GIF",
-          altText: String(item.alt_text || item.altText || "").trim(),
-          url: item.images?.original?.url
-            || item.images?.downsized?.url
-            || item.images?.fixed_height?.url
-            || item.images?.fixed_height_small?.url
-            || item.url
-            || "",
-          pageUrl: item.url || "",
-          embedUrl: item.embed_url || "",
-          previewUrl: item.images?.fixed_height_small?.url
-            || item.images?.downsized_small?.mp4
-            || item.images?.original?.url
-            || "",
-        })).filter((item) => item.url)
+        ? payload.data.map((item) => {
+          const normalized = normalizeGiphyItem(item);
+
+          if (!normalized.ok) {
+            logger?.debug?.("[gif] item skipped — no valid direct URL", {
+              provider: "giphy",
+              id: String(item.id || "").trim(),
+              reason: normalized.reason,
+            });
+            return null;
+          }
+
+          logger?.debug?.("[gif] normalized direct URL selected", {
+            provider: "giphy",
+            id: String(item.id || "").trim(),
+            directGifUrl: normalized.directGifUrl,
+          });
+
+          return {
+            id: String(item.id || "").trim(),
+            title: normalized.title,
+            altText: String(item.alt_text || item.altText || "").trim(),
+            url: normalized.directGifUrl,
+            previewUrl: normalized.previewUrl,
+          };
+        }).filter(Boolean)
         : [];
 
       const described = candidates.filter((item) => item.altText);

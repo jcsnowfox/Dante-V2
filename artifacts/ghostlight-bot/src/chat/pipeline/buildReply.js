@@ -15,10 +15,10 @@ function isLikelyGifUrl(value) {
     return false;
   }
 
+  // Only match direct media URLs that Discord can render inline as GIFs.
+  // Page URLs (giphy.com/gifs/, tenor.com/view/) produce broken previews.
   return normalized.endsWith(".gif")
-    || normalized.includes("giphy.com/gifs/")
     || normalized.includes("media.giphy.com/media/")
-    || normalized.includes("tenor.com/view/")
     || normalized.includes("media.tenor.com/")
     || normalized.includes("c.tenor.com/");
 }

@@ -7,7 +7,8 @@ const MAX_OUTGOING_CHUNKS = 5;
 const DEFAULT_TYPING_INDICATOR_TIMEOUT_MS = 2000;
 const STANDALONE_URL_PATTERN = /^https?:\/\/\S+$/i;
 const STANDALONE_MEDIA_URL_PATTERN = /\.(?:gif|webp|png|jpe?g)(?:[?#].*)?$/i;
-const STANDALONE_GIF_PROVIDER_PATTERN = /(?:^https?:\/\/(?:media\.)?giphy\.com\/|^https?:\/\/giphy\.com\/gifs\/|^https?:\/\/(?:media\.|c\.)?tenor\.com\/|^https?:\/\/tenor\.com\/view\/)/i;
+// Only match direct media URLs — page URLs (giphy.com/gifs/, tenor.com/view/) cannot embed in Discord.
+const STANDALONE_GIF_PROVIDER_PATTERN = /(?:^https:\/\/media\.giphy\.com\/|^https:\/\/(?:media\.|c\.)?tenor\.com\/)/i;
 const {
   isDiscordEntityTooLargeError,
   buildGeneratedImageFallbackUrls,
@@ -18,6 +19,7 @@ const { replaceCustomEmojiLabelsForDiscord } = require("../../reactions/customEm
 const { isDevMode, isLogRequest } = require("../../developer/devUtils");
 const { getLogsForDevReport, formatLogsForDiscord } = require("../../developer/railwayLogs");
 const { applyRuntimeSettings } = require("../../config/runtimeSettings");
+const { isValidDirectGifUrl } = require("../../media/gifUrlNormalizer");
 
 function splitAroundStandaloneUrls(text) {
   const normalizedText = String(text || "").trim();
@@ -558,14 +560,32 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
         }
       }
 
+      const gifSendMode = String(config.gifs?.sendMode || "direct_url").trim().toLowerCase();
+
       for (const [index, chunk] of outgoingChunks.entries()) {
         const isLastChunk = index === outgoingChunks.length - 1;
+        const trimmedChunk = chunk.trim();
+        const isGifEmbedChunk = gifSendMode === "embed_image"
+          && STANDALONE_URL_PATTERN.test(trimmedChunk)
+          && isValidDirectGifUrl(trimmedChunk);
+
         try {
-          sentReply = await message.channel.send({
-            content: chunk,
-            files: isLastChunk ? replyPayload.files : undefined,
-            flags: replyPayload.suppressEmbeds ? ["SuppressEmbeds"] : undefined,
-          });
+          if (isGifEmbedChunk) {
+            logger.debug?.("[gif] sending as Discord embed image", {
+              url: trimmedChunk,
+              conversationId,
+            });
+            sentReply = await message.channel.send({
+              embeds: [{ image: { url: trimmedChunk } }],
+              files: isLastChunk ? replyPayload.files : undefined,
+            });
+          } else {
+            sentReply = await message.channel.send({
+              content: chunk,
+              files: isLastChunk ? replyPayload.files : undefined,
+              flags: replyPayload.suppressEmbeds ? ["SuppressEmbeds"] : undefined,
+            });
+          }
         } catch (error) {
           if (!isLastChunk || !replyPayload.files.length || !isDiscordEntityTooLargeError(error)) {
             throw error;
