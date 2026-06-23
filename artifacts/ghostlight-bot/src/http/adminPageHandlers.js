@@ -36,6 +36,7 @@ const { handleSecondLifePageRequest } = require("./adminPageHandlers/secondLifeP
 const { handleInnerLifePageRequest } = require("./adminPageHandlers/innerLifePageHandler");
 const { handleContinuityPageRequest } = require("./adminPageHandlers/continuityPageHandler");
 const { handleGameAdminPageRequest } = require("../games/http/gameAdminPageHandler");
+const { handleNorwegianLearningPageRequest } = require("./adminPageHandlers/norwegianLearningPageHandler");
 
 async function handleAdminPageRequest({
   req = null,
@@ -376,6 +377,11 @@ async function handleAdminPageRequest({
     return;
   }
 
+  if (route.section === "norwegian") {
+    await handleNorwegianLearningPageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });
+    return;
+  }
+
   await handleAdminToolsPageRequest({ url, route, innerRes, innerContext, helpers, theme, themeLinks });
 }
 
@@ -388,4 +394,5 @@ module.exports = {
   isReviewQueueItem,
   handleAdminPageRequest,
   handleGeneratedDetailRequest,
+  handleNorwegianLearningPageRequest,
 };

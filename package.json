@@ -97,6 +97,10 @@
     "build": "pnpm -r --if-present build",
     "verify:dashboard-audio-settings": "node scripts/verify-dashboard-audio-settings.mjs",
     "verify:fish-audio": "node scripts/verify-fish-audio.mjs",
-    "verify:audio-generation": "node scripts/verify-audio-generation.mjs"
+    "verify:audio-generation": "node scripts/verify-audio-generation.mjs",
+    "verify:norwegian-foundation": "node scripts/verify-norwegian-foundation.mjs",
+    "verify:norwegian-settings": "node scripts/verify-norwegian-settings.mjs",
+    "verify:norwegian-source-policy": "node scripts/verify-norwegian-source-policy.mjs",
+    "verify:norwegian-storage": "node scripts/verify-norwegian-storage.mjs"
   }
 }

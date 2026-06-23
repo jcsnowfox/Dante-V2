@@ -47,6 +47,7 @@ const {
   renderFeedbackLearningPage: renderFeedbackLearningPageTemplate,
   renderRelationalStatePage: renderRelationalStatePageTemplate,
   renderSecondLifePage: renderSecondLifePageTemplate,
+  renderNorwegianLearningPage: renderNorwegianLearningPageTemplate,
 } = require("./renderAdminPages");
 const {
   escapeHtml,
@@ -513,6 +514,17 @@ function renderSecondLifePage(params) {
   });
 }
 
+function renderNorwegianLearningPage(params) {
+  return renderNorwegianLearningPageTemplate({
+    ...params,
+    helpers: {
+      escapeHtml,
+      withThemeField,
+      buildAdminLocation,
+    },
+  });
+}
+
 function buildAdminPageHelpers({ sortMemories, config = {} }) {
   return {
     normalizeTheme,
@@ -582,6 +594,7 @@ function buildAdminPageHelpers({ sortMemories, config = {} }) {
     renderFeedbackLearningPage,
     renderRelationalStatePage,
     renderSecondLifePage,
+    renderNorwegianLearningPage,
     escapeHtml,
     formatDateValue,
     renderOptions,
@@ -952,6 +965,7 @@ module.exports = {
   renderAdminToolsPage,
   buildAdminPageHelpers,
   renderAdminWorkspacePage,
+  renderNorwegianLearningPage,
   formatDateValue,
   formatBytes,
 };

@@ -13,6 +13,7 @@ const feedbackLearningPageModule = require("./renderAdminPages/feedbackLearningP
 const relationalStatePageModule = require("./renderAdminPages/relationalStatePage");
 const secondLifePageModule = require("./renderAdminPages/secondLifePage");
 const { renderGameAdminPage } = require("../games/http/renderGameAdminPage");
+const { renderNorwegianLearningPage } = require("./renderAdminPages/norwegianLearningPage");
 
 module.exports = {
   renderShell: sharedAdminPages.renderShell,
@@ -47,4 +48,5 @@ module.exports = {
   renderRelationalStatePage: relationalStatePageModule.renderRelationalStatePage,
   renderSecondLifePage: secondLifePageModule.renderSecondLifePage,
   renderGameAdminPage,
+  renderNorwegianLearningPage,
 };
