@@ -157,6 +157,40 @@ const MIGRATION_SQL = `
 
   ALTER TABLE IF EXISTS norwegian_media_links
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+  -- Phase 6: Norwegian Review Engine
+  ALTER TABLE IF EXISTS norwegian_review_items
+  ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'medium';
+
+  ALTER TABLE IF EXISTS norwegian_review_items
+  ADD COLUMN IF NOT EXISTS grade TEXT;
+
+  ALTER TABLE IF EXISTS norwegian_review_items
+  ADD COLUMN IF NOT EXISTS review_count INTEGER NOT NULL DEFAULT 0;
+
+  ALTER TABLE IF EXISTS norwegian_review_items
+  ADD COLUMN IF NOT EXISTS correct_count INTEGER NOT NULL DEFAULT 0;
+
+  ALTER TABLE IF EXISTS norwegian_review_items
+  ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0;
+
+  ALTER TABLE IF EXISTS norwegian_review_items
+  ADD COLUMN IF NOT EXISTS last_result TEXT;
+
+  ALTER TABLE IF EXISTS norwegian_review_items
+  ADD COLUMN IF NOT EXISTS next_due_at TIMESTAMPTZ;
+
+  ALTER TABLE IF EXISTS norwegian_review_items
+  ADD COLUMN IF NOT EXISTS mastered_at TIMESTAMPTZ;
+
+  ALTER TABLE IF EXISTS norwegian_review_items
+  ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+
+  ALTER TABLE IF EXISTS norwegian_review_items
+  ADD COLUMN IF NOT EXISTS metadata_json TEXT NOT NULL DEFAULT '{}';
+
+  ALTER TABLE IF EXISTS norwegian_review_items
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 `;
 
   ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
@@ -203,6 +237,15 @@ function createNoopNorwegianLearningStore({ logger }) {
     async listMediaLinks() { return []; },
     async listNorwegianMediaLinks() { return []; },
     async saveReviewItem() { throw new Error('[norwegian] Store disabled — no DATABASE_URL.'); },
+    async getDueReviewItems() { return []; },
+    async getOverdueReviewItems() { return []; },
+    async updateReviewResult() { return null; },
+    async snoozeReviewItem() { return null; },
+    async archiveReviewItem() { return null; },
+    async markReviewItemMastered() { return null; },
+    async getWeakSpotSummary() { return { categories: [] }; },
+    async getWeeklyNorwegianSummary() { return {}; },
+    async getDailyPracticeSet() { return []; },
     async getOverview() { return null; },
   };
 }
@@ -466,6 +509,205 @@ function createNorwegianLearningStore({ config, logger }) {
       );
 
       return { id: rows[0].id };
+    },
+
+    async getDueReviewItems(userScope, limit = 10) {
+      const scope = normalizeUserScope(userScope);
+      const now = new Date();
+      const { rows } = await pool.query(
+        `
+          SELECT id, item_type, content, source_status, due_at, grade, priority,
+                 review_count, correct_count, retry_count, last_result, created_at
+          FROM norwegian_review_items
+          WHERE user_scope = $1
+            AND (archived_at IS NULL OR archived_at > NOW())
+            AND (next_due_at IS NULL OR next_due_at <= NOW())
+          ORDER BY priority DESC, COALESCE(next_due_at, due_at) ASC
+          LIMIT $2
+        `,
+        [scope, limit],
+      );
+      return rows;
+    },
+
+    async getOverdueReviewItems(userScope, limit = 10) {
+      const scope = normalizeUserScope(userScope);
+      const { rows } = await pool.query(
+        `
+          SELECT id, item_type, content, source_status, due_at, grade, priority,
+                 review_count, correct_count, retry_count
+          FROM norwegian_review_items
+          WHERE user_scope = $1
+            AND archived_at IS NULL
+            AND next_due_at < NOW()
+          ORDER BY next_due_at ASC
+          LIMIT $2
+        `,
+        [scope, limit],
+      );
+      return rows;
+    },
+
+    async updateReviewResult(userScope, itemId, result) {
+      const scope = normalizeUserScope(userScope);
+      const itemIdNum = parseInt(itemId, 10);
+      if (!itemIdNum || isNaN(itemIdNum)) {
+        throw new Error('[norwegian] Valid item ID required');
+      }
+
+      const validResults = ['A', 'B', 'C', 'D', 'Retry'];
+      if (!validResults.includes(result)) {
+        throw new Error(`Invalid result: ${result}`);
+      }
+
+      const nextDueAt = new Date();
+      const scheduleMap = { A: 7, B: 3, C: 1, D: 1, Retry: 0 };
+      const daysUntilDue = scheduleMap[result] || 1;
+      nextDueAt.setDate(nextDueAt.getDate() + daysUntilDue);
+
+      await pool.query(
+        `
+          UPDATE norwegian_review_items
+          SET grade = $1,
+              last_result = $2,
+              review_count = review_count + 1,
+              correct_count = CASE WHEN $2 IN ('A', 'B') THEN correct_count + 1 ELSE correct_count END,
+              retry_count = CASE WHEN $2 = 'Retry' THEN retry_count + 1 ELSE retry_count END,
+              next_due_at = $3,
+              updated_at = NOW()
+          WHERE id = $4 AND user_scope = $5
+        `,
+        [result, result, nextDueAt, itemIdNum, scope],
+      );
+    },
+
+    async snoozeReviewItem(userScope, itemId, snoozeUntil) {
+      const scope = normalizeUserScope(userScope);
+      const itemIdNum = parseInt(itemId, 10);
+      if (!itemIdNum || isNaN(itemIdNum)) {
+        throw new Error('[norwegian] Valid item ID required');
+      }
+
+      await pool.query(
+        `
+          UPDATE norwegian_review_items
+          SET next_due_at = $1, updated_at = NOW()
+          WHERE id = $2 AND user_scope = $3
+        `,
+        [snoozeUntil, itemIdNum, scope],
+      );
+    },
+
+    async archiveReviewItem(userScope, itemId) {
+      const scope = normalizeUserScope(userScope);
+      const itemIdNum = parseInt(itemId, 10);
+      if (!itemIdNum || isNaN(itemIdNum)) {
+        throw new Error('[norwegian] Valid item ID required');
+      }
+
+      await pool.query(
+        `
+          UPDATE norwegian_review_items
+          SET archived_at = NOW(), updated_at = NOW()
+          WHERE id = $1 AND user_scope = $2
+        `,
+        [itemIdNum, scope],
+      );
+    },
+
+    async markReviewItemMastered(userScope, itemId) {
+      const scope = normalizeUserScope(userScope);
+      const itemIdNum = parseInt(itemId, 10);
+      if (!itemIdNum || isNaN(itemIdNum)) {
+        throw new Error('[norwegian] Valid item ID required');
+      }
+
+      const masteredDate = new Date();
+      masteredDate.setDate(masteredDate.getDate() + 30); // Review in 30 days
+
+      await pool.query(
+        `
+          UPDATE norwegian_review_items
+          SET mastered_at = NOW(), next_due_at = $1, updated_at = NOW()
+          WHERE id = $2 AND user_scope = $3
+        `,
+        [masteredDate, itemIdNum, scope],
+      );
+    },
+
+    async getWeakSpotSummary(userScope) {
+      const scope = normalizeUserScope(userScope);
+      // Summarize from corrections and pronunciation attempts
+      const { rows } = await pool.query(
+        `
+          SELECT correction_focus as category, COUNT(*) as count
+          FROM norwegian_review_items
+          WHERE user_scope = $1
+            AND archived_at IS NULL
+            AND correction_focus IS NOT NULL
+          GROUP BY correction_focus
+          ORDER BY count DESC
+          LIMIT 5
+        `,
+        [scope],
+      );
+
+      return {
+        categories: rows,
+      };
+    },
+
+    async getWeeklyNorwegianSummary(userScope) {
+      const scope = normalizeUserScope(userScope);
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+
+      const [lessonsResult, correctionsResult, vocabResult, reviewResult] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*) as count FROM norwegian_lessons WHERE user_scope = $1 AND created_at > $2`,
+          [scope, weekAgo],
+        ),
+        pool.query(
+          `SELECT COUNT(*) as count FROM norwegian_corrections WHERE user_scope = $1 AND created_at > $2`,
+          [scope, weekAgo],
+        ),
+        pool.query(
+          `SELECT COUNT(*) as count FROM norwegian_vocabulary WHERE user_scope = $1 AND created_at > $2`,
+          [scope, weekAgo],
+        ),
+        pool.query(
+          `SELECT COUNT(*) as correct_count, COUNT(*) FILTER (WHERE last_result IN ('A', 'B')) as strong_count
+           FROM norwegian_review_items WHERE user_scope = $1 AND review_count > 0`,
+          [scope],
+        ),
+      ]);
+
+      return {
+        lessonsCompleted: lessonsResult.rows[0]?.count || 0,
+        correctionsReceived: correctionsResult.rows[0]?.count || 0,
+        vocabularyAdded: vocabResult.rows[0]?.count || 0,
+        reviewItemsCompleted: reviewResult.rows[0]?.correct_count || 0,
+        strongItems: reviewResult.rows[0]?.strong_count || 0,
+      };
+    },
+
+    async getDailyPracticeSet(userScope) {
+      const scope = normalizeUserScope(userScope);
+      // Get up to 5 diverse review items for daily practice
+      const { rows } = await pool.query(
+        `
+          SELECT id, item_type, content, source_status, grade, priority,
+                 review_count, correct_count, retry_count
+          FROM norwegian_review_items
+          WHERE user_scope = $1
+            AND archived_at IS NULL
+            AND (next_due_at IS NULL OR next_due_at <= NOW())
+          ORDER BY priority DESC, next_due_at ASC
+          LIMIT 5
+        `,
+        [scope],
+      );
+      return rows;
     },
 
     async getOverview(userScope) {
