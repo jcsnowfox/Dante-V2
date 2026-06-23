@@ -41,6 +41,16 @@ function normalizeMusicPreferenceReaction(value = "") {
     : "neutral";
 }
 
+function formatSafeMusicImportError(error) {
+  const message = String(error?.message || "");
+  if (message.includes("music_playlist_tracks_music_playlist_id_spotify_track_id_key")
+    || message.includes("duplicate key value violates unique constraint")) {
+    return "Playlist import failed while reconciling duplicate tracks. Check logs for safe error details.";
+  }
+
+  return message || "Playlist import failed. Check logs for safe error details.";
+}
+
 function formatMusicImportSummary(result = {}, itemLabel = "tracks") {
   const processedCount = Number(result.processedCount ?? result.importedCount ?? 0);
   const newTrackCount = Number(result.newTrackCount ?? result.importedCount ?? 0);
@@ -337,7 +347,7 @@ async function handleMusicActions({
           limit,
         });
       } catch (err) {
-        redirect(innerRes, buildMusicReturnTo(theme, { error: err.message || "Failed to import playlist." }));
+        redirect(innerRes, buildMusicReturnTo(theme, { error: formatSafeMusicImportError(err) }));
         return;
       }
       const syncNote = result.syncSkipped
@@ -406,7 +416,7 @@ async function handleMusicActions({
           limit,
         });
       } catch (err) {
-        redirect(innerRes, buildMusicReturnTo(theme, { error: err.message || "Failed to import playlist." }));
+        redirect(innerRes, buildMusicReturnTo(theme, { error: formatSafeMusicImportError(err) }));
         return;
       }
       const syncNote = result.syncSkipped
@@ -805,6 +815,7 @@ async function handleMusicActions({
 module.exports = {
   handleMusicActions,
   formatMusicImportSummary,
+  formatSafeMusicImportError,
   parseMusicLibraryImportPayload,
   normalizeMusicGenreList,
 };
