@@ -1,23 +1,20 @@
 {
-  "name": "workspace",
-  "version": "0.0.0",
-  "license": "MIT",
-  "packageManager": "pnpm@10.26.1",
+  "name": "dante-v2",
+  "version": "2.0.0",
+  "description": "Dante V2 — Discord AI companion bot",
+  "license": "UNLICENSED",
+  "main": "src/index.js",
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
-    "start": "node artifacts/api-server/start.mjs",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
-    "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "verify:conversations-schema": "pnpm --dir artifacts/ghostlight-bot run verify:conversations-schema",
-    "verify:music-schema": "pnpm --dir artifacts/ghostlight-bot run verify:music-schema",
-    "verify:journal-schema": "pnpm --dir artifacts/ghostlight-bot run verify:journal-schema",
-    "verify:startup-schema": "pnpm --dir artifacts/ghostlight-bot run verify:startup-schema",
-    "inspect:database-source": "pnpm --dir artifacts/ghostlight-bot run inspect:database-source"
+    "dev": "node src/index.js",
+    "start": "node src/index.js",
+    "verify:audio-generation": "node scripts/verify-audio-generation.mjs",
+    "verify:fish-audio": "node scripts/verify-fish-audio.mjs",
+    "verify:dashboard-audio-settings": "node scripts/verify-dashboard-audio-settings.mjs"
   },
-  "private": true,
-  "devDependencies": {
-    "prettier": "^3.8.3",
-    "typescript": "~5.9.3"
+  "dependencies": {
+    "discord.js": "^14.13.0",
+    "dotenv": "^16.3.1",
+    "openai": "^4.20.1",
+    "pg": "^8.11.2"
   }
 }

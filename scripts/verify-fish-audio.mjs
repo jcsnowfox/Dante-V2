@@ -1,0 +1,120 @@
+import 'dotenv/config';
+import pg from 'pg';
+
+const { Pool } = pg;
+
+const PROVIDER_COLUMNS = new Map([
+  ['provider', 'text'],
+  ['provider_voice_id', 'text'],
+  ['provider_model_id', 'text'],
+]);
+
+function pass(message) {
+  console.log(`[verify:fish-audio] PASS ${message}`);
+}
+
+function warn(message) {
+  console.warn(`[verify:fish-audio] WARN ${message}`);
+}
+
+function fail(message, details = {}) {
+  console.error(`[verify:fish-audio] FAIL ${message}`, Object.keys(details).length ? details : '');
+  process.exitCode = 1;
+}
+
+function checkEnv() {
+  const fishApiKey = process.env.FISH_AUDIO_API_KEY;
+  if (!fishApiKey || !String(fishApiKey).trim()) {
+    warn('FISH_AUDIO_API_KEY is not set — Fish Audio TTS will not work');
+  } else {
+    pass('FISH_AUDIO_API_KEY is set');
+  }
+
+  const fishVoiceId = process.env.FISH_AUDIO_VOICE_ID;
+  if (!fishVoiceId || !String(fishVoiceId).trim()) {
+    warn('FISH_AUDIO_VOICE_ID is not set — Fish Audio TTS will not work without a voice ID');
+  } else {
+    pass('FISH_AUDIO_VOICE_ID is set');
+  }
+
+  const fishEnabled = process.env.FISH_AUDIO_ENABLED;
+  if (fishEnabled && ["1", "true", "yes", "on"].includes(String(fishEnabled).trim().toLowerCase())) {
+    pass('FISH_AUDIO_ENABLED is set — Fish Audio will be the default TTS provider');
+  } else {
+    warn('FISH_AUDIO_ENABLED is not set to true — set it to make Fish Audio the default provider');
+  }
+}
+
+async function checkSchema(pool) {
+  const tableResult = await pool.query(
+    `SELECT to_regclass('public.generated_audio') AS table_name;`,
+  );
+
+  if (!tableResult.rows[0]?.table_name) {
+    fail('generated_audio table is missing — run the bot once to initialize the schema');
+    return;
+  }
+
+  pass('generated_audio table exists');
+
+  const columnsResult = await pool.query(`
+    SELECT column_name, data_type
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'generated_audio';
+  `);
+  const columns = new Map(columnsResult.rows.map((row) => [row.column_name, row.data_type]));
+
+  for (const [columnName, expectedType] of PROVIDER_COLUMNS) {
+    const actualType = columns.get(columnName);
+    if (!actualType) {
+      fail(`Fish Audio column is missing: ${columnName} — run the bot once to apply migrations`);
+    } else if (actualType !== expectedType) {
+      fail(`column ${columnName} has unexpected type`, { expectedType, actualType });
+    } else {
+      pass(`column ${columnName} (${actualType})`);
+    }
+  }
+
+  const providerDefault = await pool.query(`
+    SELECT column_default
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'generated_audio'
+      AND column_name = 'provider';
+  `);
+  const defaultValue = providerDefault.rows[0]?.column_default;
+  if (defaultValue && defaultValue.includes('elevenlabs')) {
+    pass("provider column default is 'elevenlabs'");
+  } else {
+    warn(`provider column default is unexpected: ${defaultValue}`);
+  }
+}
+
+async function main() {
+  checkEnv();
+
+  if (!process.env.DATABASE_URL) {
+    console.warn('[verify:fish-audio] DATABASE_URL is not set — skipping schema verification.');
+    if (!process.exitCode) {
+      console.log('[verify:fish-audio] Env checks complete (no DB).');
+    }
+    return;
+  }
+
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+  try {
+    await checkSchema(pool);
+    if (!process.exitCode) {
+      console.log('[verify:fish-audio] All checks passed.');
+    }
+  } finally {
+    await pool.end();
+  }
+}
+
+main().catch((error) => {
+  console.error('[verify:fish-audio] Unexpected error:', error.message);
+  process.exit(1);
+});
