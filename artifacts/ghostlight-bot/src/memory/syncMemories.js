@@ -22,6 +22,7 @@ function canSyncMemories(config) {
 }
 
 async function syncMemoriesToQdrant({ config, memories, deps = {} }) {
+  const logger = deps.logger || console;
   const activeMemories = Array.isArray(memories)
     ? memories.filter((memory) => memory && memory.active)
     : [];
@@ -30,11 +31,14 @@ async function syncMemoriesToQdrant({ config, memories, deps = {} }) {
   const upsertPointsFn = deps.upsertPoints || upsertPoints;
   const buildQdrantPointFn = deps.buildQdrantPoint || buildQdrantPoint;
 
-  if (!activeMemories.length || !canSyncMemories(config)) {
-    return {
-      syncedCount: 0,
-      skipped: true,
-    };
+  logger.info?.(`[memory-qdrant] sync started activeMemoryCount=${activeMemories.length}`);
+  if (!activeMemories.length) {
+    logger.warn?.("[memory-qdrant] sync skipped reason=no_active_memories");
+    return { syncedCount: 0, skipped: true, skippedReason: "no_active_memories", skippedCount: 0 };
+  }
+  if (!canSyncMemories(config)) {
+    logger.warn?.("[memory-qdrant] sync skipped reason=qdrant_or_embeddings_not_configured");
+    return { syncedCount: 0, skipped: true, skippedReason: "qdrant_or_embeddings_not_configured", skippedCount: activeMemories.length };
   }
 
   let syncedCount = 0;
@@ -76,9 +80,11 @@ async function syncMemoriesToQdrant({ config, memories, deps = {} }) {
     syncedCount += batch.length;
   }
 
+  logger.info?.(`[memory-qdrant] sync completed synced=${syncedCount} skipped=0`);
   return {
     syncedCount,
     skipped: false,
+    skippedCount: 0,
   };
 }
 

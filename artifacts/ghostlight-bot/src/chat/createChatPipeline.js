@@ -24,6 +24,7 @@ const { resolveToneMode, formatTonePrelude } = require("../continuity/toneModeRe
 const { validateVoice, buildRetryInstruction, fallbackReply, buildVoiceRules } = require("../continuity/voiceFingerprintGuard");
 const { analyzeRepair, buildRepairPrelude, saveRepairBeat } = require("../relationshipRepair/engine");
 const { updateSystemTruth } = require("../systemTruth/runtimeState");
+const { curateRuntimeMemory } = require("../memory/runtimeCurator");
 
 function normalizeAdultPrivateChannelId(channelId) {
   const value = String(channelId || "").trim();
@@ -76,6 +77,7 @@ function createChatPipeline({
   continuity = null,
   emotionalBeatStore = null,
   promiseLedger = null,
+  memoryStore = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
@@ -187,6 +189,8 @@ function createChatPipeline({
           resolved: false,
         });
       };
+      await curateRuntimeMemory({ text: input.content, role: "user", memoryStore, config, logger, source: { authorId: input.authorId, channelId: message.channelId || message.channel?.id, messageId: message.id } });
+
       try {
         const userBeat = classifyEmotionalBeat({
           text: input.content,
@@ -687,6 +691,8 @@ function createChatPipeline({
         logger.warn("[relationship-repair] Failed to save repair beat; continuing", { messageId: message.id, error: error.message });
       }
 
+
+      await curateRuntimeMemory({ text: reply?.content || "", role: "assistant", memoryStore, config, logger, source: { authorId: input.authorId, channelId: message.channelId || message.channel?.id, messageId: `${message.id}:assistant` } });
 
       try {
         const companionPromise = detectPromise({ text: reply?.content || "", role: "assistant", channelContext: beatChannelContext });

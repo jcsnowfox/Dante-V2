@@ -187,6 +187,7 @@ async function startApp() {
     config,
     logger,
     memory,
+    memoryStore,
     tools,
     conversations,
     cache,

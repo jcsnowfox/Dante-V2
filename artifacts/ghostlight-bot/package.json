@@ -1,7 +1,7 @@
 {
   "name": "@workspace/ghostlight-bot",
   "version": "1.3.1",
-  "description": "Ghostlight \u2014 private AI companion bot (template base)",
+  "description": "Ghostlight — private AI companion bot (template base)",
   "license": "UNLICENSED",
   "main": "src/index.js",
   "scripts": {
@@ -46,7 +46,7 @@
     "verify:memory-curation": "node scripts/verify-emotional-continuity.mjs",
     "verify:cross-channel-continuity": "node scripts/verify-emotional-continuity.mjs",
     "verify:emotional-beats": "node scripts/verify-emotional-continuity.mjs",
-    "verify:proposal-memory": "node scripts/verify-emotional-continuity.mjs",
+    "verify:proposal-memory": "node scripts/verify-memory-emergency-repair.mjs",
     "verify:continuity-prelude": "node scripts/verify-emotional-continuity.mjs",
     "verify:continuity-privacy": "node scripts/verify-emotional-continuity.mjs",
     "verify:safety-error-handling": "node scripts/verify-emotional-continuity.mjs",
@@ -62,7 +62,14 @@
     "verify:system-truth-panel": "node ../../scripts/verify-trust-layer.mjs truth",
     "verify:trust-layer-runtime-wiring": "node ../../scripts/verify-trust-layer.mjs runtime",
     "verify:trust-layer-privacy": "node ../../scripts/verify-trust-layer.mjs privacy",
-    "verify:trust-layer-no-hallucinations": "node ../../scripts/verify-trust-layer.mjs nohallucinations"
+    "verify:trust-layer-no-hallucinations": "node ../../scripts/verify-trust-layer.mjs nohallucinations",
+    "verify:memory-runtime-flow": "node scripts/verify-memory-emergency-repair.mjs",
+    "verify:memory-curator": "node scripts/verify-memory-emergency-repair.mjs",
+    "verify:memory-dashboard": "node scripts/verify-memory-emergency-repair.mjs",
+    "verify:memory-qdrant-sync": "node scripts/verify-memory-emergency-repair.mjs",
+    "verify:remember-this-command": "node scripts/verify-memory-emergency-repair.mjs",
+    "verify:memory-scope-consistency": "node scripts/verify-memory-emergency-repair.mjs",
+    "build": "node --check src/index.js"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

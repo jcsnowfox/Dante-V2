@@ -490,7 +490,9 @@ function createMemoryStore({ config, logger }) {
         ],
       );
 
-      return mapMemoryRow(rows[0]);
+      const savedMemory = mapMemoryRow(rows[0]);
+      logger.info?.(`[memory-store] memory saved id=${savedMemory.memoryId} userScope=${savedMemory.userScope} companionId=${config.memory?.companionId || config.companion?.id || "Dante"} active=${savedMemory.active === true}`);
+      return savedMemory;
     },
 
     async getMemoryById(memoryId, { userScope } = {}) {
@@ -760,7 +762,9 @@ function createMemoryStore({ config, logger }) {
         values,
       );
 
-      return rows.map(mapMemoryRow);
+      const listed = rows.map(mapMemoryRow);
+      logger.info?.(`[memory-dashboard] listed memories count=${listed.length} userScope=${userScope || "all"} filters=activeOnly:${activeOnly === true}`);
+      return listed;
     },
 
     async countMemories({ userScope, activeOnly = false } = {}) {
