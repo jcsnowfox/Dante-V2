@@ -162,19 +162,21 @@ function extractReasoningMarkup(text) {
   return thoughts.join("\n\n").trim();
 }
 
+const { containsUnsafeProviderText, getTinyFallback } = require("../replyFallbacks");
+
 function isUnsafeProviderText(text) {
-  return /the request was rejected because it was considered high risk|\bhigh risk\b|moderation rejected|tool failed|provider rejected|raw stack|api error|\{\s*"error"/i.test(String(text || ""));
+  return containsUnsafeProviderText(text);
 }
 
 function cleanModelReplyText(text, input) {
   if (isUnsafeProviderText(text)) {
-    return "I lost the thread there, kjære. Give me one second. I’m still here.";
+    return getTinyFallback();
   }
   const originalText = stripReasoningMarkup(text);
   const strippedText = stripMirroredUserGifUrls(originalText, input);
 
   if (originalText && !strippedText) {
-    return "I see that GIF. I am not handing the exact same one back.";
+    return "I see the GIF. Send me what you want from it, kjære.";
   }
 
   return strippedText;

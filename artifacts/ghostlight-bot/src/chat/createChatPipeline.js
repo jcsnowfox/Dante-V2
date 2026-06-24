@@ -22,8 +22,10 @@ const { classifyEmotionalBeat, formatContinuityPrelude, isProposalText, isForgot
 const { detectPromise } = require("../continuity/promiseLedger");
 const { resolveToneMode, formatTonePrelude } = require("../continuity/toneModeResolver");
 const { validateVoice, buildRetryInstruction, fallbackReply, buildVoiceRules } = require("../continuity/voiceFingerprintGuard");
+const { getTinyFallback, STUCK_FALLBACK, isDuplicateReply, rememberReply, containsUnsafeProviderText, safeErrorReason } = require("./replyFallbacks");
 const { analyzeRepair, buildRepairPrelude, saveRepairBeat } = require("../relationshipRepair/engine");
 const { updateSystemTruth } = require("../systemTruth/runtimeState");
+const { curateRuntimeMemory } = require("../memory/runtimeCurator");
 
 function normalizeAdultPrivateChannelId(channelId) {
   const value = String(channelId || "").trim();
@@ -76,10 +78,13 @@ function createChatPipeline({
   continuity = null,
   emotionalBeatStore = null,
   promiseLedger = null,
+  memoryStore = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
       const startedAt = Date.now();
+      const replyTrace = { llmCalled: false, llmCompleted: false, fallbackUsed: false, fallbackReason: null, finalSource: "llm", duplicateBlocked: false };
+      logger.info?.(`[reply-trace] start messageId=${message.id} channelId=${message.channelId || ""}`);
       const fallbackModeName = config.chat?.defaultMode || "default";
       const selectedMode = mode || getMode(modeName || fallbackModeName);
       const preprocessedInput = preprocessMessage({ message, botUserId: message.client.user?.id });
@@ -187,6 +192,8 @@ function createChatPipeline({
           resolved: false,
         });
       };
+      await curateRuntimeMemory({ text: input.content, role: "user", memoryStore, config, logger, source: { authorId: input.authorId, channelId: message.channelId || message.channel?.id, messageId: message.id } });
+
       try {
         const userBeat = classifyEmotionalBeat({
           text: input.content,
@@ -451,6 +458,7 @@ function createChatPipeline({
       }
       if (!inDevMode) { const voiceText = buildVoiceRules(); contextSections.push({ label: "VOICE RULES", content: voiceText.replace(/^VOICE RULES:\n?/, "") }); }
       logger.info?.(`[reply-context] continuity prelude built beats=${rankedBeats.length} promises=${openPromises.length} mode=${repairResult?.repairNeeded ? "repair" : (toneDecision?.mode || "dev")}`);
+      logger.info?.(`[reply-trace] repairNeeded=${repairResult?.repairNeeded === true} repairType=${repairResult?.repairType || "null"}`);
 
       // Continuity Engine — carries open loops, future events, promises, decisions,
       // repair threads, and boundaries as a bounded private prelude section.
@@ -585,7 +593,25 @@ function createChatPipeline({
         }
       }
 
-      let modelOutput = await callModel({
+      const baseToolContext = {
+        surface: "chat",
+        userScope: config.memory?.userScope,
+        guildId: message.guildId,
+        mode: selectedMode,
+        currentMessage: message,
+        conversationId,
+        channelId: message.channelId,
+        sourceMessageId: message.id,
+        currentUserId: input.authorId,
+        currentUserName: input.authorName,
+        currentUserText: input.content,
+        recentHistory,
+        memoryContextIds: memories
+          .map((memoryItem) => memoryItem?.memoryId || memoryItem?.memory_id || "")
+          .filter(Boolean),
+        imageConversationActive: Boolean(imageConversationState?.active),
+      };
+      const callDanteModel = (extraSections = contextSections) => callModel({
         config,
         logger,
         tools,
@@ -594,44 +620,59 @@ function createChatPipeline({
         input,
         recentHistory,
         memories,
-        contextSections,
+        contextSections: extraSections,
         channelType: "discord",
         overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
         systemPromptPrefix: adultSystemPromptPrefix,
-        toolContext: {
-          surface: "chat",
-          userScope: config.memory?.userScope,
-          guildId: message.guildId,
-          mode: selectedMode,
-          currentMessage: message,
-          conversationId,
-          channelId: message.channelId,
-          sourceMessageId: message.id,
-          currentUserId: input.authorId,
-          currentUserName: input.authorName,
-          currentUserText: input.content,
-          recentHistory,
-          memoryContextIds: memories
-            .map((memoryItem) => memoryItem?.memoryId || memoryItem?.memory_id || "")
-            .filter(Boolean),
-          imageConversationActive: Boolean(imageConversationState?.active),
-        },
+        toolContext: baseToolContext,
       });
+
+      let modelOutput;
+      try {
+        replyTrace.llmCalled = true;
+        logger.info?.("[reply-trace] llm called=true");
+        modelOutput = await callDanteModel(contextSections);
+        replyTrace.llmCompleted = true;
+        logger.info?.(`[reply-trace] llm completed=true length=${String(modelOutput?.text || "").length}`);
+      } catch (error) {
+        const reason = safeErrorReason(error);
+        logger.warn?.("[reply-trace] llm failed; using tiny fallback", { messageId: message.id, reason });
+        replyTrace.fallbackUsed = true;
+        replyTrace.fallbackReason = reason;
+        replyTrace.finalSource = "tiny_fallback";
+        modelOutput = { provider: "tiny_fallback", text: getTinyFallback() };
+        logger.info?.("[reply-trace] llm completed=false length=0");
+      }
+
+      if (containsUnsafeProviderText(modelOutput?.text)) {
+        replyTrace.fallbackUsed = true;
+        replyTrace.fallbackReason = "provider_rejected";
+        replyTrace.finalSource = "tiny_fallback";
+        logger.warn?.("[reply-trace] provider text hidden; using tiny fallback", { messageId: message.id, reason: "provider_rejected" });
+        modelOutput = { ...modelOutput, text: getTinyFallback() };
+      }
 
       if (!inDevMode) {
         const guardResult = validateVoice({ text: modelOutput.text, context: { adultPrivate: adultScope.active, allowRoleplayNarration: false } });
         updateSystemTruth("continuity", { voiceFingerprintGuardEnabled: true, lastVoiceGuardResult: { passed: guardResult.passed, violations: guardResult.violations } });
         logger.info?.(`[voice-guard] checked companionId=${beatScope.companion_id} passed=${guardResult.passed} violations=${guardResult.violations.join(",")}`);
+        logger.info?.(`[reply-trace] voiceGuard passed=${guardResult.passed} violations=${guardResult.violations.join(",")}`);
         if (!guardResult.passed) {
           logger.info?.(`[voice-guard] retry requested reason=${guardResult.violations.join(",")}`);
-          const retrySections = [...contextSections, { label: "VOICE REPAIR", content: buildRetryInstruction(guardResult) }];
-          const retryOutput = await callModel({
-            config, logger, tools, mode: effectiveMode, message, input, recentHistory, memories, contextSections: retrySections,
-            channelType: "discord", overrideSystemPrompt: null, systemPromptPrefix: adultSystemPromptPrefix, toolContext: { surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode, currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id, currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory, memoryContextIds: memories.map((m)=>m?.memoryId||m?.memory_id||"").filter(Boolean), imageConversationActive: Boolean(imageConversationState?.active) },
-          });
-          const retryGuard = validateVoice({ text: retryOutput.text, context: { adultPrivate: adultScope.active, allowRoleplayNarration: false } });
-          if (retryGuard.passed) modelOutput = retryOutput;
-          else { modelOutput.text = fallbackReply(); logger.warn?.(`[voice-guard] fallback used reason=${retryGuard.violations.join(",")}`); }
+          try {
+            const retrySections = [...contextSections, { label: "VOICE REPAIR", content: buildRetryInstruction(guardResult) }];
+            const retryOutput = await callDanteModel(retrySections);
+            const retryGuard = validateVoice({ text: retryOutput.text, context: { adultPrivate: adultScope.active, allowRoleplayNarration: false } });
+            logger.info?.(`[reply-trace] voiceGuard passed=${retryGuard.passed} violations=${retryGuard.violations.join(",")}`);
+            if (retryGuard.passed) { modelOutput = retryOutput; replyTrace.finalSource = "retry"; }
+            else { modelOutput.text = fallbackReply(); replyTrace.fallbackUsed = true; replyTrace.fallbackReason = "voice_guard_retry_failed"; replyTrace.finalSource = "tiny_fallback"; logger.warn?.(`[voice-guard] fallback used reason=${retryGuard.violations.join(",")}`); }
+          } catch (error) {
+            modelOutput.text = fallbackReply();
+            replyTrace.fallbackUsed = true;
+            replyTrace.fallbackReason = "voice_guard_retry_error";
+            replyTrace.finalSource = "tiny_fallback";
+            logger.warn?.("[voice-guard] retry failed; using tiny fallback", { messageId: message.id, reason: safeErrorReason(error) });
+          }
         }
       }
 
@@ -655,19 +696,17 @@ function createChatPipeline({
         });
       }
 
-      // Emotional Arc safety interception — if the output contains a
-      // hard-blocked manipulative pattern, the unsafe reply is NOT sent as-is;
-      // it is replaced with a neutral safe fallback before the reply is built.
-      // Guarded so a failure here can never break the companion's base reply.
+      // Local output safety is only a last-resort technical fallback path; it
+      // must not inject therapy-card or moralizing guard text into Discord.
       if (emotionalArc) {
         try {
           const safety = await emotionalArc.validateOutputSafety({ text: modelOutput.text });
           if (safety.blocked) {
-            logger.warn("[chat] Emotional arc blocked manipulative output; replacing with safe fallback", {
-              messageId: message.id,
-              reason: safety.reason,
-            });
-            modelOutput.text = safety.safeText;
+            logger.warn("[chat] Emotional arc local safety output blocked; using tiny fallback", { messageId: message.id, reason: safety.reason });
+            modelOutput.text = getTinyFallback();
+            replyTrace.fallbackUsed = true;
+            replyTrace.fallbackReason = "local_output_safety";
+            replyTrace.finalSource = "tiny_fallback";
           }
         } catch (error) {
           logger.warn("[chat] Emotional arc output validation failed", {
@@ -677,7 +716,41 @@ function createChatPipeline({
         }
       }
 
-      const reply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput });
+      let reply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput });
+      if (!String(reply?.content || "").trim()) {
+        replyTrace.fallbackUsed = true;
+        replyTrace.fallbackReason = "empty_reply";
+        replyTrace.finalSource = "tiny_fallback";
+        reply = { ...(reply || {}), content: getTinyFallback() };
+      }
+      if (isDuplicateReply({ text: reply?.content, channelId: message.channelId || message.channel?.id, userScope: config.memory?.userScope })) {
+        replyTrace.duplicateBlocked = true;
+        logger.info?.("[reply-trace] duplicateBlocked=true");
+        try {
+          const retryOutput = await callDanteModel([...contextSections, { label: "DUPLICATE REPLY REPAIR", content: "Do not repeat the previous reply. Answer the current user message directly in Dante's voice." }]);
+          const retryReply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput: retryOutput });
+          if (retryReply?.content && !isDuplicateReply({ text: retryReply.content, channelId: message.channelId || message.channel?.id, userScope: config.memory?.userScope })) {
+            reply = retryReply;
+            modelOutput = retryOutput;
+            replyTrace.finalSource = "retry";
+          } else {
+            reply = { ...reply, content: STUCK_FALLBACK };
+            replyTrace.fallbackUsed = true;
+            replyTrace.fallbackReason = "duplicate_reply";
+            replyTrace.finalSource = "tiny_fallback";
+          }
+        } catch (error) {
+          reply = { ...reply, content: STUCK_FALLBACK };
+          replyTrace.fallbackUsed = true;
+          replyTrace.fallbackReason = "duplicate_retry_failed";
+          replyTrace.finalSource = "tiny_fallback";
+        }
+      } else {
+        logger.info?.("[reply-trace] duplicateBlocked=false");
+      }
+      rememberReply({ text: reply?.content, channelId: message.channelId || message.channel?.id, userScope: config.memory?.userScope });
+      logger.info?.(`[reply-trace] fallbackUsed=${replyTrace.fallbackUsed} fallbackReason=${replyTrace.fallbackReason || "null"}`);
+      logger.info?.(`[reply-trace] finalSource=${replyTrace.finalSource}`);
 
       try {
         if (repairResult?.repairNeeded) {
@@ -687,6 +760,8 @@ function createChatPipeline({
         logger.warn("[relationship-repair] Failed to save repair beat; continuing", { messageId: message.id, error: error.message });
       }
 
+
+      await curateRuntimeMemory({ text: reply?.content || "", role: "assistant", memoryStore, config, logger, source: { authorId: input.authorId, channelId: message.channelId || message.channel?.id, messageId: `${message.id}:assistant` } });
 
       try {
         const companionPromise = detectPromise({ text: reply?.content || "", role: "assistant", channelContext: beatChannelContext });

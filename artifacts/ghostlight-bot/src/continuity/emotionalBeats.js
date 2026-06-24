@@ -80,7 +80,7 @@ function formatContinuityPrelude(beats = [], { channelContext = {}, maxBullets =
   return { label: "MAJOR CONTINUITY", content: lines.join("\n") };
 }
 
-function isUnsafeProviderText(text) { return /the request was rejected because it was considered high risk|\bhigh risk\b|moderation rejected|tool failed|provider rejected|raw stack|api error|\{\s*"error"/i.test(textOf(text)); }
+function isUnsafeProviderText(text) { return /request (?:was|is|has been) rejected|\bhigh risk\b|moderation rejected|tool failed|provider rejected|raw stack|api error|\{\s*"error"/i.test(textOf(text)); }
 function sanitizeUserVisibleModelText(text) { return isUnsafeProviderText(text) ? FallbackText : text; }
 
 module.exports = { PROPOSAL_TAGS, FallbackText, isProposalText, isForgotProposalText, classifyEmotionalBeat, canUseBeatInChannel, formatContinuityPrelude, isUnsafeProviderText, sanitizeUserVisibleModelText };
