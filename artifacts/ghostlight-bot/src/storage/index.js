@@ -78,6 +78,7 @@ const {
   SUPPORTED_SCHEDULE_DAYS,
   MAX_ENABLED_TOOLS,
 } = require("./proactiveActions");
+const { createEmotionalBeatStore } = require("./emotionalBeats");
 
 module.exports = {
   createConversationStore,
@@ -96,6 +97,7 @@ module.exports = {
   createAutomationStore,
   createHeartbeatActionStore,
   createProactiveActionStore,
+  createEmotionalBeatStore,
   SUPPORTED_EVENT_TYPES,
   SUPPORTED_ROLES,
   SUPPORTED_SOURCES,

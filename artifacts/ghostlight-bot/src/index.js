@@ -30,6 +30,7 @@ const {
   createAutomationStore,
   createHeartbeatActionStore,
   createProactiveActionStore,
+  createEmotionalBeatStore,
 } = require("./storage");
 const { seedStarterHeartbeatActions } = require("./storage/heartbeatActions/seedStarterActions");
 const { createCacheService } = require("./cache");
@@ -137,6 +138,7 @@ async function startApp() {
   const automationStore = createAutomationStore({ config, logger });
   const heartbeatActionStore = createHeartbeatActionStore({ config, logger });
   const proactiveActionStore = createProactiveActionStore({ config, logger });
+  const emotionalBeatStore = createEmotionalBeatStore({ config, logger });
   const spotify = createSpotifyService({ config, store: musicStore, logger });
   const musicBrainz = createMusicBrainzService({ config, logger });
   const musicLibrary = createMusicLibraryService({ config, store: musicStore, spotify, musicBrainz, logger });
@@ -195,6 +197,7 @@ async function startApp() {
     relationalState,
     innerLife,
     continuity,
+    emotionalBeatStore,
   });
   const secondLifeReplyGenerator = createSecondLifeReplyGenerator({
     config,
@@ -304,6 +307,7 @@ async function startApp() {
     relationalState,
     innerLife,
     continuity,
+    emotionalBeatStore,
     secondLife,
     secondLifeAdapter,
     secondLifeIdentityResolver,
@@ -373,6 +377,7 @@ async function startApp() {
 
   await runStartupStep("conversations.init", logger, () => conversations.init());
   await runStartupStep("memoryStore.init", logger, () => memoryStore.init());
+  await runStartupStep("emotionalBeatStore.init", logger, () => emotionalBeatStore.init());
   await runStartupStep("generatedMemories.init", logger, () => generatedMemories.init());
   await runStartupStep("generatedImages.init", logger, () => generatedImages.init());
   await runStartupStep("generatedAudio.init", logger, () => generatedAudio.init());

@@ -112,6 +112,13 @@
     "verify:norwegian-review-engine": "node scripts/verify-norwegian-review-engine.mjs",
     "verify:norwegian-mastery": "node scripts/verify-norwegian-mastery.mjs",
     "verify:norwegian-no-hallucinations": "node scripts/verify-norwegian-no-hallucinations.mjs",
-    "verify:norwegian-e2e-smoke": "node scripts/verify-norwegian-e2e-smoke.mjs"
+    "verify:norwegian-e2e-smoke": "node scripts/verify-norwegian-e2e-smoke.mjs",
+    "verify:memory-curation": "pnpm --dir artifacts/ghostlight-bot run verify:memory-curation",
+    "verify:cross-channel-continuity": "pnpm --dir artifacts/ghostlight-bot run verify:cross-channel-continuity",
+    "verify:emotional-beats": "pnpm --dir artifacts/ghostlight-bot run verify:emotional-beats",
+    "verify:proposal-memory": "pnpm --dir artifacts/ghostlight-bot run verify:proposal-memory",
+    "verify:continuity-prelude": "pnpm --dir artifacts/ghostlight-bot run verify:continuity-prelude",
+    "verify:continuity-privacy": "pnpm --dir artifacts/ghostlight-bot run verify:continuity-privacy",
+    "verify:safety-error-handling": "pnpm --dir artifacts/ghostlight-bot run verify:safety-error-handling"
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "@workspace/ghostlight-bot",
   "version": "1.3.1",
-  "description": "Ghostlight — private AI companion bot (template base)",
+  "description": "Ghostlight \u2014 private AI companion bot (template base)",
   "license": "UNLICENSED",
   "main": "src/index.js",
   "scripts": {
@@ -42,7 +42,14 @@
     "verify:norwegian-discord-commands": "node scripts/verify-norwegian-discord-commands.mjs",
     "verify:norwegian-corrections": "node scripts/verify-norwegian-corrections.mjs",
     "verify:norwegian-media-commands": "node scripts/verify-norwegian-media-commands.mjs",
-    "verify:norwegian-learning-events": "node scripts/verify-norwegian-learning-events.mjs"
+    "verify:norwegian-learning-events": "node scripts/verify-norwegian-learning-events.mjs",
+    "verify:memory-curation": "node scripts/verify-emotional-continuity.mjs",
+    "verify:cross-channel-continuity": "node scripts/verify-emotional-continuity.mjs",
+    "verify:emotional-beats": "node scripts/verify-emotional-continuity.mjs",
+    "verify:proposal-memory": "node scripts/verify-emotional-continuity.mjs",
+    "verify:continuity-prelude": "node scripts/verify-emotional-continuity.mjs",
+    "verify:continuity-privacy": "node scripts/verify-emotional-continuity.mjs",
+    "verify:safety-error-handling": "node scripts/verify-emotional-continuity.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

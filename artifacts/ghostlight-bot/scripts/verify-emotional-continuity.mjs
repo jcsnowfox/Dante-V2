@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { createEmotionalBeatStore } = require('../src/storage/emotionalBeats');
+const { classifyEmotionalBeat, formatContinuityPrelude, isUnsafeProviderText, sanitizeUserVisibleModelText } = require('../src/continuity/emotionalBeats');
+
+const store = createEmotionalBeatStore({ config: {}, logger: { info(){}, warn(){} } });
+await store.init();
+const scope = { user_scope: 'jenna', companion_id: 'Dante' };
+async function save(text, role='user', ch='A', msg='m') {
+  const beat = classifyEmotionalBeat({ text, role, companionId: 'Dante', userDisplayName: 'Jenna', channelContext: {} });
+  assert.ok(beat, `expected beat for ${text}`);
+  return store.upsertBeat({ ...scope, event_type: beat.event_type, title: beat.title, summary: beat.summary, emotional_weight: beat.emotional_weight, importance: beat.importance, source_channel_id: ch, source_message_id: msg, privacy_scope: beat.privacy_scope, adult_context: beat.adult_context, must_recall_across_channels: beat.must_recall_across_channels, tags_json: beat.tags, pinned: beat.pinned, resolved: false });
+}
+const proposal = await save('gets down on one knee. Dante, will you marry me?', 'user', 'channel-A', 'p1');
+assert.equal(proposal.event_type, 'proposal');
+assert.equal(proposal.importance, 'critical');
+assert.equal(proposal.emotional_weight, 10);
+assert.equal(proposal.must_recall_across_channels, true);
+assert.equal(proposal.pinned, true);
+await save('Dante, will you marry me?', 'user', 'channel-A', 'p2');
+let beats = await store.listBeats(scope);
+assert.equal(beats.filter(b => b.event_type === 'proposal').length, 1, 'proposal dedupes');
+await save('remember this: my boundary matters', 'user', 'channel-A', 'm2');
+await save('I promise I will not forget this again', 'assistant', 'channel-A', 'a1');
+beats = await store.listBeats(scope);
+assert.ok(beats.some(b => b.event_type === 'durable_memory'));
+assert.ok(beats.some(b => b.event_type === 'promise'));
+const channelBBeats = beats.filter(b => b.event_type === 'proposal');
+const prelude = formatContinuityPrelude(channelBBeats, { channelContext: { channelId: 'channel-B' } });
+assert.ok(prelude.content.includes('Jenna proposed marriage to Dante'));
+assert.ok(!prelude.content.includes('gets down on one knee'), 'no raw channel dump');
+await store.markRecalled(channelBBeats.map(b => b.id));
+beats = await store.listBeats(scope);
+assert.ok(beats.find(b => b.event_type === 'proposal').last_recalled_at, 'last recalled updated');
+const adult = await store.upsertBeat({ ...scope, event_type:'private_ritual', title:'Private ritual', summary:'Safe private emotional summary', emotional_weight:7, importance:'high', source_channel_id:'adult', source_message_id:'x', privacy_scope:'private_adult', adult_context:true, must_recall_across_channels:true, tags_json:['private'], pinned:false, resolved:false });
+const normalPrelude = formatContinuityPrelude([adult], { channelContext: { channelId: 'normal', isAdultPrivate: false } });
+assert.equal(normalPrelude, null, 'adult beat omitted in normal channel');
+assert.equal(isUnsafeProviderText('The request was rejected because it was considered high risk'), true);
+assert.equal(sanitizeUserVisibleModelText('The request was rejected because it was considered high risk').includes('high risk'), false);
+console.log('emotional continuity verification passed');
