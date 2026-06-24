@@ -216,6 +216,10 @@ function getAdminRouteState(pathname) {
     return { section: "norwegian" };
   }
 
+  if (pathname === "/admin/human-simulation" || pathname.startsWith("/admin/human-simulation/")) {
+    return { section: "humanSimulation" };
+  }
+
   return { section: "home" };
 }
 

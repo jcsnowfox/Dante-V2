@@ -79,6 +79,7 @@ function createChatPipeline({
   emotionalBeatStore = null,
   promiseLedger = null,
   memoryStore = null,
+  humanSimulation = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
@@ -594,6 +595,30 @@ function createChatPipeline({
           });
         }
       }
+
+      // Human Simulation Foundation — injects channel awareness, micro-preferences,
+      // timeline anchors, and due follow-ups as bounded private prelude sections.
+      // Additive only; fully guarded; never breaks the base reply.
+      if (!inDevMode && humanSimulation) {
+        try {
+          const hsResult = await humanSimulation.processMessage({
+            message,
+            input,
+            repairResult,
+            adultScope,
+            beatType: rankedBeats[0]?.event_type || null,
+          });
+          if (hsResult?.preludeSections?.length) {
+            for (const section of hsResult.preludeSections) {
+              contextSections.push(section);
+            }
+            logger.debug?.("[chat] Human simulation preludes injected", { messageId: message.id, count: hsResult.preludeSections.length });
+          }
+        } catch (error) {
+          logger.warn("[chat] Human simulation processing failed; continuing without it", { messageId: message.id, error: error.message });
+        }
+      }
+      logger.info?.("[reply-trace] humanSimulation processed=true");
 
       let modelOutput;
       try {

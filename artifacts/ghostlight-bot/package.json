@@ -75,7 +75,14 @@
     "verify:voice-guard-dante-first": "node scripts/verify-dante-first-replies.mjs voice",
     "verify:repair-trigger-precision": "node scripts/verify-dante-first-replies.mjs repair",
     "verify:adult-private-no-moralizing": "node scripts/verify-dante-first-replies.mjs adult",
-    "verify:voice-guard-no-loop": "node scripts/verify-dante-first-replies.mjs voice-no-loop"
+    "verify:voice-guard-no-loop": "node scripts/verify-dante-first-replies.mjs voice-no-loop",
+    "verify:micro-preference-learner": "node scripts/verify-micro-preference-learner.mjs",
+    "verify:personal-timeline": "node scripts/verify-personal-timeline.mjs",
+    "verify:emotional-follow-ups": "node scripts/verify-emotional-follow-ups.mjs",
+    "verify:channel-awareness-map": "node scripts/verify-channel-awareness-map.mjs",
+    "verify:human-simulation-foundation": "node scripts/verify-human-simulation-foundation.mjs",
+    "verify:human-simulation-runtime-wiring": "node scripts/verify-human-simulation-runtime-wiring.mjs",
+    "verify:human-simulation-privacy": "node scripts/verify-human-simulation-privacy.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

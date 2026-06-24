@@ -32,7 +32,12 @@ const {
   createProactiveActionStore,
   createEmotionalBeatStore,
   createPromiseLedger,
+  createMicroPreferenceStore,
+  createPersonalTimelineStore,
+  createFollowUpStore,
+  createChannelAwarenessStore,
 } = require("./storage");
+const { createHumanSimulationEngine } = require("./humanSimulation/humanSimulationEngine");
 const { seedStarterHeartbeatActions } = require("./storage/heartbeatActions/seedStarterActions");
 const { createCacheService } = require("./cache");
 const { createChannelModeService } = require("./channelModes");
@@ -141,6 +146,11 @@ async function startApp() {
   const proactiveActionStore = createProactiveActionStore({ config, logger });
   const emotionalBeatStore = createEmotionalBeatStore({ config, logger });
   const promiseLedger = createPromiseLedger({ config, logger });
+  const microPreferenceStore = createMicroPreferenceStore({ config, logger });
+  const personalTimelineStore = createPersonalTimelineStore({ config, logger });
+  const followUpStore = createFollowUpStore({ config, logger });
+  const channelAwarenessStore = createChannelAwarenessStore({ config, logger });
+  const humanSimulation = createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore });
   const spotify = createSpotifyService({ config, store: musicStore, logger });
   const musicBrainz = createMusicBrainzService({ config, logger });
   const musicLibrary = createMusicLibraryService({ config, store: musicStore, spotify, musicBrainz, logger });
@@ -202,6 +212,7 @@ async function startApp() {
     continuity,
     emotionalBeatStore,
     promiseLedger,
+    humanSimulation,
   });
   const secondLifeReplyGenerator = createSecondLifeReplyGenerator({
     config,
@@ -313,6 +324,11 @@ async function startApp() {
     continuity,
     emotionalBeatStore,
     promiseLedger,
+    humanSimulation,
+    microPreferenceStore,
+    personalTimelineStore,
+    followUpStore,
+    channelAwarenessStore,
     secondLife,
     secondLifeAdapter,
     secondLifeIdentityResolver,
@@ -371,6 +387,11 @@ async function startApp() {
     norwegianLearning,
     emotionalBeatStore,
     promiseLedger,
+    humanSimulation,
+    microPreferenceStore,
+    personalTimelineStore,
+    followUpStore,
+    channelAwarenessStore,
   };
 
   const gameButtonHandler = gameSystem.createButtonHandler({ appContext });
@@ -413,6 +434,7 @@ async function startApp() {
   await runStartupStep("relationalState.init", logger, () => relationalState.init());
   await runStartupStep("innerLife.init", logger, () => innerLife.init());
   await runStartupStep("continuity.init", logger, () => continuity.init());
+  await runStartupStep("humanSimulation.init", logger, () => humanSimulation.init());
   await runStartupStep("secondLife.init", logger, () => secondLife.init());
   await runStartupStep("secondLife.seedCommands", logger, async () => {
     if (!secondLife || secondLife.available !== true) return;

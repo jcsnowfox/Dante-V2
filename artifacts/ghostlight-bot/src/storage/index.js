@@ -80,6 +80,10 @@ const {
 } = require("./proactiveActions");
 const { createEmotionalBeatStore } = require("./emotionalBeats");
 const { createPromiseLedger } = require("../continuity/promiseLedger");
+const { createMicroPreferenceStore } = require("./microPreferences");
+const { createPersonalTimelineStore } = require("./personalTimeline");
+const { createFollowUpStore } = require("./followUpItems");
+const { createChannelAwarenessStore } = require("./channelAwareness");
 
 module.exports = {
   createConversationStore,
@@ -100,6 +104,10 @@ module.exports = {
   createProactiveActionStore,
   createEmotionalBeatStore,
   createPromiseLedger,
+  createMicroPreferenceStore,
+  createPersonalTimelineStore,
+  createFollowUpStore,
+  createChannelAwarenessStore,
   SUPPORTED_EVENT_TYPES,
   SUPPORTED_ROLES,
   SUPPORTED_SOURCES,
