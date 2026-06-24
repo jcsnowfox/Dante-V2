@@ -151,6 +151,7 @@ a{color:var(--accent)}
 
 /* ── Home page inner life feed ─────────────────────────────────── */
 .home-il-section{margin-top:.9rem;padding-top:.75rem;border-top:1px solid color-mix(in srgb,var(--border) 45%, transparent)}
+.home-il-bottom-section .home-il-section{margin-top:0;padding-top:0;border-top:none}
 .home-il-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem}
 .home-il-entry-list{display:grid;gap:.6rem}
 .home-il-entry-card{display:grid;gap:.35rem;padding:.65rem .75rem;border-radius:8px;border:1px solid color-mix(in srgb,var(--border) 55%, transparent);background:color-mix(in srgb,var(--surface) 70%, transparent)}

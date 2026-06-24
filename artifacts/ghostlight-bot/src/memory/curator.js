@@ -1154,26 +1154,25 @@ async function loadCuratorSourceEvents({
   const channelIds = normalizeChannelIds(config.memory?.dailySummaryChannelIds);
   const window = getLookbackWindow({ lookbackHours, now, normalizeLookback });
 
-  if (!channelIds.length) {
-    return {
-      ...window,
-      channelIds,
-      events: [],
-      skippedReason: "no_ltm_channels",
-    };
-  }
-
   const events = await conversations.listRecentEventsByDateRange({
     startDate: window.startDate,
     endDate: window.endDate,
     includeSummaries: false,
     limit,
   });
-  const filteredEvents = filterCuratorSourceEvents(events, {
-    channelIds,
-    since: window.start,
-    until: window.end,
-  });
+  const filteredEvents = channelIds.length
+    ? filterCuratorSourceEvents(events, {
+      channelIds,
+      since: window.start,
+      until: window.end,
+    })
+    : events.filter((event) => {
+      const createdTime = new Date(event.created_at).getTime();
+      return !Number.isNaN(createdTime)
+        && createdTime >= window.start.getTime()
+        && createdTime <= window.end.getTime()
+        && !["summary_daily", "summary_weekly"].includes(event.event_type);
+    });
 
   return {
     ...window,

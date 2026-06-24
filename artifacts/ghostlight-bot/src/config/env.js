@@ -275,10 +275,10 @@ function loadConfig() {
       reviewRejectedRetentionDays: readPositiveInt(process.env.MEMORY_REVIEW_REJECTED_RETENTION_DAYS, 30, { min: 1, max: 365 }),
     },
     memoryLookup: {
-      enabled: readBoolean(process.env.MEMORY_LOOKUP_ENABLED, false),
+      enabled: readBoolean(process.env.MEMORY_LOOKUP_ENABLED, true),
     },
     memoryCurator: {
-      enabled: readBoolean(process.env.MEMORY_CURATOR_ENABLED, false),
+      enabled: readBoolean(process.env.MEMORY_CURATOR_ENABLED, true),
       stageTwoModelMode: readCuratorStageTwoModelMode(process.env.MEMORY_CURATOR_STAGE_TWO_MODEL_MODE),
       attentionScanLastRunAt: String(process.env.MEMORY_CURATOR_ATTENTION_SCAN_LAST_RUN_AT || "").trim(),
       longScanLastRunAt: String(process.env.MEMORY_CURATOR_LONG_SCAN_LAST_RUN_AT || "").trim(),

@@ -274,36 +274,9 @@ function renderHomePage({ stats, theme = "light", helpers }) {
           "</div>",
         ].join("")
         : "",
-      recentInnerLifeEntries.length
-        ? [
-          "<div class=\"home-il-section\">",
-          "<div class=\"home-il-section-head\">",
-          `<span class="stat-label">Inner Life</span>`,
-          `<a class="pill" href="${escapeHtml(buildAdminLocation({ path: "/admin/inner-life/entries", theme }))}">All entries →</a>`,
-          "</div>",
-          "<div class=\"home-il-entry-list\">",
-          ...recentInnerLifeEntries.map((entry) => {
-            const typeLabel = INNER_LIFE_TYPE_LABELS[entry.entryType] || entry.entryType;
-            const statusLabel = INNER_LIFE_STATUS_LABELS[entry.status] || entry.status;
-            const content = String(entry.summary || "").trim();
-            const truncated = content.length > 200 ? content.slice(0, 200) + "…" : content;
-            return [
-              "<div class=\"home-il-entry-card\">",
-              "<div class=\"home-il-entry-top\">",
-              `<span class="badge home-il-type-badge">${escapeHtml(typeLabel)}</span>`,
-              `<span class="home-il-entry-time">${escapeHtml(formatHomeDate(entry.createdAt))}</span>`,
-              "</div>",
-              truncated ? `<p class="home-il-entry-content">${escapeHtml(truncated)}</p>` : "",
-              `<span class="badge home-il-status-badge home-il-status-${escapeHtml(entry.status || "active")}">${escapeHtml(statusLabel)}</span>`,
-              "</div>",
-            ].join("");
-          }),
-          "</div>",
-          "</div>",
-        ].join("")
-        : (!recentDecisions.length
-          ? "<p class=\"meta\">Recent Heartbeat decisions and Inner Life entries will appear here.</p>"
-          : ""),
+      !recentDecisions.length
+        ? "<p class=\"meta\">Recent Heartbeat decisions will appear here.</p>"
+        : "",
       "</section>",
       "</div>",
       "</section>",
@@ -325,6 +298,37 @@ function renderHomePage({ stats, theme = "light", helpers }) {
         "<div class=\"home-journal-stream-wrap\">",
         "<div class=\"home-journal-stream-track\">",
         recentJournalCards,
+        "</div>",
+        "</div>",
+        "</section>",
+      ].join("")
+      : "",
+
+    recentInnerLifeEntries.length
+      ? [
+        "<section class=\"lite-panel page-frame home-il-bottom-section\">",
+        "<div class=\"home-il-section\">",
+        "<div class=\"home-il-section-head\">",
+        `<span class="stat-label">Inner Life</span>`,
+        `<a class="pill" href="${escapeHtml(buildAdminLocation({ path: "/admin/inner-life/entries", theme }))}">All entries →</a>`,
+        "</div>",
+        "<div class=\"home-il-entry-list\">",
+        ...recentInnerLifeEntries.map((entry) => {
+          const typeLabel = INNER_LIFE_TYPE_LABELS[entry.entryType] || entry.entryType;
+          const statusLabel = INNER_LIFE_STATUS_LABELS[entry.status] || entry.status;
+          const content = String(entry.summary || "").trim();
+          const truncated = content.length > 200 ? content.slice(0, 200) + "…" : content;
+          return [
+            "<div class=\"home-il-entry-card\">",
+            "<div class=\"home-il-entry-top\">",
+            `<span class="badge home-il-type-badge">${escapeHtml(typeLabel)}</span>`,
+            `<span class="home-il-entry-time">${escapeHtml(formatHomeDate(entry.createdAt))}</span>`,
+            "</div>",
+            truncated ? `<p class="home-il-entry-content">${escapeHtml(truncated)}</p>` : "",
+            `<span class="badge home-il-status-badge home-il-status-${escapeHtml(entry.status || "active")}">${escapeHtml(statusLabel)}</span>`,
+            "</div>",
+          ].join("");
+        }),
         "</div>",
         "</div>",
         "</section>",

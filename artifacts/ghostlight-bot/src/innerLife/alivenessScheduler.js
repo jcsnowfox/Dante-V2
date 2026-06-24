@@ -69,6 +69,9 @@ function createAlivenessScheduler({ store, config, logger, callModel = null } = 
       });
     }, TICK_INTERVAL_MS);
     logger.debug("[inner-life] scheduler started", { intervalMs: TICK_INTERVAL_MS });
+    tick().catch((err) => {
+      logger.warn("[inner-life] scheduler initial tick error", { error: err?.message });
+    });
   }
 
   function stop() {
