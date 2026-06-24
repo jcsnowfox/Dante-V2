@@ -105,6 +105,13 @@
     "verify:norwegian-discord-commands": "node scripts/verify-norwegian-discord-commands.mjs",
     "verify:norwegian-corrections": "node scripts/verify-norwegian-corrections.mjs",
     "verify:norwegian-media-commands": "node scripts/verify-norwegian-media-commands.mjs",
-    "verify:norwegian-learning-events": "node scripts/verify-norwegian-learning-events.mjs"
+    "verify:norwegian-learning-events": "node scripts/verify-norwegian-learning-events.mjs",
+    "verify:norwegian-dashboard": "node scripts/verify-norwegian-dashboard.mjs",
+    "verify:norwegian-pronunciation": "node scripts/verify-norwegian-pronunciation.mjs",
+    "verify:norwegian-media-curator": "node scripts/verify-norwegian-media-curator.mjs",
+    "verify:norwegian-review-engine": "node scripts/verify-norwegian-review-engine.mjs",
+    "verify:norwegian-mastery": "node scripts/verify-norwegian-mastery.mjs",
+    "verify:norwegian-no-hallucinations": "node scripts/verify-norwegian-no-hallucinations.mjs",
+    "verify:norwegian-e2e-smoke": "node scripts/verify-norwegian-e2e-smoke.mjs"
   }
 }

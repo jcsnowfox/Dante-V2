@@ -183,22 +183,23 @@ function renderNorwegianDashboard({
     }
 
     const html = mediaLinks.slice(0, 20).map((media) => {
-      const notes = media.notes ? JSON.parse(media.notes) : {};
+      const url = media.url || '';
+      const watchLabel = { watched: '✅ Watched', read: '✅ Read', not_watched: '', not_read: '', saved_for_later: '🔖 Saved' }[media.watch_status] || '';
       return `
         <div class="nw-media-card">
           <div class="nw-card-header">
-            <h3><a href="${esc(media.source_id)}" target="_blank" rel="noopener">${esc(media.title)}</a></h3>
+            <h3>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(media.title)}</a>` : esc(media.title)}</h3>
             <span class="nw-badge-status">${renderSourceStatusBadge(media.source_status)}</span>
           </div>
           <div class="nw-card-meta">
             <span class="nw-meta-item">📺 ${esc(media.media_type)}</span>
             <span class="nw-meta-item">📅 ${new Date(media.created_at).toLocaleDateString()}</span>
-            ${notes.level ? `<span class="nw-meta-item">📚 ${esc(notes.level)}</span>` : ''}
-            ${notes.source ? `<span class="nw-meta-item">📍 ${esc(notes.source)}</span>` : ''}
+            ${media.level ? `<span class="nw-meta-item">📚 ${esc(media.level)}</span>` : ''}
+            ${media.source_name ? `<span class="nw-meta-item">📍 ${esc(media.source_name)}</span>` : ''}
+            ${watchLabel ? `<span class="nw-meta-item">${watchLabel}</span>` : ''}
           </div>
-          <div class="nw-media-url">
-            <a href="${esc(media.source_id)}" target="_blank" rel="noopener">Open link →</a>
-          </div>
+          ${media.availability_note ? `<div class="nw-explanation">${esc(media.availability_note)}</div>` : ''}
+          ${url ? `<div class="nw-media-url"><a href="${esc(url)}" target="_blank" rel="noopener">Open link →</a></div>` : ''}
         </div>`;
     }).join('');
 
@@ -210,21 +211,27 @@ function renderNorwegianDashboard({
       return `<div class="nw-empty"><p>No review items yet. Corrections and lessons will appear here.</p></div>`;
     }
 
-    const html = reviewItems.slice(0, 20).map((item) => `
+    const html = reviewItems.slice(0, 20).map((item) => {
+      const dueDate = item.next_due_at || item.due_at;
+      const isOverdue = dueDate && new Date(dueDate) < new Date();
+      return `
       <div class="nw-review-card">
         <div class="nw-card-header">
           <h3>${esc(item.item_type)}</h3>
-          <span class="nw-badge-status">${renderSourceStatusBadge(item.source_status)}</span>
-        </div>
-        ${item.due_at ? `
-          <div class="nw-card-meta">
-            <span class="nw-meta-item">⏰ Due: ${new Date(item.due_at).toLocaleDateString()}</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            ${item.grade ? `<span class="nw-badge-status">${renderGradeBadge(item.grade)}</span>` : ''}
+            <span class="nw-badge-status">${renderSourceStatusBadge(item.source_status)}</span>
           </div>
-        ` : ''}
-        <div class="nw-review-meta">
-          <span class="nw-meta-item">📅 Created: ${new Date(item.created_at).toLocaleDateString()}</span>
         </div>
-      </div>`).join('');
+        <div class="nw-card-meta">
+          <span class="nw-meta-item">📅 Created: ${new Date(item.created_at).toLocaleDateString()}</span>
+          ${dueDate ? `<span class="nw-meta-item" style="${isOverdue ? 'color:#c00' : ''}">⏰ ${isOverdue ? 'Overdue' : 'Due'}: ${new Date(dueDate).toLocaleDateString()}</span>` : ''}
+          ${item.priority ? `<span class="nw-meta-item">Priority: ${esc(item.priority)}</span>` : ''}
+          ${item.review_count ? `<span class="nw-meta-item">Reviews: ${item.review_count}</span>` : ''}
+          ${item.last_result ? `<span class="nw-meta-item">Last: ${esc(item.last_result)}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
 
     return `<div class="nw-cards">${html}</div>`;
   }
