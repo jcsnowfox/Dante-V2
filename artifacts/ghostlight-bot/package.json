@@ -74,7 +74,8 @@
     "verify:reply-fallback-rotation": "node scripts/verify-dante-first-replies.mjs fallback",
     "verify:voice-guard-dante-first": "node scripts/verify-dante-first-replies.mjs voice",
     "verify:repair-trigger-precision": "node scripts/verify-dante-first-replies.mjs repair",
-    "verify:adult-private-no-moralizing": "node scripts/verify-dante-first-replies.mjs adult"
+    "verify:adult-private-no-moralizing": "node scripts/verify-dante-first-replies.mjs adult",
+    "verify:voice-guard-no-loop": "node scripts/verify-dante-first-replies.mjs voice-no-loop"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

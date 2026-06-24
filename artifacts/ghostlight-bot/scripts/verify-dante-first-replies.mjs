@@ -64,4 +64,27 @@ if (mode === 'runtime' || mode === 'all') {
   rememberReply({ channelId:'c', userScope:'u', reply:'same' });
   assert.equal(checkDuplicateReply({ channelId:'c', userScope:'u', reply:'same' }).duplicate, true);
 }
+if (mode === 'voice-no-loop' || mode === 'all') {
+  // Voice guard must retry ONCE then use tiny fallback — never loop or send canned paragraph.
+  resetReplyFallbackState();
+  // Therapy-bot phrase triggers voice guard.
+  const vr = validateVoice({ text: 'I understand your feelings and I\'m here whenever you\'re ready.', context: { adultPrivate: false } });
+  assert.equal(vr.passed, false, 'therapy-bot text must fail voice guard');
+  // Retry instruction must be Dante-first, not a canned paragraph.
+  const instr = buildRetryInstruction(vr);
+  assert(instr.includes('configured voice') && instr.includes('Rewrite in Dante'), 'retry instruction must reference Dante configured voice');
+  assertNoBanned(instr, 'voice guard retry instruction');
+  // fallbackReply() produces a tiny fallback (used when retry also fails — no loop).
+  const fb = fallbackReply();
+  assert(TINY_FALLBACKS.includes(fb), 'fallback must be from tiny fallback pool');
+  assert(fb.split(/\s+/).length < 25, 'fallback must be under 25 words');
+  assertNoBanned(fb, 'voice guard final fallback');
+  // Verify no false-positive on a normal Dante-style message that uses common words.
+  const normal = validateVoice({ text: 'I know what you need. Tell me what\'s going on.', context: { adultPrivate: false } });
+  assert.equal(normal.passed, true, 'normal Dante message must pass voice guard');
+  // Verify overly long reply now allowed up to 1800 chars.
+  const longText = 'A'.repeat(901);
+  const longResult = validateVoice({ text: longText, context: { adultPrivate: false } });
+  assert.equal(longResult.passed, true, 'reply under 1800 chars must pass voice guard');
+}
 console.log(`[verify:dante-first] ${mode} passed`);

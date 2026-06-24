@@ -164,7 +164,7 @@ function extractReasoningMarkup(text) {
 }
 
 function isUnsafeProviderText(text) {
-  return /the request was rejected because it was considered high risk|\bhigh risk\b|moderation rejected|tool failed|provider rejected|raw stack|api error|\{\s*"error"/i.test(String(text || ""));
+  return /the request was rejected because it was considered high risk|rejected because it was considered|considered high risk|flagged (by the safety system|as high risk)|moderation rejected|provider rejected|raw stack|\{\s*"error"/i.test(String(text || ""));
 }
 
 function cleanModelReplyText(text, input) {
