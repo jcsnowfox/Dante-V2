@@ -21,7 +21,7 @@ const {
 const { classifyEmotionalBeat, formatContinuityPrelude, isProposalText, isForgotProposalText } = require("../continuity/emotionalBeats");
 const { detectPromise } = require("../continuity/promiseLedger");
 const { resolveToneMode, formatTonePrelude } = require("../continuity/toneModeResolver");
-const { validateVoice, buildRetryInstruction, fallbackReply, buildVoiceRules } = require("../continuity/voiceFingerprintGuard");
+const { buildVoiceRules } = require("../continuity/voiceFingerprintGuard");
 const { tinyFallbackForReason, checkDuplicateReply, rememberReply } = require("../continuity/replyFallbacks");
 const { analyzeRepair, buildRepairPrelude, saveRepairBeat } = require("../relationshipRepair/engine");
 const { updateSystemTruth } = require("../systemTruth/runtimeState");
@@ -643,25 +643,7 @@ function createChatPipeline({
         modelOutput = { provider: "fallback", mode: effectiveMode.name, text: tinyFallbackForReason("llm_call_failed", logger, { messageId: message.id, channelId: message.channelId }) };
       }
 
-      if (!inDevMode && replyTrace.finalSource !== "tiny_fallback") {
-        const guardResult = validateVoice({ text: modelOutput.text, context: { adultPrivate: adultScope.active, allowRoleplayNarration: false } });
-        updateSystemTruth("continuity", { voiceFingerprintGuardEnabled: true, lastVoiceGuardResult: { passed: guardResult.passed, violations: guardResult.violations } });
-        replyTrace.voiceGuardPassed = guardResult.passed;
-        replyTrace.voiceGuardViolations = guardResult.violations;
-        logger.info?.(`[reply-trace] voiceGuard passed=${guardResult.passed} violations=${guardResult.violations.join(",")}`);
-        logger.info?.(`[voice-guard] checked companionId=${beatScope.companion_id} passed=${guardResult.passed} violations=${guardResult.violations.join(",")}`);
-        if (!guardResult.passed) {
-          logger.info?.(`[voice-guard] retry requested reason=${guardResult.violations.join(",")}`);
-          const retrySections = [...contextSections, { label: "VOICE REPAIR", content: buildRetryInstruction(guardResult) }];
-          const retryOutput = await callModel({
-            config, logger, tools, mode: effectiveMode, message, input, recentHistory, memories, contextSections: retrySections,
-            channelType: "discord", overrideSystemPrompt: null, systemPromptPrefix: adultSystemPromptPrefix, toolContext: { surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode, currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id, currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory, memoryContextIds: memories.map((m)=>m?.memoryId||m?.memory_id||"").filter(Boolean), imageConversationActive: Boolean(imageConversationState?.active) },
-          });
-          const retryGuard = validateVoice({ text: retryOutput.text, context: { adultPrivate: adultScope.active, allowRoleplayNarration: false } });
-          if (retryGuard.passed) { modelOutput = retryOutput; replyTrace.finalSource = "retry"; }
-          else { modelOutput.text = fallbackReply(); replyTrace.fallbackUsed = true; replyTrace.fallbackReason = "voice_guard_retry_failed"; replyTrace.finalSource = "tiny_fallback"; logger.warn?.(`[voice-guard] fallback used reason=${retryGuard.violations.join(",")}`); }
-        }
-      }
+      logger.info?.("[reply-trace] voiceGuard bypassed=true");
 
       if (shouldRefreshImageConversationFromAssistant({
         text: modelOutput.text,

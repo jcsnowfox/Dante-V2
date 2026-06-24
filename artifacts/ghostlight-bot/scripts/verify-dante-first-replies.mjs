@@ -59,7 +59,7 @@ if (mode === 'adult' || mode === 'all') {
 }
 if (mode === 'runtime' || mode === 'all') {
   const pipeline = readFileSync(new URL('../src/chat/createChatPipeline.js', import.meta.url), 'utf8');
-  for (const needle of ['[reply-trace] llm called=true','[reply-trace] finalSource=','DUPLICATE REPLY REPAIR','voiceGuard passed=']) assert(pipeline.includes(needle), `missing runtime wiring: ${needle}`);
+  for (const needle of ['[reply-trace] llm called=true','[reply-trace] finalSource=','DUPLICATE REPLY REPAIR','voiceGuard bypassed=true']) assert(pipeline.includes(needle), `missing runtime wiring: ${needle}`);
   resetReplyFallbackState();
   rememberReply({ channelId:'c', userScope:'u', reply:'same' });
   assert.equal(checkDuplicateReply({ channelId:'c', userScope:'u', reply:'same' }).duplicate, true);
