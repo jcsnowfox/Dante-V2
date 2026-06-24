@@ -49,7 +49,14 @@
     "verify:proposal-memory": "node scripts/verify-emotional-continuity.mjs",
     "verify:continuity-prelude": "node scripts/verify-emotional-continuity.mjs",
     "verify:continuity-privacy": "node scripts/verify-emotional-continuity.mjs",
-    "verify:safety-error-handling": "node scripts/verify-emotional-continuity.mjs"
+    "verify:safety-error-handling": "node scripts/verify-emotional-continuity.mjs",
+    "verify:emotional-beats-dashboard": "node scripts/verify-continuity-control-layer.mjs",
+    "verify:promise-ledger": "node scripts/verify-continuity-control-layer.mjs",
+    "verify:voice-fingerprint-guard": "node scripts/verify-continuity-control-layer.mjs",
+    "verify:tone-mode-resolver": "node scripts/verify-continuity-control-layer.mjs",
+    "verify:continuity-control-layer": "node scripts/verify-continuity-control-layer.mjs",
+    "verify:continuity-control-privacy": "node scripts/verify-continuity-control-layer.mjs",
+    "verify:reply-runtime-wiring": "node scripts/verify-continuity-control-layer.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

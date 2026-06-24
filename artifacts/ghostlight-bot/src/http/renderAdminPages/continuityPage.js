@@ -211,6 +211,24 @@ function renderEmotionalBeatsTab({ emotionalBeats, helpers }) {
   ].join("");
 }
 
+
+function renderPromiseLedgerTab({ promises, helpers, theme }) {
+  const { escapeHtml, withThemeField } = helpers;
+  const rows = Array.isArray(promises) ? promises : [];
+  if (!rows.length) return '<p class="meta">No promises stored yet.</p>';
+  return ['<div class="model-table-wrap"><table class="model-table">','<thead><tr><th>Maker</th><th>Summary</th><th>Type</th><th>Status</th><th>Importance</th><th>Source</th><th>Privacy</th><th>Due</th><th>Timestamps</th><th>Tags</th><th></th></tr></thead><tbody>', rows.map((p)=>['<tr>',`<td>${escapeHtml(p.promise_maker||'—')}</td>`,`<td class="table-detail-cell">${escapeHtml(p.promise_text_summary||'—')}</td>`,`<td>${escapeHtml(p.promise_type||'other')}</td>`,`<td>${escapeHtml(p.status||'open')}</td>`,`<td>${escapeHtml(p.importance||'medium')}</td>`,`<td class="meta">${escapeHtml([p.source_channel_id,p.source_message_id].filter(Boolean).join(' / ')||'—')}</td>`,`<td>${escapeHtml(p.privacy_scope||'normal')}${p.adult_context?' (adult gated)':''}</td>`,`<td>${escapeHtml(p.due_at?new Date(p.due_at).toLocaleString('en-GB'):'—')}</td>`,`<td class="meta">fulfilled ${escapeHtml(p.fulfilled_at||'—')}<br>broken ${escapeHtml(p.broken_at||'—')}<br>repaired ${escapeHtml(p.repaired_at||'—')}</td>`,`<td class="meta">${escapeHtml(Array.isArray(p.tags_json)?p.tags_json.join(', '):'')}</td>`,`<td><div style="display:flex;gap:6px;flex-wrap:wrap">${['fulfilled','broken','repaired','archived'].map(st=>`<form method="POST" action="/admin/actions/promise-status" style="display:contents">${withThemeField(theme)}<input type="hidden" name="promiseId" value="${escapeHtml(String(p.id))}"><input type="hidden" name="status" value="${st}"><input type="hidden" name="returnTo" value="/admin/continuity/promises"><button type="submit" class="secondary">${st}</button></form>`).join('')}<form method="POST" action="/admin/actions/promise-delete" style="display:contents" onsubmit="return confirm('Delete promise?')">${withThemeField(theme)}<input type="hidden" name="promiseId" value="${escapeHtml(String(p.id))}"><input type="hidden" name="returnTo" value="/admin/continuity/promises"><button type="submit" class="secondary">Delete</button></form></div></td>`,'</tr>'].join('')).join(''),'</tbody></table></div>'].join('');
+}
+function renderVoiceFingerprintTab({ helpers }) {
+  const { escapeHtml } = helpers;
+  const { getVoiceDashboardState } = require("../../continuity/voiceFingerprintGuard");
+  const v = getVoiceDashboardState();
+  return `<h3>Voice Fingerprint Guard</h3><p class="meta">enabled ${v.enabled} · strictness ${escapeHtml(v.strictness)} · preset ${escapeHtml(v.currentVoicePresetName)}</p><div class="model-table-wrap"><table class="model-table"><tbody><tr><th>Last check</th><td>${escapeHtml(JSON.stringify(v.lastCheck||{}))}</td></tr><tr><th>Violation counts</th><td>${escapeHtml(JSON.stringify(v.recentViolationCounts))}</td></tr><tr><th>Forbidden phrase hits</th><td>${escapeHtml(v.forbiddenPhrases.join(', '))}</td></tr><tr><th>Retry count</th><td>${v.retryCount}</td></tr><tr><th>Fallback count</th><td>${v.fallbackCount}</td></tr><tr><th>Max reply length</th><td>${v.maxReplyLength}</td></tr></tbody></table></div>`;
+}
+function renderToneModeTab({ helpers }) {
+  const { escapeHtml } = helpers;
+  return `<h3>Tone Mode Resolver</h3><p class="meta">enabled true · default mode neutral · adult_private only in configured adult/private channel</p><div class="model-table-wrap"><table class="model-table"><tbody><tr><th>Supported modes</th><td>${escapeHtml('neutral, tender, flirty, dry_sarcastic, protective, possessive, melancholic, agitated, focused, playful, quiet, repair, teacher, norwegian_tutor, adult_private')}</td></tr><tr><th>Settings</th><td>allow flirty in normal channels: false<br>allow possessive mode: guarded<br>quiet hours tone preference: continuity settings</td></tr></tbody></table></div>`;
+}
+
 function renderSettingsTab({ settings, helpers, theme, msg, err }) {
   const { escapeHtml, withThemeField } = helpers;
 
@@ -425,13 +443,16 @@ ${msgBanner}${errBanner}
 }
 
 function renderContinuityPage({
-  tab, items, emotionalBeats, settings, typeFilter, statusFilter,
+  tab, items, emotionalBeats, promises, settings, typeFilter, statusFilter,
   storeAvailable, theme, helpers, msg, err,
 }) {
   const tabs = [
     { key: "overview", label: "Overview", path: "/admin/continuity/overview" },
     { key: "items", label: "Items", path: "/admin/continuity/items" },
     { key: "emotional-beats", label: "Emotional Beats", path: "/admin/continuity/emotional-beats" },
+    { key: "promises", label: "Promise Ledger", path: "/admin/continuity/promises" },
+    { key: "voice", label: "Voice Fingerprint", path: "/admin/continuity/voice" },
+    { key: "tone", label: "Tone Mode", path: "/admin/continuity/tone" },
     { key: "settings", label: "Settings", path: "/admin/continuity/settings" },
   ];
 
@@ -440,6 +461,12 @@ function renderContinuityPage({
     body = renderSettingsTab({ settings, helpers, theme, msg, err });
   } else if (tab === "emotional-beats") {
     body = renderEmotionalBeatsTab({ emotionalBeats, helpers });
+  } else if (tab === "promises") {
+    body = renderPromiseLedgerTab({ promises, helpers, theme });
+  } else if (tab === "voice") {
+    body = renderVoiceFingerprintTab({ helpers });
+  } else if (tab === "tone") {
+    body = renderToneModeTab({ helpers });
   } else if (tab === "items") {
     body = renderItemsTab({ items, typeFilter, statusFilter, helpers, theme });
   } else {

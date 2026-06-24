@@ -177,6 +177,33 @@ async function handleContinuityActions({ req, res, url, context, withAdmin }) {
     })(req, res, context);
   }
 
+  if (req.method === "POST" && url.pathname === "/admin/actions/promise-status") {
+    return withAdmin(async (innerReq, innerRes, innerContext) => {
+      const { fields } = await parseRequestForm(innerReq);
+      const theme = normalizeTheme(fields.theme);
+      const returnTo = fieldValue(fields, "returnTo") || "/admin/continuity/promises";
+      const promiseId = Number(fieldValue(fields, "promiseId"));
+      const status = fieldValue(fields, "status");
+      const ledger = innerContext.promiseLedger;
+      if (!ledger || !promiseId || !["fulfilled", "broken", "repaired", "archived"].includes(status)) return redirect(innerRes, { returnTo, theme, error: "Invalid promise request." });
+      const stamp = status === "fulfilled" ? "fulfilled_at" : status === "broken" ? "broken_at" : status === "repaired" ? "repaired_at" : null;
+      await ledger.updatePromise({ id: promiseId, updates: { status, ...(stamp ? { [stamp]: new Date() } : {}) } });
+      return redirect(innerRes, { returnTo, theme, message: `Promise marked ${status}.` });
+    })(req, res, context);
+  }
+
+  if (req.method === "POST" && url.pathname === "/admin/actions/promise-delete") {
+    return withAdmin(async (innerReq, innerRes, innerContext) => {
+      const { fields } = await parseRequestForm(innerReq);
+      const theme = normalizeTheme(fields.theme);
+      const returnTo = fieldValue(fields, "returnTo") || "/admin/continuity/promises";
+      const promiseId = Number(fieldValue(fields, "promiseId"));
+      if (!innerContext.promiseLedger || !promiseId) return redirect(innerRes, { returnTo, theme, error: "Invalid promise request." });
+      await innerContext.promiseLedger.deletePromise({ id: promiseId });
+      return redirect(innerRes, { returnTo, theme, message: "Promise deleted." });
+    })(req, res, context);
+  }
+
   return false;
 }
 
