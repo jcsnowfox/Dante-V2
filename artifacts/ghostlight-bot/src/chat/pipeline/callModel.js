@@ -12,7 +12,8 @@ const {
   formatTimestamp,
 } = require("./buildChatInput");
 const { isStandaloneProviderRefusal } = require("./providerRefusal");
-const { isUnsafeProviderText, FallbackText } = require("../../continuity/emotionalBeats");
+const { isUnsafeProviderText } = require("../../continuity/emotionalBeats");
+const { selectTinyFallback } = require("../../continuity/replyFallbacks");
 
 function isToolUseUnsupportedError(error) {
   const status = Number(error?.status || error?.code || 0);
@@ -936,14 +937,14 @@ async function callModel({
       responseId: response.id,
       preview: truncateDiagnosticText(visibleText, 200),
     });
-    visibleText = FallbackText;
+    visibleText = selectTinyFallback();
   }
 
   return {
     provider: providerLabel,
     mode: mode.name,
     toolCount: totalToolCount,
-    text: isUnsafeProviderText(visibleText) ? FallbackText : (visibleText || FallbackText),
+    text: isUnsafeProviderText(visibleText) ? selectTinyFallback() : (visibleText || selectTinyFallback()),
     sources,
     webSearchUsed: useWebSearch,
     files: replyDirectives.files,
