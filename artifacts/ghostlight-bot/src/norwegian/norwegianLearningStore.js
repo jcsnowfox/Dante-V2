@@ -352,9 +352,9 @@ function createNorwegianLearningStore({ config, logger }) {
           INSERT INTO norwegian_pronunciation_attempts (
             user_scope, target_phrase, transcript_text, stt_confidence, score, grade,
             feedback, correction_focus, attempt_number, source_status, tts_example_provider,
-            source_channel, source_message_id, word_or_phrase
+            source_channel, source_message_id
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
           RETURNING id
         `,
         [
@@ -371,7 +371,6 @@ function createNorwegianLearningStore({ config, logger }) {
           String(event.ttsExampleProvider || '').slice(0, 50),
           String(event.sourceChannel || '').slice(0, 50),
           String(event.sourceMessageId || '').slice(0, 50),
-          String(event.wordOrPhrase || event.targetPhrase || '').slice(0, 500),
         ],
       );
 
@@ -636,14 +635,14 @@ function createNorwegianLearningStore({ config, logger }) {
 
     async getWeakSpotSummary(userScope) {
       const scope = normalizeUserScope(userScope);
-      // Summarize from corrections and pronunciation attempts
-      const { rows } = await pool.query(
+      // Weak spots from pronunciation attempts (correction_focus column)
+      const { rows: pronunciationRows } = await pool.query(
         `
-          SELECT correction_focus as category, COUNT(*) as count
-          FROM norwegian_review_items
+          SELECT correction_focus AS category, COUNT(*) AS count
+          FROM norwegian_pronunciation_attempts
           WHERE user_scope = $1
-            AND archived_at IS NULL
             AND correction_focus IS NOT NULL
+            AND correction_focus != ''
           GROUP BY correction_focus
           ORDER BY count DESC
           LIMIT 5
@@ -651,8 +650,15 @@ function createNorwegianLearningStore({ config, logger }) {
         [scope],
       );
 
+      // Total corrections count for summary
+      const { rows: correctionRows } = await pool.query(
+        `SELECT COUNT(*) AS total FROM norwegian_corrections WHERE user_scope = $1`,
+        [scope],
+      );
+
       return {
-        categories: rows,
+        categories: pronunciationRows,
+        totalCorrections: Number(correctionRows[0]?.total || 0),
       };
     },
 
@@ -791,7 +797,12 @@ function createNorwegianLearningStore({ config, logger }) {
     async listNorwegianReviewItems(userScope, limit = 50) {
       const scope = normalizeUserScope(userScope);
       const { rows } = await pool.query(
-        `SELECT id, item_type, content, source_status, due_at, created_at FROM norwegian_review_items WHERE user_scope = $1 ORDER BY COALESCE(due_at, created_at) DESC LIMIT $2`,
+        `SELECT id, item_type, content, source_status, due_at, grade, priority,
+                review_count, correct_count, retry_count, last_result, next_due_at, created_at
+         FROM norwegian_review_items
+         WHERE user_scope = $1
+         ORDER BY COALESCE(next_due_at, due_at, created_at) DESC
+         LIMIT $2`,
         [scope, limit],
       );
       return rows;
@@ -800,7 +811,13 @@ function createNorwegianLearningStore({ config, logger }) {
     async listNorwegianPronunciationAttempts(userScope, limit = 50) {
       const scope = normalizeUserScope(userScope);
       const { rows } = await pool.query(
-        `SELECT id, word_or_phrase, source_status, notes, created_at FROM norwegian_pronunciation_attempts WHERE user_scope = $1 ORDER BY created_at DESC LIMIT $2`,
+        `SELECT id, target_phrase, transcript_text, stt_confidence, score, grade,
+                feedback, correction_focus, attempt_number, source_status,
+                tts_example_provider, created_at
+         FROM norwegian_pronunciation_attempts
+         WHERE user_scope = $1
+         ORDER BY created_at DESC
+         LIMIT $2`,
         [scope, limit],
       );
       return rows;

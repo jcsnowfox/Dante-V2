@@ -27,20 +27,17 @@ async function searchNorwegianMedia({
       userScope: 'search',
     });
 
-    const response = await client.messages.create({
-      model: 'claude-opus-4-1',
-      max_tokens: 1000,
-      tools: [
-        {
-          type: 'web_search',
-          name: 'web_search',
-          description: 'Search the web for information',
-        },
-      ],
+    const response = await client.chat.completions.create({
+      model: config.llm?.chat?.model || 'openai/gpt-4o-mini',
+      max_tokens: 800,
       messages: [
         {
+          role: 'system',
+          content: 'You find real Norwegian-language media resources. Return only real URLs from: nrk.no, aftenposten.no, vg.no, dagbladet.no, youtube.com, spotify.com, or similar verified Norwegian sources. Never invent URLs.',
+        },
+        {
           role: 'user',
-          content: `Search for the most relevant Norwegian-language ${mediaType} resources about "${query}". Return the top 3-5 results with their full URLs, titles, and sources.`,
+          content: `List 3-5 real Norwegian-language ${mediaType} resources about "${query}". Format each as: Title: [title]\nURL: [full url]\nSource: [source name]`,
         },
       ],
     });
@@ -65,23 +62,21 @@ async function searchNorwegianMedia({
 function extractMediaResults(response, mediaType, logger) {
   const results = [];
 
-  if (!response || !response.content) {
+  // Handle OpenAI chat completions response format
+  const text = response?.choices?.[0]?.message?.content
+    || (response?.content?.[0]?.type === 'text' ? response.content[0].text : null);
+
+  if (!text) {
     return results;
   }
 
-  // Walk through response content to find URLs and titles
-  for (const block of response.content) {
-    if (block.type === 'text') {
-      // Parse text for URLs
-      const urlMatches = block.text.match(/https?:\/\/[^\s\]<>"{}|\\^`]+/g) || [];
-      const titleMatches = block.text.match(/(?:title|Title):\s*([^\n]+)/gi) || [];
+  // Parse text for URLs
+  const urlMatches = text.match(/https?:\/\/[^\s\]<>"{}|\\^`]+/g) || [];
 
-      for (const url of urlMatches) {
-        const result = parseMediaUrl(url, mediaType);
-        if (result && result.url) {
-          results.push(result);
-        }
-      }
+  for (const url of urlMatches) {
+    const result = parseMediaUrl(url, mediaType);
+    if (result && result.url) {
+      results.push(result);
     }
   }
 

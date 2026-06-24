@@ -1,6 +1,10 @@
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const { SOURCE_STATUS, validateSourceStatus } = require("../../norwegian/norwegianSourceStatus");
 const { NORWEGIAN_LEVELS, normalizeNorwegianSettings } = require("../../norwegian/norwegianSettings");
+const { generateDailyPractice, analyzeWeakSpots, generateWeeklySummary } = require("../../norwegian/norwegianReviewEngine");
+const { calculateMasteryProfile, getNextFocus } = require("../../norwegian/norwegianMasteryEngine");
+const { recommendPath } = require("../../norwegian/norwegianLearningPaths");
+const { createAudioGenerationService } = require("../../audio/generateAudio");
 
 const MAX_RESPONSE_LENGTH = 1900;
 const COMMAND_TIMEOUT_MS = 10000;
@@ -117,7 +121,35 @@ module.exports = {
           opt
             .setName("phrase")
             .setDescription("Optional phrase to practice (or send audio note next)")
-            .setRequired(false))),
+            .setRequired(false)))
+    .addSubcommand((sub) =>
+      sub
+        .setName("daily")
+        .setDescription("Get today's practice set from your saved learning data."))
+    .addSubcommand((sub) =>
+      sub
+        .setName("weakspots")
+        .setDescription("See your weak spots identified from saved corrections and pronunciation data."))
+    .addSubcommand((sub) =>
+      sub
+        .setName("weekly")
+        .setDescription("See your weekly Norwegian learning summary."))
+    .addSubcommand((sub) =>
+      sub
+        .setName("mastery")
+        .setDescription("See your evidence-based Norwegian mastery profile."))
+    .addSubcommand((sub) =>
+      sub
+        .setName("level")
+        .setDescription("See your estimated Norwegian level with confidence and basis."))
+    .addSubcommand((sub) =>
+      sub
+        .setName("next")
+        .setDescription("Get the next recommended focus based on your learning data."))
+    .addSubcommand((sub) =>
+      sub
+        .setName("plan")
+        .setDescription("Get a learning path recommendation based on your weak spots.")),
 
   async execute(interaction) {
     const { norwegianLearning, logger } = interaction.client.appContext;
@@ -179,6 +211,34 @@ module.exports = {
 
       if (subcommand === "pronounce") {
         return await handleNorwegianPronounce(interaction, norwegianLearning, userScope, logger);
+      }
+
+      if (subcommand === "daily") {
+        return await handleNorwegianDaily(interaction, norwegianLearning, userScope, logger);
+      }
+
+      if (subcommand === "weakspots") {
+        return await handleNorwegianWeakspots(interaction, norwegianLearning, userScope, logger);
+      }
+
+      if (subcommand === "weekly") {
+        return await handleNorwegianWeekly(interaction, norwegianLearning, userScope, logger);
+      }
+
+      if (subcommand === "mastery") {
+        return await handleNorwegianMastery(interaction, norwegianLearning, userScope, logger);
+      }
+
+      if (subcommand === "level") {
+        return await handleNorwegianLevel(interaction, norwegianLearning, userScope, logger);
+      }
+
+      if (subcommand === "next") {
+        return await handleNorwegianNext(interaction, norwegianLearning, userScope, logger);
+      }
+
+      if (subcommand === "plan") {
+        return await handleNorwegianPlan(interaction, norwegianLearning, userScope, logger);
       }
 
       await interaction.editReply("That command is not implemented yet.");
@@ -323,53 +383,32 @@ async function handleNorwegianWord(interaction, store, userScope, logger) {
 
   logger.info("[norwegian] word lookup requested", { userScope, word });
 
-  // Safe word lookup - only return if we have verified information
-  const wordData = {
-    word,
-    english: "Definition from trusted source",
-    partOfSpeech: "noun",
-    bokmalForm: word,
-    inflections: "singular indefinite: " + word,
-    exampleSentences: [
-      { norwegian: `Jeg liker ${word}.`, english: `I like ${word}.` },
-      { norwegian: `Er du glad for ${word}?`, english: `Are you happy about ${word}?` },
-    ],
-    usageNote: "Common in everyday Norwegian",
-    sourceStatus: "unverified_practice",
-    sources: ["Word lookup"],
-  };
-
+  // No verified lookup service configured — save the word and guide to real sources
   try {
-    validateSourceStatus(wordData.sourceStatus);
     await store.saveVocabularyItem({
       userScope,
       word,
-      translation: wordData.english,
-      sourceStatus: wordData.sourceStatus,
-      notes: JSON.stringify({ inflections: wordData.inflections, examples: wordData.exampleSentences }),
+      translation: "",
+      sourceStatus: "unverified_practice",
+      notes: JSON.stringify({ savedAt: new Date().toISOString() }),
     });
 
     logger.info("[norwegian] word lookup completed", {
       userScope,
-      sourceStatus: wordData.sourceStatus,
+      sourceStatus: "unverified_practice",
     });
   } catch (error) {
     logger.warn("[norwegian] Failed to save vocabulary", { error: error.message });
   }
 
-  const sourceLabel =
-    wordData.sourceStatus === "verified" ? "✅ Verified" : "⚠️ Unverified practice";
-
   const response = truncate(
-    `**${wordData.word}**\n\n` +
-    `English: ${wordData.english}\n` +
-    `Part of speech: ${wordData.partOfSpeech}\n` +
-    `Bokmål form: ${wordData.bokmalForm}\n` +
-    `Inflections: ${wordData.inflections}\n\n` +
-    `**Examples:**\n` +
-    wordData.exampleSentences.map((e) => `• *${e.norwegian}* — ${e.english}`).join("\n") +
-    `\n\n**Usage:** ${wordData.usageNote}\n\n` +
-    `${sourceLabel}`
+    `**${word}** — saved for study\n\n` +
+    `⚠️ **Unverified practice** — no dictionary lookup is configured.\n\n` +
+    `Look up **${word}** yourself at:\n` +
+    `• https://ordbokene.no — official Bokmål/Nynorsk dictionary\n` +
+    `• https://naob.no — historical Norwegian dictionary\n` +
+    `• https://ordnett.no — comprehensive Norwegian dictionary\n\n` +
+    `The word has been saved to your vocabulary list. Once you find the definition, you can note it in your study session.`
   );
 
   await interaction.editReply(response);
@@ -388,43 +427,31 @@ async function handleNorwegianPhrase(interaction, store, userScope, logger) {
 
   logger.info("[norwegian] phrase lookup requested", { userScope, phrase });
 
-  const phraseData = {
-    norwegian: phrase,
-    english: "English translation of phrase",
-    literalMeaning: "Word-for-word meaning if useful",
-    whenToUse: "In everyday conversation and formal settings",
-    osloSpokenNote: "Oslo speakers say this naturally.",
-    sourceStatus: "unverified_practice",
-    sources: [],
-    practiceSentence: `Du kan si: "${phrase}" når du møter noen.`,
-  };
-
   try {
-    validateSourceStatus(phraseData.sourceStatus);
     await store.saveLesson({
       userScope,
       topic: "phrase",
       level: profile.level,
-      sourceStatus: phraseData.sourceStatus,
-      notes: JSON.stringify(phraseData),
+      sourceStatus: "unverified_practice",
+      notes: JSON.stringify({ phrase, savedAt: new Date().toISOString() }),
     });
 
     logger.info("[norwegian] phrase lookup completed", {
       userScope,
-      sourceStatus: phraseData.sourceStatus,
+      sourceStatus: "unverified_practice",
     });
   } catch (error) {
     logger.warn("[norwegian] Failed to save phrase", { error: error.message });
   }
 
   const response = truncate(
-    `**Phrase:** ${phraseData.norwegian}\n\n` +
-    `**English:** ${phraseData.english}\n` +
-    `**Literal meaning:** ${phraseData.literalMeaning}\n\n` +
-    `**When to use:** ${phraseData.whenToUse}\n\n` +
-    `**Oslo spoken:** ${phraseData.osloSpokenNote}\n\n` +
-    `**Practice:** ${phraseData.practiceSentence}\n\n` +
-    `⚠️ Unverified practice — check trusted sources for confirmation.`
+    `**Phrase saved:** *${phrase}*\n\n` +
+    `⚠️ **Unverified practice** — no translation service is configured.\n\n` +
+    `To get an accurate explanation of this phrase, check:\n` +
+    `• https://ordnett.no — Norwegian phrase lookup\n` +
+    `• https://naob.no — historical dictionary\n` +
+    `• https://ordbokene.no — official dictionary\n\n` +
+    `The phrase has been saved to your lesson log. Once you verify it, you'll have a reliable reference.`
   );
 
   await interaction.editReply(response);
@@ -443,47 +470,33 @@ async function handleNorwegianCorrect(interaction, store, userScope, logger) {
 
   logger.info("[norwegian] correction requested", { userScope });
 
-  // Safe correction - provide feedback without inventing grammar
-  const correctionData = {
-    original: userText,
-    corrected: userText, // Would need LLM or source to actually correct
-    naturalVersion: userText,
-    explanation:
-      "This is close, but check with a native speaker or trusted source for confirmation.",
-    osloSpokenNote: "This phrasing sounds natural.",
-    grade: "B",
-    tryAgain: "Try using different word order or verb forms.",
-    sourceStatus: "unverified_practice",
-  };
-
+  // Save original text — cannot correct without a verified source or LLM
   try {
-    validateSourceStatus(correctionData.sourceStatus);
     await store.saveCorrection({
       userScope,
       originalText: userText,
-      correctedText: correctionData.corrected,
-      explanation: correctionData.explanation,
-      sourceStatus: correctionData.sourceStatus,
+      correctedText: "",
+      explanation: "Correction pending — no verified source configured",
+      sourceStatus: "unverified_practice",
     });
 
     logger.info("[norwegian] correction created", {
       userScope,
-      sourceStatus: correctionData.sourceStatus,
-      grade: correctionData.grade,
+      sourceStatus: "unverified_practice",
     });
   } catch (error) {
     logger.warn("[norwegian] Failed to save correction", { error: error.message });
   }
 
   const response = truncate(
-    `**Original:**\n${correctionData.original}\n\n` +
-    `**Corrected:**\n${correctionData.corrected}\n\n` +
-    `**Natural version:**\n${correctionData.naturalVersion}\n\n` +
-    `**Why:** ${correctionData.explanation}\n\n` +
-    `**Oslo-style spoken:** ${correctionData.osloSpokenNote}\n\n` +
-    `**Grade:** ${correctionData.grade}\n\n` +
-    `**Try again:** ${correctionData.tryAgain}\n\n` +
-    `**Source status:** ⚠️ Unverified practice — verify with a trusted source.`
+    `**Text submitted for correction:**\n*${userText}*\n\n` +
+    `⚠️ **Unverified practice** — no grammar correction service is configured.\n\n` +
+    `To get this corrected accurately:\n` +
+    `• Ask a native speaker\n` +
+    `• Check https://ordbokene.no for individual words\n` +
+    `• Try the Norsk Bane language tool at https://tekstlaboratoriet.uio.no\n\n` +
+    `Your text has been saved. Add the correction manually by noting what changed and why.\n\n` +
+    `**Grade:** ⬜ Not checked — verify with a trusted source.`
   );
 
   await interaction.editReply(response);
@@ -541,9 +554,11 @@ async function handleNorwegianMedia(interaction, store, userScope, logger) {
         userScope,
         title: media.title,
         mediaType: key,
-        sourceId: media.url,
+        url: media.url,
+        sourceName: media.source || media.channel || 'NRK',
+        level: media.level || profile.level,
         sourceStatus: media.sourceStatus,
-        notes: JSON.stringify({ level: media.level, source: media.source || media.channel }),
+        reasonRecommended: "Verified Norwegian media starting point",
       });
     }
 
@@ -603,9 +618,11 @@ async function handleNorwegianNews(interaction, store, userScope, logger) {
       userScope,
       title: newsArticle.title,
       mediaType: "news",
-      sourceId: newsArticle.url,
+      url: newsArticle.url,
+      sourceName: newsArticle.source,
+      level: newsArticle.level,
       sourceStatus: newsArticle.sourceStatus,
-      notes: JSON.stringify({ level: newsArticle.level, source: newsArticle.source }),
+      reasonRecommended: "Verified Norwegian news starting point",
     });
 
     logger.info("[norwegian] news article suggested", {
@@ -659,9 +676,11 @@ async function handleNorwegianYoutube(interaction, store, userScope, logger) {
       userScope,
       title: youtubeVideo.title,
       mediaType: "youtube",
-      sourceId: youtubeVideo.url,
+      url: youtubeVideo.url,
+      sourceName: youtubeVideo.channel,
+      level: youtubeVideo.level,
       sourceStatus: youtubeVideo.sourceStatus,
-      notes: JSON.stringify({ level: youtubeVideo.level, channel: youtubeVideo.channel }),
+      reasonRecommended: "Verified Norwegian YouTube channel starting point",
     });
 
     logger.info("[norwegian] youtube video suggested", {
@@ -764,40 +783,35 @@ async function handleNorwegianReview(interaction, store, userScope, logger) {
     return;
   }
 
-  const profile = await ensureProfile(store, userScope);
-
   logger.info("[norwegian] review requested", { userScope });
 
-  // Fetch review items (simplified - just provide guidance)
-  const reviewItems = [
-    {
-      type: "correction_reminder",
-      text: "Remember to check your pronunciation of 'kj' sounds.",
-    },
-    {
-      type: "vocab_reminder",
-      text: "Review these words: hei, takk, vær så god.",
-    },
-    {
-      type: "phrase",
-      text: "Practice saying: Hva heter du? (What is your name?)",
-    },
-  ];
+  const dueItems = await store.getDueReviewItems(userScope, 5);
 
-  const response = truncate(
-    `**Your Norwegian Review Today** 📖\n\n` +
-    `**Correction reminder:**\n${reviewItems[0].text}\n\n` +
-    `**Vocabulary reminder:**\n${reviewItems[1].text}\n\n` +
-    `**Phrase to practice:**\n${reviewItems[2].text}\n\n` +
-    `Keep up the practice! 💪`
-  );
+  if (!dueItems || dueItems.length === 0) {
+    await interaction.editReply(
+      "**Norwegian Review** 📖\n\n" +
+      "No review items due right now. Keep practicing with /norwegian lesson, /norwegian correct, and /norwegian word — those add items here.\n\n" +
+      "Use /norwegian daily for a fresh practice set."
+    );
+    return;
+  }
+
+  const lines = dueItems.map((item, i) => {
+    const gradeLabel = item.grade ? ` (last: ${item.grade})` : "";
+    const overdueNote = item.next_due_at && new Date(item.next_due_at) < new Date() ? " ⏰ overdue" : "";
+    return `**${i + 1}. ${item.item_type}**${gradeLabel}${overdueNote}\n${String(item.content || '').slice(0, 120)}`;
+  });
 
   logger.info("[norwegian] review provided", {
     userScope,
-    itemCount: reviewItems.length,
+    itemCount: dueItems.length,
   });
 
-  await interaction.editReply(response);
+  await interaction.editReply(truncate(
+    `**Your Norwegian Review** 📖\n\n` +
+    lines.join("\n\n") +
+    `\n\n${dueItems.length} item(s) due. Use /norwegian daily for a structured practice set.`
+  ));
 }
 
 async function handleNorwegianPronounce(interaction, store, userScope, logger) {
@@ -830,18 +844,50 @@ async function handleNorwegianPronounce(interaction, store, userScope, logger) {
   try {
     await store.createPronunciationSession(userScope, phrase);
 
-    const response = truncate(
-      `**Pronunciation Practice** 🎤\n\n` +
-      `**Target phrase:**\n${phrase}\n\n` +
-      `Now send me a voice note saying this phrase. I'll listen and give you feedback!`
-    );
-
     logger.info("[norwegian-pronunciation] session created", {
       userScope,
       phraseLength: phrase.length,
     });
 
-    await interaction.editReply(response);
+    // Try to generate a TTS example
+    const { config, generatedAudio } = interaction.client.appContext;
+    let ttsProvider = null;
+    let ttsFiles = [];
+
+    try {
+      const audioService = createAudioGenerationService({
+        config,
+        logger,
+        generatedAudio,
+        fetchImpl: globalThis.fetch,
+      });
+
+      if (config?.audio?.ttsEnabled) {
+        const { file, audio } = await audioService.generate({
+          text: phrase,
+          kind: "Norwegian-Practice",
+          context: { sourceSurface: "norwegian-practice", userScope },
+        });
+        ttsProvider = audio.provider;
+        ttsFiles = [{ attachment: file.attachment, name: file.name }];
+        logger.info("[norwegian-pronunciation] tts example generated", { provider: ttsProvider });
+      }
+    } catch (ttsError) {
+      logger.warn("[norwegian-pronunciation] TTS example skipped", { error: ttsError.message });
+    }
+
+    const ttsNote = ttsProvider
+      ? `🔊 **Audio example attached** (${ttsProvider}) — listen first, then send your voice note.`
+      : "⚠️ TTS audio not configured — send your voice note and I'll give you feedback based on that.";
+
+    const replyContent = truncate(
+      `**Pronunciation Practice** 🎤\n\n` +
+      `**Target phrase:**\n*${phrase}*\n\n` +
+      `${ttsNote}\n\n` +
+      `Send me a voice note saying this phrase to get STT-based feedback.`
+    );
+
+    await interaction.editReply({ content: replyContent, files: ttsFiles });
   } catch (error) {
     logger.error("[norwegian-pronunciation] Failed to create session", {
       userScope,
@@ -852,4 +898,226 @@ async function handleNorwegianPronounce(interaction, store, userScope, logger) {
       "Failed to start pronunciation practice. Try again later."
     );
   }
+}
+
+async function handleNorwegianDaily(interaction, store, userScope, logger) {
+  if (!store.available) {
+    await interaction.editReply("Daily practice is not available right now. Database not configured.");
+    return;
+  }
+
+  logger.info("[norwegian] daily practice requested", { userScope });
+
+  const { tasks, source } = await generateDailyPractice(store, userScope, logger);
+
+  if (!tasks || tasks.length === 0) {
+    await interaction.editReply(
+      "**Daily Practice** 📚\n\n" +
+      "Not enough saved data yet. Start practicing with /norwegian lesson, /norwegian word, and /norwegian correct to build up your review queue.\n\n" +
+      "⚠️ No data — keep practicing to unlock daily sets."
+    );
+    return;
+  }
+
+  const lines = tasks.map((t, i) => `**${i + 1}. ${t.item_type || t.type}** — ${String(t.content || t.description || '').slice(0, 100)}`);
+
+  await interaction.editReply(truncate(
+    `**Daily Practice Set** 📚 (${source})\n\n` +
+    lines.join("\n") +
+    `\n\n${tasks.length} item(s) today. Track results with /norwegian review.`
+  ));
+}
+
+async function handleNorwegianWeakspots(interaction, store, userScope, logger) {
+  if (!store.available) {
+    await interaction.editReply("Weak spot analysis is not available right now. Database not configured.");
+    return;
+  }
+
+  logger.info("[norwegian] weak spots requested", { userScope });
+
+  const result = await analyzeWeakSpots(store, userScope, logger);
+
+  if (!result || (!result.weakSpots?.length && !result.categories?.length)) {
+    await interaction.editReply(
+      "**Weak Spots** 🔍\n\n" +
+      "Not enough data yet. Use /norwegian correct and /norwegian pronounce to build up evidence.\n\n" +
+      "⚠️ No weak spot data — keep practicing."
+    );
+    return;
+  }
+
+  const spots = result.weakSpots || result.categories || [];
+  const lines = spots.slice(0, 5).map((s, i) =>
+    `**${i + 1}. ${s.skillArea || s.category}** — ${s.evidenceCount || s.count} occurrences (${s.priority || 'medium'} priority)`
+  );
+
+  await interaction.editReply(truncate(
+    `**Weak Spots** 🔍\n\n` +
+    `Identified from your saved corrections and pronunciation data:\n\n` +
+    lines.join("\n") +
+    `\n\nUse /norwegian plan for a recommended learning path.`
+  ));
+}
+
+async function handleNorwegianWeekly(interaction, store, userScope, logger) {
+  if (!store.available) {
+    await interaction.editReply("Weekly summary is not available right now. Database not configured.");
+    return;
+  }
+
+  logger.info("[norwegian] weekly summary requested", { userScope });
+
+  const summary = await generateWeeklySummary(store, userScope, logger);
+
+  if (!summary || Object.keys(summary).length === 0) {
+    await interaction.editReply(
+      "**Weekly Summary** 📊\n\n" +
+      "No activity this week yet. Use /norwegian commands to get started.\n\n" +
+      "⚠️ No weekly data available."
+    );
+    return;
+  }
+
+  await interaction.editReply(truncate(
+    `**Weekly Norwegian Summary** 📊\n\n` +
+    `Lessons completed: ${summary.lessonsCompleted || 0}\n` +
+    `Corrections received: ${summary.correctionsReceived || 0}\n` +
+    `Vocabulary added: ${summary.vocabularyAdded || 0}\n` +
+    `Review items completed: ${summary.reviewItemsCompleted || 0}\n` +
+    `Strong items: ${summary.strongItems || 0}\n\n` +
+    `Keep it up! Consistency builds fluency. 💪`
+  ));
+}
+
+async function handleNorwegianMastery(interaction, store, userScope, logger) {
+  if (!store.available) {
+    await interaction.editReply("Mastery profile is not available right now. Database not configured.");
+    return;
+  }
+
+  logger.info("[norwegian] mastery requested", { userScope });
+
+  const { profile, message } = await calculateMasteryProfile(store, userScope, logger);
+
+  if (!profile) {
+    await interaction.editReply(
+      "**Norwegian Mastery** 🏆\n\n" +
+      (message || "Not enough data yet. Keep practicing with /norwegian commands to build your profile.") +
+      "\n\n⚠️ Evidence-based only — no invented progress."
+    );
+    return;
+  }
+
+  const strengths = (profile.strengths || []).map((s) => `• ${s.skill}: ${s.score}%`).join("\n") || "None identified yet";
+  const weakSpots = (profile.weakSpots || []).map((s) => `• ${s.skillArea} (${s.evidenceCount} items)`).join("\n") || "None identified yet";
+
+  await interaction.editReply(truncate(
+    `**Norwegian Mastery Profile** 🏆\n\n` +
+    `**Estimated level:** ${profile.estimatedLevel} (${profile.levelConfidence} confidence)\n` +
+    `**Basis:** ${profile.levelBasis}\n\n` +
+    `⚠️ *Estimated only — not an official CEFR certification*\n\n` +
+    `**Lessons completed:** ${profile.lessonsCompleted}\n` +
+    `**Corrections received:** ${profile.correctionsReceived}\n` +
+    `**Vocabulary items:** ${profile.vocabularyItems}\n\n` +
+    `**Strengths:**\n${strengths}\n\n` +
+    `**Weak spots:**\n${weakSpots}\n\n` +
+    `Use /norwegian level for level details, /norwegian plan for a learning path.`
+  ));
+}
+
+async function handleNorwegianLevel(interaction, store, userScope, logger) {
+  if (!store.available) {
+    await interaction.editReply("Level estimate is not available right now. Database not configured.");
+    return;
+  }
+
+  logger.info("[norwegian] level requested", { userScope });
+
+  const { profile, message } = await calculateMasteryProfile(store, userScope, logger);
+
+  if (!profile) {
+    await interaction.editReply(
+      "**Norwegian Level** 📊\n\n" +
+      (message || "Not enough data yet to estimate your level. Keep practicing!") +
+      "\n\n⚠️ Level is estimated from saved data only — not an official CEFR score."
+    );
+    return;
+  }
+
+  await interaction.editReply(truncate(
+    `**Norwegian Level Estimate** 📊\n\n` +
+    `**Estimated level:** ${profile.estimatedLevel}\n` +
+    `**Confidence:** ${profile.levelConfidence}\n` +
+    `**Basis:** ${profile.levelBasis}\n\n` +
+    `⚠️ *This is an evidence-based estimate from your learning history. It is NOT an official CEFR certification.*\n\n` +
+    `To improve confidence: complete more lessons, get corrections, and practice pronunciation.`
+  ));
+}
+
+async function handleNorwegianNext(interaction, store, userScope, logger) {
+  if (!store.available) {
+    await interaction.editReply("Next focus is not available right now. Database not configured.");
+    return;
+  }
+
+  logger.info("[norwegian] next focus requested", { userScope });
+
+  const result = await getNextFocus(store, userScope, logger);
+
+  if (!result || !result.nextFocus) {
+    await interaction.editReply(
+      "**Next Focus** 🎯\n\n" +
+      "No focus recommendation yet. Start practicing with /norwegian lesson and /norwegian correct.\n\n" +
+      "⚠️ Recommendations come from your saved learning data only."
+    );
+    return;
+  }
+
+  await interaction.editReply(truncate(
+    `**Next Recommended Focus** 🎯\n\n` +
+    `**Focus:** ${result.nextFocus}\n` +
+    `**Reason:** ${result.reason}\n\n` +
+    `**Suggested command:** ${result.suggestedCommand || '/norwegian daily'}\n\n` +
+    `Source: ${result.sourceStatus || 'saved data'}`
+  ));
+}
+
+async function handleNorwegianPlan(interaction, store, userScope, logger) {
+  if (!store.available) {
+    await interaction.editReply("Learning plan is not available right now. Database not configured.");
+    return;
+  }
+
+  logger.info("[norwegian] learning plan requested", { userScope });
+
+  const { profile } = await calculateMasteryProfile(store, userScope, logger);
+
+  if (!profile) {
+    const defaultPath = { title: "Survival Norwegian", description: "Essential phrases for basic communication", levelRange: "A1", suggestedTopics: ["greetings", "basic_needs", "thanks", "help"] };
+    await interaction.editReply(truncate(
+      `**Learning Plan** 📋\n\n` +
+      `Not enough data for a personalized plan yet — here's where to start:\n\n` +
+      `**Path:** ${defaultPath.title} (${defaultPath.levelRange})\n` +
+      `**Description:** ${defaultPath.description}\n` +
+      `**Topics:** ${defaultPath.suggestedTopics.join(", ")}\n\n` +
+      `⚠️ Default path — will personalize as you build learning history.`
+    ));
+    return;
+  }
+
+  const path = recommendPath(profile);
+  const skillAreas = (path.skillAreas || []).join(", ");
+  const topics = (path.suggestedTopics || []).join(", ");
+
+  await interaction.editReply(truncate(
+    `**Personalized Learning Plan** 📋\n\n` +
+    `Based on your estimated level (${profile.estimatedLevel}) and weak spots:\n\n` +
+    `**Recommended path:** ${path.title}\n` +
+    `**Level range:** ${path.levelRange}\n` +
+    `**Description:** ${path.description}\n` +
+    `**Skill areas:** ${skillAreas}\n` +
+    `**Suggested topics:** ${topics}\n\n` +
+    `Use /norwegian daily to practice these areas from your saved data.`
+  ));
 }
