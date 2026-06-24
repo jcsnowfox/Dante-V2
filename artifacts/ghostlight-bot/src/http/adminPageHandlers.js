@@ -396,6 +396,20 @@ async function handleAdminPageRequest({
     return;
   }
 
+  if (route.section === "humanSimulation") {
+    const tab = url.searchParams.get("tab") || "preferences";
+    const userScope = innerContext.config?.memory?.userScope || "user";
+    const companionId = innerContext.config?.memory?.companionId || innerContext.config?.companion?.id || "Dante";
+    const [prefs, events, followUps, channels] = await Promise.all([
+      innerContext.microPreferenceStore?.listPreferences?.({ user_scope: userScope, companion_id: companionId, limit: 100 }).catch(() => []) || [],
+      innerContext.personalTimelineStore?.listEvents?.({ user_scope: userScope, companion_id: companionId, limit: 100 }).catch(() => []) || [],
+      innerContext.followUpStore?.listFollowUps?.({ user_scope: userScope, companion_id: companionId, limit: 100 }).catch(() => []) || [],
+      innerContext.channelAwarenessStore?.listChannels?.({ user_scope: userScope, companion_id: companionId, limit: 200 }).catch(() => []) || [],
+    ]);
+    innerRes.end(helpers.renderHumanSimulationPage({ tab, prefs, events, followUps, channels, helpers, theme, themeLinks }));
+    return;
+  }
+
   await handleAdminToolsPageRequest({ url, route, innerRes, innerContext, helpers, theme, themeLinks });
 }
 
