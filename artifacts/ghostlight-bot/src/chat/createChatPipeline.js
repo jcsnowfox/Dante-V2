@@ -19,6 +19,9 @@ const {
   buildImageConversationContextSection,
 } = require("./imageConversationState");
 const { classifyEmotionalBeat, formatContinuityPrelude, isProposalText, isForgotProposalText } = require("../continuity/emotionalBeats");
+const { detectPromise } = require("../continuity/promiseLedger");
+const { resolveToneMode, formatTonePrelude } = require("../continuity/toneModeResolver");
+const { validateVoice, buildRetryInstruction, fallbackReply, buildVoiceRules } = require("../continuity/voiceFingerprintGuard");
 
 function normalizeAdultPrivateChannelId(channelId) {
   const value = String(channelId || "").trim();
@@ -70,6 +73,7 @@ function createChatPipeline({
   innerLife = null,
   continuity = null,
   emotionalBeatStore = null,
+  promiseLedger = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
@@ -160,6 +164,7 @@ function createChatPipeline({
         isThread: Boolean(message.channel?.isThread?.()),
         channelId: message.channel?.id || message.channelId || null,
         isAdultPrivate: false,
+        modeName: selectedMode.name,
       };
       const saveBeat = async (beat, role) => {
         if (!beat || !emotionalBeatStore?.upsertBeat) return null;
@@ -191,6 +196,15 @@ function createChatPipeline({
         if (userBeat) await saveBeat(userBeat, "user");
       } catch (error) {
         logger.warn("[chat] Emotional beat curation failed; continuing", { messageId: message.id, error: error.message });
+      }
+
+      try {
+        const userPromise = detectPromise({ text: input.content, role: "user", channelContext: beatChannelContext });
+        if (userPromise && promiseLedger?.savePromise) {
+          await promiseLedger.savePromise({ ...beatScope, ...userPromise, source_channel_id: message.channelId || "", source_message_id: message.id });
+        }
+      } catch (error) {
+        logger.warn("[chat] User promise curation failed; continuing", { messageId: message.id, error: error.message });
       }
 
       try {
@@ -376,12 +390,15 @@ function createChatPipeline({
       }
 
 
+      let rankedBeats = [];
+      let openPromises = [];
+
       if (!inDevMode && emotionalBeatStore?.listBeats) {
         try {
           const allBeats = await emotionalBeatStore.listBeats({ ...beatScope, limit: 20 });
           const messageMentionsProposal = isProposalText(input.content) || isForgotProposalText(input.content);
-          const rankedBeats = allBeats
-            .filter((beat) => beat.must_recall_across_channels || beat.pinned || beat.importance === "critical" || beat.resolved === false)
+          rankedBeats = allBeats
+            .filter((beat) => !beat.adult_context && (beat.must_recall_across_channels || beat.pinned || beat.importance === "critical" || beat.resolved === false))
             .sort((a, b) => {
               const proposalBoostA = messageMentionsProposal && a.event_type === "proposal" ? 100 : 0;
               const proposalBoostB = messageMentionsProposal && b.event_type === "proposal" ? 100 : 0;
@@ -399,6 +416,29 @@ function createChatPipeline({
           logger.warn("[chat] Emotional beat retrieval failed; continuing", { messageId: message.id, error: error.message });
         }
       }
+
+      if (!inDevMode && promiseLedger?.retrieveOpen) {
+        try {
+          openPromises = await promiseLedger.retrieveOpen({ ...beatScope, limit: 5, allowAdultPrivate: beatChannelContext.isAdultPrivate });
+          if (openPromises.length) {
+            contextSections.push({ label: "OPEN PROMISES", content: openPromises.map((p) => `* ${p.promise_text_summary}`).join("\n") });
+            await promiseLedger.markRecalled?.(openPromises.map((p) => p.id).filter(Boolean));
+          }
+        } catch (error) {
+          logger.warn("[chat] Promise retrieval failed; continuing", { messageId: message.id, error: error.message });
+        }
+      }
+
+      const toneDecision = !inDevMode ? resolveToneMode({
+        messageText: input.content,
+        channelContext: beatChannelContext,
+        emotionalBeats: rankedBeats,
+        openPromises,
+        settings: { allowFlirtyInNormalChannels: false, defaultMode: "neutral" },
+      }) : null;
+      if (toneDecision) { const toneText = formatTonePrelude(toneDecision); contextSections.push({ label: "TONE MODE", content: toneText.replace(/^TONE MODE:\n?/, "") }); }
+      if (!inDevMode) { const voiceText = buildVoiceRules(); contextSections.push({ label: "VOICE RULES", content: voiceText.replace(/^VOICE RULES:\n?/, "") }); }
+      logger.info?.(`[reply-context] continuity prelude built beats=${rankedBeats.length} promises=${openPromises.length} mode=${toneDecision?.mode || "dev"}`);
 
       // Continuity Engine — carries open loops, future events, promises, decisions,
       // repair threads, and boundaries as a bounded private prelude section.
@@ -533,7 +573,7 @@ function createChatPipeline({
         }
       }
 
-      const modelOutput = await callModel({
+      let modelOutput = await callModel({
         config,
         logger,
         tools,
@@ -565,6 +605,22 @@ function createChatPipeline({
           imageConversationActive: Boolean(imageConversationState?.active),
         },
       });
+
+      if (!inDevMode) {
+        const guardResult = validateVoice({ text: modelOutput.text, context: { adultPrivate: adultScope.active, allowRoleplayNarration: false } });
+        logger.info?.(`[voice-guard] checked companionId=${beatScope.companion_id} passed=${guardResult.passed} violations=${guardResult.violations.join(",")}`);
+        if (!guardResult.passed) {
+          logger.info?.(`[voice-guard] retry requested reason=${guardResult.violations.join(",")}`);
+          const retrySections = [...contextSections, { label: "VOICE REPAIR", content: buildRetryInstruction(guardResult) }];
+          const retryOutput = await callModel({
+            config, logger, tools, mode: effectiveMode, message, input, recentHistory, memories, contextSections: retrySections,
+            channelType: "discord", overrideSystemPrompt: null, systemPromptPrefix: adultSystemPromptPrefix, toolContext: { surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode, currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id, currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory, memoryContextIds: memories.map((m)=>m?.memoryId||m?.memory_id||"").filter(Boolean), imageConversationActive: Boolean(imageConversationState?.active) },
+          });
+          const retryGuard = validateVoice({ text: retryOutput.text, context: { adultPrivate: adultScope.active, allowRoleplayNarration: false } });
+          if (retryGuard.passed) modelOutput = retryOutput;
+          else { modelOutput.text = fallbackReply(); logger.warn?.(`[voice-guard] fallback used reason=${retryGuard.violations.join(",")}`); }
+        }
+      }
 
       if (shouldRefreshImageConversationFromAssistant({
         text: modelOutput.text,
@@ -610,6 +666,15 @@ function createChatPipeline({
 
       const reply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput });
 
+
+      try {
+        const companionPromise = detectPromise({ text: reply?.content || "", role: "assistant", channelContext: beatChannelContext });
+        if (companionPromise && promiseLedger?.savePromise) {
+          await promiseLedger.savePromise({ ...beatScope, ...companionPromise, source_channel_id: message.channelId || "", source_message_id: `${message.id}:assistant` });
+        }
+      } catch (error) {
+        logger.warn("[chat] Companion promise curation failed; continuing", { messageId: message.id, error: error.message });
+      }
 
       try {
         const companionBeat = classifyEmotionalBeat({

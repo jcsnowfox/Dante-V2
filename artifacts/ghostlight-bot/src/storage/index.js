@@ -79,6 +79,7 @@ const {
   MAX_ENABLED_TOOLS,
 } = require("./proactiveActions");
 const { createEmotionalBeatStore } = require("./emotionalBeats");
+const { createPromiseLedger } = require("../continuity/promiseLedger");
 
 module.exports = {
   createConversationStore,
@@ -98,6 +99,7 @@ module.exports = {
   createHeartbeatActionStore,
   createProactiveActionStore,
   createEmotionalBeatStore,
+  createPromiseLedger,
   SUPPORTED_EVENT_TYPES,
   SUPPORTED_ROLES,
   SUPPORTED_SOURCES,

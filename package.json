@@ -119,6 +119,13 @@
     "verify:proposal-memory": "pnpm --dir artifacts/ghostlight-bot run verify:proposal-memory",
     "verify:continuity-prelude": "pnpm --dir artifacts/ghostlight-bot run verify:continuity-prelude",
     "verify:continuity-privacy": "pnpm --dir artifacts/ghostlight-bot run verify:continuity-privacy",
-    "verify:safety-error-handling": "pnpm --dir artifacts/ghostlight-bot run verify:safety-error-handling"
+    "verify:safety-error-handling": "pnpm --dir artifacts/ghostlight-bot run verify:safety-error-handling",
+    "verify:emotional-beats-dashboard": "pnpm --dir artifacts/ghostlight-bot run verify:emotional-beats-dashboard",
+    "verify:promise-ledger": "pnpm --dir artifacts/ghostlight-bot run verify:promise-ledger",
+    "verify:voice-fingerprint-guard": "pnpm --dir artifacts/ghostlight-bot run verify:voice-fingerprint-guard",
+    "verify:tone-mode-resolver": "pnpm --dir artifacts/ghostlight-bot run verify:tone-mode-resolver",
+    "verify:continuity-control-layer": "pnpm --dir artifacts/ghostlight-bot run verify:continuity-control-layer",
+    "verify:continuity-control-privacy": "pnpm --dir artifacts/ghostlight-bot run verify:continuity-control-privacy",
+    "verify:reply-runtime-wiring": "pnpm --dir artifacts/ghostlight-bot run verify:reply-runtime-wiring"
   }
 }
