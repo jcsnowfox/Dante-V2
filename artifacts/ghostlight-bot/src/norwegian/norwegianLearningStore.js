@@ -191,7 +191,6 @@ const MIGRATION_SQL = `
 
   ALTER TABLE IF EXISTS norwegian_review_items
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
-`;
 
   ALTER TABLE IF EXISTS norwegian_pronunciation_attempts
   ADD COLUMN IF NOT EXISTS source_message_id TEXT;
