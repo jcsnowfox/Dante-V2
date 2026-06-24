@@ -18,6 +18,7 @@ const {
   markImageConversationActive,
   buildImageConversationContextSection,
 } = require("./imageConversationState");
+const { classifyEmotionalBeat, formatContinuityPrelude, isProposalText, isForgotProposalText } = require("../continuity/emotionalBeats");
 
 function normalizeAdultPrivateChannelId(channelId) {
   const value = String(channelId || "").trim();
@@ -68,6 +69,7 @@ function createChatPipeline({
   relationalState = null,
   innerLife = null,
   continuity = null,
+  emotionalBeatStore = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
@@ -148,6 +150,48 @@ function createChatPipeline({
       });
 
       let memories = [];
+
+      const beatScope = {
+        user_scope: config.memory?.userScope || input.authorId || "user",
+        companion_id: config.memory?.companionId || config.companion?.id || "Dante",
+      };
+      const beatChannelContext = {
+        isDM: message.channel?.type === 1 || Boolean(message.channel?.isDMBased?.()),
+        isThread: Boolean(message.channel?.isThread?.()),
+        channelId: message.channel?.id || message.channelId || null,
+        isAdultPrivate: false,
+      };
+      const saveBeat = async (beat, role) => {
+        if (!beat || !emotionalBeatStore?.upsertBeat) return null;
+        return emotionalBeatStore.upsertBeat({
+          ...beatScope,
+          event_type: beat.event_type,
+          title: beat.title,
+          summary: beat.summary,
+          emotional_weight: beat.emotional_weight,
+          importance: beat.importance,
+          source_channel_id: message.channelId || message.channel?.id || "",
+          source_message_id: role === "user" ? message.id : `${message.id}:assistant`,
+          privacy_scope: beat.privacy_scope,
+          adult_context: beat.adult_context,
+          must_recall_across_channels: beat.must_recall_across_channels,
+          tags_json: beat.tags,
+          pinned: beat.pinned,
+          resolved: false,
+        });
+      };
+      try {
+        const userBeat = classifyEmotionalBeat({
+          text: input.content,
+          role: "user",
+          companionId: beatScope.companion_id,
+          userDisplayName: input.authorName || "Jenna",
+          channelContext: beatChannelContext,
+        });
+        if (userBeat) await saveBeat(userBeat, "user");
+      } catch (error) {
+        logger.warn("[chat] Emotional beat curation failed; continuing", { messageId: message.id, error: error.message });
+      }
 
       try {
         memories = await retrieveMemory({
@@ -328,6 +372,31 @@ function createChatPipeline({
             messageId: message.id,
             error: error.message,
           });
+        }
+      }
+
+
+      if (!inDevMode && emotionalBeatStore?.listBeats) {
+        try {
+          const allBeats = await emotionalBeatStore.listBeats({ ...beatScope, limit: 20 });
+          const messageMentionsProposal = isProposalText(input.content) || isForgotProposalText(input.content);
+          const rankedBeats = allBeats
+            .filter((beat) => beat.must_recall_across_channels || beat.pinned || beat.importance === "critical" || beat.resolved === false)
+            .sort((a, b) => {
+              const proposalBoostA = messageMentionsProposal && a.event_type === "proposal" ? 100 : 0;
+              const proposalBoostB = messageMentionsProposal && b.event_type === "proposal" ? 100 : 0;
+              const imp = { critical: 4, high: 3, medium: 2, low: 1 };
+              return (proposalBoostB - proposalBoostA) || ((b.pinned ? 10 : 0) - (a.pinned ? 10 : 0)) || ((imp[b.importance] || 0) - (imp[a.importance] || 0));
+            })
+            .slice(0, 7);
+          const continuityPrelude = formatContinuityPrelude(rankedBeats, { channelContext: beatChannelContext });
+          if (continuityPrelude) {
+            contextSections.push(continuityPrelude);
+            await emotionalBeatStore.markRecalled?.(rankedBeats.map((beat) => beat.id).filter(Boolean));
+            logger.debug?.("[chat] Emotional continuity prelude injected", { messageId: message.id, beatCount: rankedBeats.length });
+          }
+        } catch (error) {
+          logger.warn("[chat] Emotional beat retrieval failed; continuing", { messageId: message.id, error: error.message });
         }
       }
 
@@ -540,6 +609,20 @@ function createChatPipeline({
       }
 
       const reply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput });
+
+
+      try {
+        const companionBeat = classifyEmotionalBeat({
+          text: reply?.content || "",
+          role: "assistant",
+          companionId: beatScope.companion_id,
+          userDisplayName: input.authorName || "Jenna",
+          channelContext: beatChannelContext,
+        });
+        if (companionBeat) await saveBeat(companionBeat, "assistant");
+      } catch (error) {
+        logger.warn("[chat] Companion reply beat curation failed; continuing", { messageId: message.id, error: error.message });
+      }
 
       logger.debug?.("[chat] Pipeline completed", {
         messageId: message.id,

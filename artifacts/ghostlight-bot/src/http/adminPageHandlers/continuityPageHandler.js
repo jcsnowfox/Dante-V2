@@ -12,6 +12,7 @@ async function handleContinuityPageRequest({ url, innerRes, innerContext, helper
   let settings = null;
   let items = [];
   let storeAvailable = false;
+  let emotionalBeats = [];
 
   if (engine) {
     settings = engine.config || null;
@@ -25,6 +26,16 @@ async function handleContinuityPageRequest({ url, innerRes, innerContext, helper
         });
       } catch { items = []; }
     }
+  }
+
+  if (innerContext.emotionalBeatStore?.listBeats) {
+    try {
+      emotionalBeats = await innerContext.emotionalBeatStore.listBeats({
+        user_scope: innerContext.config?.memory?.userScope || "user",
+        companion_id: innerContext.config?.memory?.companionId || "Dante",
+        limit: 100,
+      });
+    } catch { emotionalBeats = []; }
   }
 
   const msg = getMessage(url);
@@ -42,6 +53,7 @@ async function handleContinuityPageRequest({ url, innerRes, innerContext, helper
       pageBody: renderContinuityPage({
         tab,
         items,
+        emotionalBeats,
         settings,
         typeFilter,
         statusFilter,

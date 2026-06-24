@@ -12,6 +12,7 @@ const {
   formatTimestamp,
 } = require("./buildChatInput");
 const { isStandaloneProviderRefusal } = require("./providerRefusal");
+const { isUnsafeProviderText, FallbackText } = require("../../continuity/emotionalBeats");
 
 function isToolUseUnsupportedError(error) {
   const status = Number(error?.status || error?.code || 0);
@@ -935,14 +936,14 @@ async function callModel({
       responseId: response.id,
       preview: truncateDiagnosticText(visibleText, 200),
     });
-    visibleText = "The model provider declined this request.";
+    visibleText = FallbackText;
   }
 
   return {
     provider: providerLabel,
     mode: mode.name,
     toolCount: totalToolCount,
-    text: visibleText || buildMissingOutputText({ response, toolLoop }),
+    text: isUnsafeProviderText(visibleText) ? FallbackText : (visibleText || FallbackText),
     sources,
     webSearchUsed: useWebSearch,
     files: replyDirectives.files,

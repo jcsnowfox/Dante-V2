@@ -135,7 +135,7 @@ function renderItemsTab({ items, typeFilter, statusFilter, helpers, theme }) {
     ? [
       "<div class=\"model-table-wrap\"><table class=\"model-table\">",
       "<thead><tr><th>Type</th><th>Title</th><th>Summary</th><th>Status</th><th>Priority</th><th>Created</th><th></th></tr></thead>",
-      "<tbody>",
+      '<tbody>',
       items.map((item) => {
         const created = item.createdAt ? new Date(item.createdAt).toLocaleDateString("en-GB") : "—";
         const summary = (item.summary || "").slice(0, 100);
@@ -171,11 +171,44 @@ function renderItemsTab({ items, typeFilter, statusFilter, helpers, theme }) {
           "</tr>",
         ].join("");
       }).join(""),
-      "</tbody></table></div>",
+      '</tbody></table></div>',
     ].join("")
     : `<p class="meta" style="margin-top:1rem">No ${escapeHtml(statusFilter || "active")} items${typeFilter ? ` of type "${escapeHtml(TYPE_LABELS[typeFilter] || typeFilter)}"` : ""}.</p>`;
 
   return [filterBar, tableMarkup].join("");
+}
+
+function renderEmotionalBeatsTab({ emotionalBeats, helpers }) {
+  const { escapeHtml } = helpers;
+  const beats = Array.isArray(emotionalBeats) ? emotionalBeats : [];
+  if (!beats.length) {
+    return '<p class="meta">No major emotional beats stored yet. Proposal, promise, repair, boundary, and commitment events will appear here after curation.</p>';
+  }
+  return [
+    '<div class="model-table-wrap"><table class="model-table">',
+    '<thead><tr><th>Event</th><th>Title</th><th>Summary</th><th>Importance</th><th>Weight</th><th>Privacy</th><th>Source</th><th>Tags</th><th>Flags</th><th>Last recalled</th></tr></thead>',
+    "<tbody>",
+    beats.map((beat) => {
+      const tags = Array.isArray(beat.tags_json) ? beat.tags_json.join(", ") : "";
+      const flags = [beat.pinned ? "pinned" : "", beat.resolved ? "resolved" : "open", beat.must_recall_across_channels ? "cross-channel" : "local"].filter(Boolean).join(", " );
+      const source = [beat.source_channel_id, beat.source_message_id].filter(Boolean).join(" / ") || "—";
+      return [
+        "<tr>",
+        `<td><span class="badge">${escapeHtml(beat.event_type || "—")}</span></td>`,
+        `<td>${escapeHtml(beat.title || "—")}</td>`,
+        `<td class="table-detail-cell">${escapeHtml(beat.summary || "—")}</td>`,
+        `<td>${escapeHtml(beat.importance || "—")}</td>`,
+        `<td>${escapeHtml(String(beat.emotional_weight ?? "—"))}</td>`,
+        `<td>${escapeHtml(beat.privacy_scope || "normal")}${beat.adult_context ? " (adult gated)" : ""}</td>`,
+        `<td class="meta">${escapeHtml(source)}</td>`,
+        `<td class="meta">${escapeHtml(tags)}</td>`,
+        `<td class="meta">${escapeHtml(flags)}</td>`,
+        `<td class="meta">${escapeHtml(beat.last_recalled_at ? new Date(beat.last_recalled_at).toLocaleString("en-GB") : "—")}</td>`,
+        "</tr>",
+      ].join("");
+    }).join(""),
+    "</tbody></table></div>",
+  ].join("");
 }
 
 function renderSettingsTab({ settings, helpers, theme, msg, err }) {
@@ -392,18 +425,21 @@ ${msgBanner}${errBanner}
 }
 
 function renderContinuityPage({
-  tab, items, settings, typeFilter, statusFilter,
+  tab, items, emotionalBeats, settings, typeFilter, statusFilter,
   storeAvailable, theme, helpers, msg, err,
 }) {
   const tabs = [
     { key: "overview", label: "Overview", path: "/admin/continuity/overview" },
     { key: "items", label: "Items", path: "/admin/continuity/items" },
+    { key: "emotional-beats", label: "Emotional Beats", path: "/admin/continuity/emotional-beats" },
     { key: "settings", label: "Settings", path: "/admin/continuity/settings" },
   ];
 
   let body = "";
   if (tab === "settings") {
     body = renderSettingsTab({ settings, helpers, theme, msg, err });
+  } else if (tab === "emotional-beats") {
+    body = renderEmotionalBeatsTab({ emotionalBeats, helpers });
   } else if (tab === "items") {
     body = renderItemsTab({ items, typeFilter, statusFilter, helpers, theme });
   } else {
