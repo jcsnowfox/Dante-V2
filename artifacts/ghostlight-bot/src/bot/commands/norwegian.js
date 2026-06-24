@@ -5,6 +5,7 @@ const { generateDailyPractice, analyzeWeakSpots, generateWeeklySummary } = requi
 const { calculateMasteryProfile, getNextFocus } = require("../../norwegian/norwegianMasteryEngine");
 const { recommendPath } = require("../../norwegian/norwegianLearningPaths");
 const { createAudioGenerationService } = require("../../audio/generateAudio");
+const { updateSystemTruth } = require("../../systemTruth/runtimeState");
 
 const MAX_RESPONSE_LENGTH = 1900;
 const COMMAND_TIMEOUT_MS = 10000;
@@ -16,6 +17,12 @@ function truncate(text, max = MAX_RESPONSE_LENGTH) {
 
 function getUserScope(interaction) {
   return interaction.client.appContext?.config?.memory?.userScope || "user";
+}
+function recordNorwegianTruth(event) {
+  updateSystemTruth("norwegian", { norwegianModeEnabled: true, sourceCheckRequired: true, lastNorwegianLearningEvent: { ...event, at: new Date().toISOString() }, lastSourceStatus: event.sourceStatus || "not_checked", lastMediaLinkSaved: event.url || undefined });
+}
+function isTrustedNorwegianUrl(url) {
+  try { const u = new URL(url); return ["www.nrk.no", "nrk.no", "ordbokene.no", "www.ordbokene.no", "naob.no", "www.naob.no"].includes(u.hostname); } catch { return false; }
 }
 
 async function ensureProfile(store, userScope) {
@@ -393,6 +400,7 @@ async function handleNorwegianWord(interaction, store, userScope, logger) {
       notes: JSON.stringify({ savedAt: new Date().toISOString() }),
     });
 
+    recordNorwegianTruth({ command: "word", sourceStatus: "unverified_practice" });
     logger.info("[norwegian] word lookup completed", {
       userScope,
       sourceStatus: "unverified_practice",
@@ -480,6 +488,7 @@ async function handleNorwegianCorrect(interaction, store, userScope, logger) {
       sourceStatus: "unverified_practice",
     });
 
+    recordNorwegianTruth({ command: "correct", sourceStatus: "unverified_practice", grade: "not_checked" });
     logger.info("[norwegian] correction created", {
       userScope,
       sourceStatus: "unverified_practice",
@@ -509,83 +518,15 @@ async function handleNorwegianMedia(interaction, store, userScope, logger) {
     );
     return;
   }
-
-  const profile = await ensureProfile(store, userScope);
-
+  await ensureProfile(store, userScope);
   logger.info("[norwegian] media search requested", { userScope });
-
-  // Safe media recommendations - only real, verified sources
-  const mediaRecommendations = {
-    news: {
-      title: "NRK Nyheter - Norwegian News",
-      source: "NRK",
-      url: "https://www.nrk.no/nyheter/",
-      level: profile.level,
-      summary: "Official Norwegian news source with audio and text.",
-      listeningWords: ["nyheter", "dag", "kommune", "politikk", "mennesker"],
-      listeningTask: "Try to identify dates and place names.",
-      sourceStatus: "verified",
-    },
-    youtube: {
-      title: "NRK Skole Norwegian Learning",
-      channel: "NRK Skole",
-      url: "https://www.youtube.com/@nrkskole",
-      level: "A1-B2",
-      why: "Official educational content in Norwegian",
-      listeningTask: "Watch for 3-5 minutes and note 5 new words.",
-      sourceStatus: "verified",
-    },
-    listening: {
-      title: "NRK P13 - Youth Radio",
-      source: "NRK",
-      url: "https://www.nrk.no/radio/p13/",
-      level: "B1+",
-      summary: "Fast-paced radio perfect for listening practice",
-      listeningWords: ["musikk", "nyheter", "gjester", "samtale"],
-      sourceStatus: "verified",
-    },
-  };
-
-  try {
-    // Save media links
-    for (const [key, media] of Object.entries(mediaRecommendations)) {
-      validateSourceStatus(media.sourceStatus);
-      await store.saveMediaLink({
-        userScope,
-        title: media.title,
-        mediaType: key,
-        url: media.url,
-        sourceName: media.source || media.channel || 'NRK',
-        level: media.level || profile.level,
-        sourceStatus: media.sourceStatus,
-        reasonRecommended: "Verified Norwegian media starting point",
-      });
-    }
-
-    logger.info("[norwegian] media search completed", {
-      userScope,
-      resultCount: 3,
-      verifiedLinks: 3,
-    });
-  } catch (error) {
-    logger.warn("[norwegian] Failed to save media links", { error: error.message });
-  }
-
-  const response = truncate(
-    `**Norwegian Media Recommendations** 📚\n\n` +
-    `**News:**\n` +
-    `[${mediaRecommendations.news.title}](${mediaRecommendations.news.url})\n` +
-    `${mediaRecommendations.news.summary}\n\n` +
-    `**YouTube:**\n` +
-    `[${mediaRecommendations.youtube.title}](${mediaRecommendations.youtube.url})\n` +
-    `${mediaRecommendations.youtube.why}\n\n` +
-    `**Listening:**\n` +
-    `[${mediaRecommendations.listening.title}](${mediaRecommendations.listening.url})\n` +
-    `${mediaRecommendations.listening.summary}\n\n` +
-    `✅ All links are verified and real.`
-  );
-
-  await interaction.editReply(response);
+  recordNorwegianTruth({ command: "media", sourceStatus: "not_checked" });
+  await interaction.editReply(truncate(
+    `**Norwegian Media Search** 📚\n\n` +
+    `⚠️ **No reliable media found from configured sources.** Live web search / media validation is not configured in this runtime, so I will not invent NRK pages, YouTube titles, subtitle availability, or region availability.\n\n` +
+    `sourceStatus: **not_checked**\n` +
+    `Availability note: unknown until validated by live search or stored trusted URL.`
+  ));
 }
 
 async function handleNorwegianNews(interaction, store, userScope, logger) {
@@ -625,6 +566,7 @@ async function handleNorwegianNews(interaction, store, userScope, logger) {
       reasonRecommended: "Verified Norwegian news starting point",
     });
 
+    recordNorwegianTruth({ command: "news", sourceStatus: newsArticle.sourceStatus, url: newsArticle.url });
     logger.info("[norwegian] news article suggested", {
       userScope,
       sourceStatus: newsArticle.sourceStatus,
@@ -664,7 +606,7 @@ async function handleNorwegianYoutube(interaction, store, userScope, logger) {
     channel: "NRK Skole",
     url: "https://www.youtube.com/@nrkskole",
     level: "A1-B2",
-    why: "Official educational content with clear pronunciation and subtitles when available",
+    why: "Official educational content; subtitle availability is not claimed until checked",
     listeningTask: "Watch 5 minutes and repeat the phrases you hear.",
     sourceStatus: "verified",
     hasSubtitles: false, // Don't claim subtitles unless verified
@@ -683,6 +625,7 @@ async function handleNorwegianYoutube(interaction, store, userScope, logger) {
       reasonRecommended: "Verified Norwegian YouTube channel starting point",
     });
 
+    recordNorwegianTruth({ command: "youtube", sourceStatus: youtubeVideo.sourceStatus, url: youtubeVideo.url });
     logger.info("[norwegian] youtube video suggested", {
       userScope,
       sourceStatus: youtubeVideo.sourceStatus,
@@ -692,8 +635,8 @@ async function handleNorwegianYoutube(interaction, store, userScope, logger) {
   }
 
   const subtitleNote = youtubeVideo.hasSubtitles
-    ? "Subtitles available."
-    : "Check if subtitles are available in video settings.";
+    ? "Subtitles verified available."
+    : "Subtitle availability not checked; no subtitle claim is being made.";
 
   const response = truncate(
     `**Video:** [${youtubeVideo.title}](${youtubeVideo.url})\n\n` +
@@ -884,9 +827,11 @@ async function handleNorwegianPronounce(interaction, store, userScope, logger) {
       `**Pronunciation Practice** 🎤\n\n` +
       `**Target phrase:**\n*${phrase}*\n\n` +
       `${ttsNote}\n\n` +
+      `sourceStatus: **stt_based_practice** (Retry if audio confidence is low; no fake precise score will be shown.)\n\n` +
       `Send me a voice note saying this phrase to get STT-based feedback.`
     );
 
+    recordNorwegianTruth({ command: "pronounce", sourceStatus: "stt_based_practice" });
     await interaction.editReply({ content: replyContent, files: ttsFiles });
   } catch (error) {
     logger.error("[norwegian-pronunciation] Failed to create session", {
@@ -1045,6 +990,7 @@ async function handleNorwegianLevel(interaction, store, userScope, logger) {
     return;
   }
 
+  recordNorwegianTruth({ command: "level", sourceStatus: "not_checked", estimatedLevel: profile.estimatedLevel });
   await interaction.editReply(truncate(
     `**Norwegian Level Estimate** 📊\n\n` +
     `**Estimated level:** ${profile.estimatedLevel}\n` +

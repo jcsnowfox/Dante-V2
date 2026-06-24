@@ -38,6 +38,7 @@ const { handleContinuityPageRequest } = require("./adminPageHandlers/continuityP
 const { handleGameAdminPageRequest } = require("../games/http/gameAdminPageHandler");
 const { handleNorwegianLearningPageRequest } = require("./adminPageHandlers/norwegianLearningPageHandler");
 const { handleNorwegianDashboardRequest } = require("./adminPageHandlers/norwegianDashboardHandler");
+const { handleSystemTruthPageRequest } = require("./adminPageHandlers/systemTruthPageHandler");
 
 async function handleAdminPageRequest({
   req = null,
@@ -370,6 +371,11 @@ async function handleAdminPageRequest({
 
   if (route.section === "continuity") {
     await handleContinuityPageRequest({ url, route, innerRes, innerContext, helpers, theme, themeLinks });
+    return;
+  }
+
+  if (route.section === "systemTruth") {
+    await handleSystemTruthPageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });
     return;
   }
 
