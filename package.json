@@ -126,6 +126,12 @@
     "verify:tone-mode-resolver": "pnpm --dir artifacts/ghostlight-bot run verify:tone-mode-resolver",
     "verify:continuity-control-layer": "pnpm --dir artifacts/ghostlight-bot run verify:continuity-control-layer",
     "verify:continuity-control-privacy": "pnpm --dir artifacts/ghostlight-bot run verify:continuity-control-privacy",
-    "verify:reply-runtime-wiring": "pnpm --dir artifacts/ghostlight-bot run verify:reply-runtime-wiring"
+    "verify:reply-runtime-wiring": "pnpm --dir artifacts/ghostlight-bot run verify:reply-runtime-wiring",
+    "verify:relationship-repair-engine": "node scripts/verify-trust-layer.mjs relationship",
+    "verify:norwegian-accuracy-spine": "node scripts/verify-trust-layer.mjs norwegian",
+    "verify:system-truth-panel": "node scripts/verify-trust-layer.mjs truth",
+    "verify:trust-layer-runtime-wiring": "node scripts/verify-trust-layer.mjs runtime",
+    "verify:trust-layer-privacy": "node scripts/verify-trust-layer.mjs privacy",
+    "verify:trust-layer-no-hallucinations": "node scripts/verify-trust-layer.mjs nohallucinations"
   }
 }

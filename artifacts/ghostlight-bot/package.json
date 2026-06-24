@@ -56,7 +56,13 @@
     "verify:tone-mode-resolver": "node scripts/verify-continuity-control-layer.mjs",
     "verify:continuity-control-layer": "node scripts/verify-continuity-control-layer.mjs",
     "verify:continuity-control-privacy": "node scripts/verify-continuity-control-layer.mjs",
-    "verify:reply-runtime-wiring": "node scripts/verify-continuity-control-layer.mjs"
+    "verify:reply-runtime-wiring": "node scripts/verify-continuity-control-layer.mjs",
+    "verify:relationship-repair-engine": "node ../../scripts/verify-trust-layer.mjs relationship",
+    "verify:norwegian-accuracy-spine": "node ../../scripts/verify-trust-layer.mjs norwegian",
+    "verify:system-truth-panel": "node ../../scripts/verify-trust-layer.mjs truth",
+    "verify:trust-layer-runtime-wiring": "node ../../scripts/verify-trust-layer.mjs runtime",
+    "verify:trust-layer-privacy": "node ../../scripts/verify-trust-layer.mjs privacy",
+    "verify:trust-layer-no-hallucinations": "node ../../scripts/verify-trust-layer.mjs nohallucinations"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

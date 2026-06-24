@@ -311,6 +311,7 @@ async function startApp() {
     innerLife,
     continuity,
     emotionalBeatStore,
+    promiseLedger,
     secondLife,
     secondLifeAdapter,
     secondLifeIdentityResolver,
@@ -367,6 +368,8 @@ async function startApp() {
     gameSettings: appContext.gameSettings,
     licenseRuntime: appContext.licenseRuntime,
     norwegianLearning,
+    emotionalBeatStore,
+    promiseLedger,
   };
 
   const gameButtonHandler = gameSystem.createButtonHandler({ appContext });

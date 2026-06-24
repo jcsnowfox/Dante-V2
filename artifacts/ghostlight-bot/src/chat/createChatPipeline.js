@@ -22,6 +22,8 @@ const { classifyEmotionalBeat, formatContinuityPrelude, isProposalText, isForgot
 const { detectPromise } = require("../continuity/promiseLedger");
 const { resolveToneMode, formatTonePrelude } = require("../continuity/toneModeResolver");
 const { validateVoice, buildRetryInstruction, fallbackReply, buildVoiceRules } = require("../continuity/voiceFingerprintGuard");
+const { analyzeRepair, buildRepairPrelude, saveRepairBeat } = require("../relationshipRepair/engine");
+const { updateSystemTruth } = require("../systemTruth/runtimeState");
 
 function normalizeAdultPrivateChannelId(channelId) {
   const value = String(channelId || "").trim();
@@ -437,8 +439,18 @@ function createChatPipeline({
         settings: { allowFlirtyInNormalChannels: false, defaultMode: "neutral" },
       }) : null;
       if (toneDecision) { const toneText = formatTonePrelude(toneDecision); contextSections.push({ label: "TONE MODE", content: toneText.replace(/^TONE MODE:\n?/, "") }); }
+      let repairResult = null;
+      if (!inDevMode) {
+        repairResult = await analyzeRepair({ messageText: input.content, emotionalBeats: rankedBeats, openPromises, durableMemories: memories, recentHistory, channelContext: beatChannelContext, userDisplayName: input.authorName || "Jenna" });
+        if (repairResult?.repairNeeded) {
+          const repairPrelude = buildRepairPrelude(repairResult, input.content);
+          if (repairPrelude) contextSections.push(repairPrelude);
+          updateSystemTruth("continuity", { relationshipRepairEngineEnabled: true, lastToneMode: "repair", lastRepairEvent: { type: repairResult.repairType, severity: repairResult.severity, evidenceCount: repairResult.retrievedEvidence.length, createdAt: new Date().toISOString() } });
+          logger.info?.(`[relationship-repair] prelude injected type=${repairResult.repairType} severity=${repairResult.severity} evidence=${repairResult.retrievedEvidence.length}`);
+        }
+      }
       if (!inDevMode) { const voiceText = buildVoiceRules(); contextSections.push({ label: "VOICE RULES", content: voiceText.replace(/^VOICE RULES:\n?/, "") }); }
-      logger.info?.(`[reply-context] continuity prelude built beats=${rankedBeats.length} promises=${openPromises.length} mode=${toneDecision?.mode || "dev"}`);
+      logger.info?.(`[reply-context] continuity prelude built beats=${rankedBeats.length} promises=${openPromises.length} mode=${repairResult?.repairNeeded ? "repair" : (toneDecision?.mode || "dev")}`);
 
       // Continuity Engine — carries open loops, future events, promises, decisions,
       // repair threads, and boundaries as a bounded private prelude section.
@@ -608,6 +620,7 @@ function createChatPipeline({
 
       if (!inDevMode) {
         const guardResult = validateVoice({ text: modelOutput.text, context: { adultPrivate: adultScope.active, allowRoleplayNarration: false } });
+        updateSystemTruth("continuity", { voiceFingerprintGuardEnabled: true, lastVoiceGuardResult: { passed: guardResult.passed, violations: guardResult.violations } });
         logger.info?.(`[voice-guard] checked companionId=${beatScope.companion_id} passed=${guardResult.passed} violations=${guardResult.violations.join(",")}`);
         if (!guardResult.passed) {
           logger.info?.(`[voice-guard] retry requested reason=${guardResult.violations.join(",")}`);
@@ -666,6 +679,14 @@ function createChatPipeline({
 
       const reply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput });
 
+      try {
+        if (repairResult?.repairNeeded) {
+          await saveRepairBeat({ emotionalBeatStore, scope: { ...beatScope, source_channel_id: message.channelId || "", source_message_id: message.id }, message: input.content, reply: reply?.content || "", repairResult });
+        }
+      } catch (error) {
+        logger.warn("[relationship-repair] Failed to save repair beat; continuing", { messageId: message.id, error: error.message });
+      }
+
 
       try {
         const companionPromise = detectPromise({ text: reply?.content || "", role: "assistant", channelContext: beatChannelContext });
@@ -689,6 +710,9 @@ function createChatPipeline({
         logger.warn("[chat] Companion reply beat curation failed; continuing", { messageId: message.id, error: error.message });
       }
 
+      updateSystemTruth("llm", { activeChatProvider: config.llm?.provider || config.openai?.provider || "unknown", activeModel: effectiveMode.chatModel || config.openai?.chatModel || "unknown", lastModelUsed: modelOutput.model || effectiveMode.chatModel || "unknown" });
+      updateSystemTruth("memory", { lastMemoryRetrieval: new Date().toISOString(), lastContinuityPreludeBuilt: new Date().toISOString(), lastCrossChannelRetrieval: rankedBeats.length ? new Date().toISOString() : undefined, lastEmotionalBeatSaved: rankedBeats[0]?.updated_at || rankedBeats[0]?.created_at || undefined });
+      updateSystemTruth("privacy", { privateAdultMemoryGatingEnabled: true, rawAudioStorageEnabled: false, rawTranscriptLoggingEnabled: false, safeErrorShieldEnabled: true });
       logger.debug?.("[chat] Pipeline completed", {
         messageId: message.id,
         mode: selectedMode.name,
