@@ -138,6 +138,11 @@
     "verify:memory-dashboard": "pnpm --dir artifacts/ghostlight-bot run verify:memory-dashboard",
     "verify:memory-qdrant-sync": "pnpm --dir artifacts/ghostlight-bot run verify:memory-qdrant-sync",
     "verify:remember-this-command": "pnpm --dir artifacts/ghostlight-bot run verify:remember-this-command",
-    "verify:memory-scope-consistency": "pnpm --dir artifacts/ghostlight-bot run verify:memory-scope-consistency"
+    "verify:memory-scope-consistency": "pnpm --dir artifacts/ghostlight-bot run verify:memory-scope-consistency",
+    "verify:no-canned-guard-responses": "pnpm --dir artifacts/ghostlight-bot run verify:no-canned-guard-responses",
+    "verify:reply-fallback-rotation": "pnpm --dir artifacts/ghostlight-bot run verify:reply-fallback-rotation",
+    "verify:voice-guard-dante-first": "pnpm --dir artifacts/ghostlight-bot run verify:voice-guard-dante-first",
+    "verify:repair-trigger-precision": "pnpm --dir artifacts/ghostlight-bot run verify:repair-trigger-precision",
+    "verify:adult-private-no-moralizing": "pnpm --dir artifacts/ghostlight-bot run verify:adult-private-no-moralizing"
   }
 }

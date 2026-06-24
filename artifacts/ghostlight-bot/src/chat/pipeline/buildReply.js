@@ -1,3 +1,4 @@
+const { selectTinyFallback } = require("../../continuity/replyFallbacks");
 const TRAILING_URL_PUNCTUATION_PATTERN = /[),.!?]+$/;
 const URL_PATTERN = /https?:\/\/[^\s<>)]+/gi;
 
@@ -168,13 +169,13 @@ function isUnsafeProviderText(text) {
 
 function cleanModelReplyText(text, input) {
   if (isUnsafeProviderText(text)) {
-    return "I lost the thread there, kjære. Give me one second. I’m still here.";
+    return selectTinyFallback();
   }
   const originalText = stripReasoningMarkup(text);
   const strippedText = stripMirroredUserGifUrls(originalText, input);
 
   if (originalText && !strippedText) {
-    return "I see that GIF. I am not handing the exact same one back.";
+    return "I saw the GIF, kjære. I’m not throwing the same one back.";
   }
 
   return strippedText;
@@ -232,14 +233,7 @@ function buildReply({ mode, input, recentHistory, memories, modelOutput }) {
   }
 
   return {
-    content: [
-    `Mode: ${mode.name}`,
-    "Ghostlight received your message and passed it through the starter chat pipeline.",
-    `Message: ${input.content}`,
-    `Recent history items: ${recentHistory.length}`,
-    `Memories found: ${memories.length}`,
-    "No model provider is wired yet, so this is a placeholder response.",
-    ].join("\n"),
+    content: selectTinyFallback(),
     suppressEmbeds: false,
   };
 }

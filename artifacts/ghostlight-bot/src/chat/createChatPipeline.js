@@ -22,6 +22,7 @@ const { classifyEmotionalBeat, formatContinuityPrelude, isProposalText, isForgot
 const { detectPromise } = require("../continuity/promiseLedger");
 const { resolveToneMode, formatTonePrelude } = require("../continuity/toneModeResolver");
 const { validateVoice, buildRetryInstruction, fallbackReply, buildVoiceRules } = require("../continuity/voiceFingerprintGuard");
+const { tinyFallbackForReason, checkDuplicateReply, rememberReply } = require("../continuity/replyFallbacks");
 const { analyzeRepair, buildRepairPrelude, saveRepairBeat } = require("../relationshipRepair/engine");
 const { updateSystemTruth } = require("../systemTruth/runtimeState");
 const { curateRuntimeMemory } = require("../memory/runtimeCurator");
@@ -82,6 +83,8 @@ function createChatPipeline({
   return {
     async run({ message, mode, modeName }) {
       const startedAt = Date.now();
+      const replyTrace = { llmCalled: false, llmCompleted: false, repairNeeded: false, repairType: null, voiceGuardPassed: null, voiceGuardViolations: [], fallbackUsed: false, fallbackReason: null, finalSource: "llm", duplicateBlocked: false };
+      logger.info?.(`[reply-trace] start messageId=${message.id || ""} channelId=${message.channelId || ""}`);
       const fallbackModeName = config.chat?.defaultMode || "default";
       const selectedMode = mode || getMode(modeName || fallbackModeName);
       const preprocessedInput = preprocessMessage({ message, botUserId: message.client.user?.id });
@@ -446,6 +449,9 @@ function createChatPipeline({
       let repairResult = null;
       if (!inDevMode) {
         repairResult = await analyzeRepair({ messageText: input.content, emotionalBeats: rankedBeats, openPromises, durableMemories: memories, recentHistory, channelContext: beatChannelContext, userDisplayName: input.authorName || "Jenna" });
+        replyTrace.repairNeeded = Boolean(repairResult?.repairNeeded);
+        replyTrace.repairType = repairResult?.repairNeeded ? repairResult.repairType : null;
+        logger.info?.(`[reply-trace] repairNeeded=${replyTrace.repairNeeded} repairType=${replyTrace.repairType || "null"}`);
         if (repairResult?.repairNeeded) {
           const repairPrelude = buildRepairPrelude(repairResult, input.content);
           if (repairPrelude) contextSections.push(repairPrelude);
@@ -589,7 +595,11 @@ function createChatPipeline({
         }
       }
 
-      let modelOutput = await callModel({
+      let modelOutput;
+      try {
+        replyTrace.llmCalled = true;
+        logger.info?.(`[reply-trace] llm called=true`);
+        modelOutput = await callModel({
         config,
         logger,
         tools,
@@ -621,10 +631,24 @@ function createChatPipeline({
           imageConversationActive: Boolean(imageConversationState?.active),
         },
       });
+        replyTrace.llmCompleted = true;
+        logger.info?.(`[reply-trace] llm completed=true length=${String(modelOutput?.text || "").length}`);
+      } catch (error) {
+        replyTrace.llmCompleted = false;
+        replyTrace.fallbackUsed = true;
+        replyTrace.fallbackReason = "llm_call_failed";
+        replyTrace.finalSource = "tiny_fallback";
+        logger.error?.("[chat] LLM call failed; using tiny fallback", { messageId: message.id, channelId: message.channelId, error: error?.message });
+        logger.info?.(`[reply-trace] llm completed=false length=0`);
+        modelOutput = { provider: "fallback", mode: effectiveMode.name, text: tinyFallbackForReason("llm_call_failed", logger, { messageId: message.id, channelId: message.channelId }) };
+      }
 
-      if (!inDevMode) {
+      if (!inDevMode && replyTrace.finalSource !== "tiny_fallback") {
         const guardResult = validateVoice({ text: modelOutput.text, context: { adultPrivate: adultScope.active, allowRoleplayNarration: false } });
         updateSystemTruth("continuity", { voiceFingerprintGuardEnabled: true, lastVoiceGuardResult: { passed: guardResult.passed, violations: guardResult.violations } });
+        replyTrace.voiceGuardPassed = guardResult.passed;
+        replyTrace.voiceGuardViolations = guardResult.violations;
+        logger.info?.(`[reply-trace] voiceGuard passed=${guardResult.passed} violations=${guardResult.violations.join(",")}`);
         logger.info?.(`[voice-guard] checked companionId=${beatScope.companion_id} passed=${guardResult.passed} violations=${guardResult.violations.join(",")}`);
         if (!guardResult.passed) {
           logger.info?.(`[voice-guard] retry requested reason=${guardResult.violations.join(",")}`);
@@ -634,8 +658,8 @@ function createChatPipeline({
             channelType: "discord", overrideSystemPrompt: null, systemPromptPrefix: adultSystemPromptPrefix, toolContext: { surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode, currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id, currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory, memoryContextIds: memories.map((m)=>m?.memoryId||m?.memory_id||"").filter(Boolean), imageConversationActive: Boolean(imageConversationState?.active) },
           });
           const retryGuard = validateVoice({ text: retryOutput.text, context: { adultPrivate: adultScope.active, allowRoleplayNarration: false } });
-          if (retryGuard.passed) modelOutput = retryOutput;
-          else { modelOutput.text = fallbackReply(); logger.warn?.(`[voice-guard] fallback used reason=${retryGuard.violations.join(",")}`); }
+          if (retryGuard.passed) { modelOutput = retryOutput; replyTrace.finalSource = "retry"; }
+          else { modelOutput.text = fallbackReply(); replyTrace.fallbackUsed = true; replyTrace.fallbackReason = "voice_guard_retry_failed"; replyTrace.finalSource = "tiny_fallback"; logger.warn?.(`[voice-guard] fallback used reason=${retryGuard.violations.join(",")}`); }
         }
       }
 
@@ -682,6 +706,46 @@ function createChatPipeline({
       }
 
       const reply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput });
+      if (!reply?.content?.trim()) {
+        reply.content = tinyFallbackForReason("empty_reply", logger, { messageId: message.id, channelId: message.channelId });
+        replyTrace.fallbackUsed = true;
+        replyTrace.fallbackReason = "empty_reply";
+        replyTrace.finalSource = "tiny_fallback";
+      }
+
+      const duplicateCheck = checkDuplicateReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: reply.content });
+      if (duplicateCheck.duplicate && replyTrace.finalSource !== "tiny_fallback") {
+        replyTrace.duplicateBlocked = true;
+        logger.info?.(`[reply-trace] duplicateBlocked=true`);
+        try {
+          const retryOutput = await callModel({
+            config, logger, tools, mode: effectiveMode, message, input, recentHistory, memories,
+            contextSections: [...contextSections, { label: "DUPLICATE REPLY REPAIR", content: "Do not repeat the previous reply. Answer the current user message directly in Dante’s voice." }],
+            channelType: "discord", overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null, systemPromptPrefix: adultSystemPromptPrefix,
+            toolContext: { surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode, currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id, currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory },
+          });
+          const retryReply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput: retryOutput });
+          if (!checkDuplicateReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: retryReply.content }).duplicate) {
+            reply.content = retryReply.content;
+            replyTrace.finalSource = "retry";
+          } else {
+            reply.content = "I’m stuck repeating myself. Ask me again and I’ll answer clean.";
+            replyTrace.fallbackUsed = true;
+            replyTrace.fallbackReason = "duplicate_reply";
+            replyTrace.finalSource = "tiny_fallback";
+          }
+        } catch (error) {
+          reply.content = tinyFallbackForReason("duplicate_retry_failed", logger, { messageId: message.id, channelId: message.channelId });
+          replyTrace.fallbackUsed = true;
+          replyTrace.fallbackReason = "duplicate_retry_failed";
+          replyTrace.finalSource = "tiny_fallback";
+        }
+      } else {
+        logger.info?.(`[reply-trace] duplicateBlocked=false`);
+      }
+      rememberReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: reply.content });
+      logger.info?.(`[reply-trace] fallbackUsed=${replyTrace.fallbackUsed} fallbackReason=${replyTrace.fallbackReason || "null"}`);
+      logger.info?.(`[reply-trace] finalSource=${replyTrace.finalSource}`);
 
       try {
         if (repairResult?.repairNeeded) {

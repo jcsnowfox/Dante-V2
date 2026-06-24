@@ -1,7 +1,8 @@
 "use strict";
 
 const PROPOSAL_TAGS = ["proposal", "marriage", "engagement", "one_knee", "relationship_commitment"];
-const FallbackText = "I lost the thread there, kjære. Give me one second. I’m still here.";
+const { selectTinyFallback } = require("./replyFallbacks");
+const FallbackText = selectTinyFallback();
 
 function textOf(value) { return String(value || "").trim(); }
 function lc(value) { return textOf(value).toLowerCase(); }

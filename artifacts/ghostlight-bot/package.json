@@ -56,7 +56,7 @@
     "verify:tone-mode-resolver": "node scripts/verify-continuity-control-layer.mjs",
     "verify:continuity-control-layer": "node scripts/verify-continuity-control-layer.mjs",
     "verify:continuity-control-privacy": "node scripts/verify-continuity-control-layer.mjs",
-    "verify:reply-runtime-wiring": "node scripts/verify-continuity-control-layer.mjs",
+    "verify:reply-runtime-wiring": "node scripts/verify-dante-first-replies.mjs runtime",
     "verify:relationship-repair-engine": "node ../../scripts/verify-trust-layer.mjs relationship",
     "verify:norwegian-accuracy-spine": "node ../../scripts/verify-trust-layer.mjs norwegian",
     "verify:system-truth-panel": "node ../../scripts/verify-trust-layer.mjs truth",
@@ -69,7 +69,12 @@
     "verify:memory-qdrant-sync": "node scripts/verify-memory-emergency-repair.mjs",
     "verify:remember-this-command": "node scripts/verify-memory-emergency-repair.mjs",
     "verify:memory-scope-consistency": "node scripts/verify-memory-emergency-repair.mjs",
-    "build": "node --check src/index.js"
+    "build": "node --check src/index.js",
+    "verify:no-canned-guard-responses": "node scripts/verify-dante-first-replies.mjs no-canned",
+    "verify:reply-fallback-rotation": "node scripts/verify-dante-first-replies.mjs fallback",
+    "verify:voice-guard-dante-first": "node scripts/verify-dante-first-replies.mjs voice",
+    "verify:repair-trigger-precision": "node scripts/verify-dante-first-replies.mjs repair",
+    "verify:adult-private-no-moralizing": "node scripts/verify-dante-first-replies.mjs adult"
   },
   "dependencies": {
     "discord.js": "^14.26.3",
