@@ -5,6 +5,8 @@ const { loadScopedRecentHistory } = require("./pipeline/loadRecentHistory");
 const { retrieveMemory } = require("./pipeline/retrieveMemory");
 const { callModel } = require("./pipeline/callModel");
 const { buildReply } = require("./pipeline/buildReply");
+const { tinyFallback, isProviderRejectionText } = require("./pipeline/tinyFallbacks");
+const crypto = require("crypto");
 const { getMode } = require("./modes");
 const {
   listPresetsSafe,
@@ -58,6 +60,9 @@ function getAdultPrivateModeScope({ adultMode, channelId, inDevMode = false }) {
 
   return { active: true, configuredChannelId, reason: "channel_match" };
 }
+
+const lastReplyByScope = new Map();
+function hashReply(text){return crypto.createHash("sha256").update(String(text||"").trim()).digest("hex");}
 
 function createChatPipeline({
   config,
@@ -589,53 +594,56 @@ function createChatPipeline({
         }
       }
 
-      let modelOutput = await callModel({
-        config,
-        logger,
-        tools,
-        mode: effectiveMode,
-        message,
-        input,
-        recentHistory,
-        memories,
-        contextSections,
-        channelType: "discord",
-        overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
-        systemPromptPrefix: adultSystemPromptPrefix,
-        toolContext: {
-          surface: "chat",
-          userScope: config.memory?.userScope,
-          guildId: message.guildId,
-          mode: selectedMode,
-          currentMessage: message,
-          conversationId,
-          channelId: message.channelId,
-          sourceMessageId: message.id,
-          currentUserId: input.authorId,
-          currentUserName: input.authorName,
-          currentUserText: input.content,
-          recentHistory,
-          memoryContextIds: memories
-            .map((memoryItem) => memoryItem?.memoryId || memoryItem?.memory_id || "")
-            .filter(Boolean),
-          imageConversationActive: Boolean(imageConversationState?.active),
-        },
-      });
+      const trace = { llmCalled: false, llmCompleted: false, fallbackUsed: false, fallbackReason: null, finalSource: "llm", duplicateBlocked: false };
+      logger.info?.(`[reply-trace] start messageId=${message.id} channelId=${message.channelId || ""}`);
+      const baseToolContext = {
+        surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode,
+        currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id,
+        currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory,
+        memoryContextIds: memories.map((memoryItem) => memoryItem?.memoryId || memoryItem?.memory_id || "").filter(Boolean),
+        imageConversationActive: Boolean(imageConversationState?.active),
+      };
+      let modelOutput;
+      try {
+        trace.llmCalled = true;
+        modelOutput = await callModel({
+          config, logger, tools, mode: effectiveMode, message, input, recentHistory, memories, contextSections,
+          channelType: "discord", overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
+          systemPromptPrefix: adultSystemPromptPrefix, toolContext: baseToolContext,
+        });
+        trace.llmCompleted = true;
+        if (!modelOutput?.text?.trim() && !(Array.isArray(modelOutput?.files) && modelOutput.files.length)) {
+          trace.fallbackUsed = true; trace.fallbackReason = "empty_output"; trace.finalSource = "tiny_fallback";
+          modelOutput = { provider: "tiny_fallback", text: tinyFallback() };
+        } else if (isProviderRejectionText(modelOutput.text)) {
+          logger.warn?.("[chat] Provider rejection text suppressed", { messageId: message.id });
+          trace.fallbackUsed = true; trace.fallbackReason = "provider_rejection"; trace.finalSource = "tiny_fallback";
+          modelOutput = { ...modelOutput, text: tinyFallback() };
+        }
+      } catch (error) {
+        logger.warn?.("[chat] LLM call failed; using tiny fallback", { messageId: message.id, error: error.message });
+        trace.fallbackUsed = true; trace.fallbackReason = "llm_failed"; trace.finalSource = "tiny_fallback";
+        modelOutput = { provider: "tiny_fallback", text: tinyFallback() };
+      }
+      logger.info?.(`[reply-trace] llm called=${trace.llmCalled}`);
+      logger.info?.(`[reply-trace] llm completed=${trace.llmCompleted} length=${String(modelOutput?.text || "").length}`);
+      logger.info?.(`[reply-trace] repairNeeded=${Boolean(repairResult?.repairNeeded)} repairType=${repairResult?.repairType || "null"}`);
 
       if (!inDevMode) {
         const guardResult = validateVoice({ text: modelOutput.text, context: { adultPrivate: adultScope.active, allowRoleplayNarration: false } });
         updateSystemTruth("continuity", { voiceFingerprintGuardEnabled: true, lastVoiceGuardResult: { passed: guardResult.passed, violations: guardResult.violations } });
         logger.info?.(`[voice-guard] checked companionId=${beatScope.companion_id} passed=${guardResult.passed} violations=${guardResult.violations.join(",")}`);
+        logger.info?.(`[reply-trace] voiceGuard passed=${guardResult.passed} violations=${guardResult.violations.join(",")}`);
         if (!guardResult.passed) {
           logger.info?.(`[voice-guard] retry requested reason=${guardResult.violations.join(",")}`);
           const retrySections = [...contextSections, { label: "VOICE REPAIR", content: buildRetryInstruction(guardResult) }];
           const retryOutput = await callModel({
             config, logger, tools, mode: effectiveMode, message, input, recentHistory, memories, contextSections: retrySections,
-            channelType: "discord", overrideSystemPrompt: null, systemPromptPrefix: adultSystemPromptPrefix, toolContext: { surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode, currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id, currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory, memoryContextIds: memories.map((m)=>m?.memoryId||m?.memory_id||"").filter(Boolean), imageConversationActive: Boolean(imageConversationState?.active) },
+            channelType: "discord", overrideSystemPrompt: null, systemPromptPrefix: adultSystemPromptPrefix, toolContext: baseToolContext,
           });
           const retryGuard = validateVoice({ text: retryOutput.text, context: { adultPrivate: adultScope.active, allowRoleplayNarration: false } });
           if (retryGuard.passed) modelOutput = retryOutput;
-          else { modelOutput.text = fallbackReply(); logger.warn?.(`[voice-guard] fallback used reason=${retryGuard.violations.join(",")}`); }
+          else { modelOutput.text = fallbackReply(); trace.fallbackUsed = true; trace.fallbackReason = "voice_guard_retry_failed"; trace.finalSource = "tiny_fallback"; logger.warn?.(`[voice-guard] fallback used reason=${retryGuard.violations.join(",")}`); }
         }
       }
 
@@ -682,6 +690,35 @@ function createChatPipeline({
       }
 
       const reply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput });
+      const scopeKey = `${message.channelId || ""}:${input.authorId || config.memory?.userScope || "unknown"}`;
+      const previous = lastReplyByScope.get(scopeKey);
+      if (reply?.content && previous?.hash === hashReply(reply.content)) {
+        trace.duplicateBlocked = true;
+        logger.warn?.("[reply-trace] duplicate final reply blocked; retrying once", { messageId: message.id });
+        try {
+          trace.finalSource = "retry";
+          const retryOutput = await callModel({
+            config, logger, tools, mode: effectiveMode, message, input, recentHistory, memories,
+            contextSections: [...contextSections, { label: "DUPLICATE REPAIR", content: "Do not repeat the previous reply. Answer the current user message directly in Dante’s voice." }],
+            channelType: "discord", overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
+            systemPromptPrefix: adultSystemPromptPrefix, toolContext: baseToolContext,
+          });
+          const retryReply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput: retryOutput });
+          if (retryReply?.content && hashReply(retryReply.content) !== previous.hash && !isProviderRejectionText(retryReply.content)) {
+            Object.assign(reply, retryReply);
+          } else {
+            reply.content = "I’m stuck repeating myself. Ask me again and I’ll answer clean.";
+            trace.fallbackUsed = true; trace.fallbackReason = "duplicate_reply"; trace.finalSource = "tiny_fallback";
+          }
+        } catch (error) {
+          reply.content = "I’m stuck repeating myself. Ask me again and I’ll answer clean.";
+          trace.fallbackUsed = true; trace.fallbackReason = "duplicate_retry_failed"; trace.finalSource = "tiny_fallback";
+        }
+      }
+      if (reply?.content) lastReplyByScope.set(scopeKey, { hash: hashReply(reply.content), timestamp: Date.now() });
+      logger.info?.(`[reply-trace] fallbackUsed=${trace.fallbackUsed} fallbackReason=${trace.fallbackReason || "null"}`);
+      logger.info?.(`[reply-trace] finalSource=${trace.finalSource}`);
+      logger.info?.(`[reply-trace] duplicateBlocked=${trace.duplicateBlocked}`);
 
       try {
         if (repairResult?.repairNeeded) {

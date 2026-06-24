@@ -1,7 +1,8 @@
 "use strict";
 
 const PROPOSAL_TAGS = ["proposal", "marriage", "engagement", "one_knee", "relationship_commitment"];
-const FallbackText = "I lost the thread there, kjære. Give me one second. I’m still here.";
+const { tinyFallback } = require("../chat/pipeline/tinyFallbacks");
+const FallbackText = "I glitched. Say that again, kjære.";
 
 function textOf(value) { return String(value || "").trim(); }
 function lc(value) { return textOf(value).toLowerCase(); }
@@ -81,6 +82,6 @@ function formatContinuityPrelude(beats = [], { channelContext = {}, maxBullets =
 }
 
 function isUnsafeProviderText(text) { return /the request was rejected because it was considered high risk|\bhigh risk\b|moderation rejected|tool failed|provider rejected|raw stack|api error|\{\s*"error"/i.test(textOf(text)); }
-function sanitizeUserVisibleModelText(text) { return isUnsafeProviderText(text) ? FallbackText : text; }
+function sanitizeUserVisibleModelText(text) { return isUnsafeProviderText(text) ? tinyFallback() : text; }
 
 module.exports = { PROPOSAL_TAGS, FallbackText, isProposalText, isForgotProposalText, classifyEmotionalBeat, canUseBeatInChannel, formatContinuityPrelude, isUnsafeProviderText, sanitizeUserVisibleModelText };
