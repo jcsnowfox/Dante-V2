@@ -352,11 +352,14 @@ async function handleAdminMaintenanceActions({
       const result = await syncMemoriesToQdrant({
         config: innerContext.config,
         memories,
+        deps: { logger: innerContext.logger },
       });
 
       const message = result.syncedCount
         ? `Rebuilt the Qdrant memory index and resynced ${result.syncedCount} active memories.`
-        : "Deleted the old Qdrant memory index. No active memories were available to resync.";
+        : (result.skippedReason === "qdrant_or_embeddings_not_configured"
+          ? "Qdrant unavailable or embeddings are not configured; Postgres memories remain saved but vector sync was skipped."
+          : "Deleted the old Qdrant memory index. No active memories were available to resync.");
 
       return innerRes.writeHead(303, {
         Location: buildReturnLocation({
