@@ -165,6 +165,11 @@ function buildThreadHeartbeatContextText(heartbeatContext = null) {
     }, null, 2));
   }
 
+  if (heartbeatContext.awarenessPrelude && typeof heartbeatContext.awarenessPrelude === "string" && heartbeatContext.awarenessPrelude.trim()) {
+    lines.push("");
+    lines.push(heartbeatContext.awarenessPrelude.trim());
+  }
+
   if (!lines.length) {
     return "";
   }
@@ -1072,4 +1077,5 @@ module.exports = {
   runProactiveAction,
   isProactiveActionDueNow,
   shouldUseToolLoopForThreadAction,
+  buildThreadHeartbeatContextText,
 };

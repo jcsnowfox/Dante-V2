@@ -45,6 +45,7 @@ function createChatPipeline({
   webSearchService = null,
   recentDecisionStore = null,
   timedNotesStore = null,
+  situationalAwarenessEngine = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
@@ -262,6 +263,37 @@ function createChatPipeline({
 
       // Store diagnostics for later logging
       const modelContextDiagnostics = modelContextResult.diagnostics;
+
+      // Situational Awareness Engine — additive layer. Injects a compact
+      // multi-section prelude describing time, presence, conversation state,
+      // relationship, memories, projects, activity, and privacy scope. Fully
+      // guarded; can never break the base reply.
+      if (situationalAwarenessEngine) {
+        try {
+          const awarenessResult = await situationalAwarenessEngine.processMessage({
+            message,
+            input,
+            recentHistory,
+            memories,
+            mode: selectedMode,
+            tools,
+            presenceSnapshot: mainUserPresence?.getSnapshotForUser?.(input.authorId) || null,
+            worldContext: modelContextResult?.worldContext || null,
+          });
+          if (awarenessResult?.preludeSection) {
+            contextSections.push(awarenessResult.preludeSection);
+            logger.debug?.("[chat] Situational awareness prelude injected", {
+              messageId: message.id,
+              sectionsUsed: awarenessResult.awarenessContext?.sources_used?.length || 0,
+            });
+          }
+        } catch (error) {
+          logger.warn("[chat] Situational awareness processing failed; continuing without it", {
+            messageId: message.id,
+            error: error.message,
+          });
+        }
+      }
 
       // Emotional Arc Engine — additive layer. Never mutates the base prompt;
       // only appends an optional internal prelude context section. Fully

@@ -318,6 +318,21 @@ function loadConfig() {
       maxAttachmentMb: readPositiveInt(process.env.MAX_ATTACHMENT_MB, 25, { min: 1, max: 500 }),
       maxVideoSeconds: readPositiveInt(process.env.MAX_VIDEO_SECONDS, 600, { min: 1, max: 3600 }),
     },
+    situationalAwareness: {
+      enabled: readBoolean(process.env.SITUATIONAL_AWARENESS_ENABLED, true),
+      storeSnapshots: readBoolean(process.env.SITUATIONAL_AWARENESS_STORE_SNAPSHOTS, false),
+      maxBullets: readPositiveInt(process.env.SITUATIONAL_AWARENESS_MAX_BULLETS, 8, { min: 1, max: 20 }),
+      includeTime: readBoolean(process.env.SITUATIONAL_AWARENESS_INCLUDE_TIME, true),
+      includePresence: readBoolean(process.env.SITUATIONAL_AWARENESS_INCLUDE_PRESENCE, true),
+      includeConversation: readBoolean(process.env.SITUATIONAL_AWARENESS_INCLUDE_CONVERSATION, true),
+      includeRelationship: readBoolean(process.env.SITUATIONAL_AWARENESS_INCLUDE_RELATIONSHIP, true),
+      includeMemory: readBoolean(process.env.SITUATIONAL_AWARENESS_INCLUDE_MEMORY, true),
+      includeProjects: readBoolean(process.env.SITUATIONAL_AWARENESS_INCLUDE_PROJECTS, true),
+      includeWorld: readBoolean(process.env.SITUATIONAL_AWARENESS_INCLUDE_WORLD, false),
+      includeActivity: readBoolean(process.env.SITUATIONAL_AWARENESS_INCLUDE_ACTIVITY, true),
+      includePrivacy: readBoolean(process.env.SITUATIONAL_AWARENESS_INCLUDE_PRIVACY, true),
+      includeTools: readBoolean(process.env.SITUATIONAL_AWARENESS_INCLUDE_TOOLS, false),
+    },
   };
 }
 

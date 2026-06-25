@@ -119,7 +119,14 @@
     "verify:notes-ui": "node scripts/verify-notes-ui.mjs",
     "verify:context-pack-runtime-wiring": "node scripts/verify-context-pack-runtime-wiring.mjs",
     "verify:context-pack-privacy": "node scripts/verify-context-pack-privacy.mjs",
-    "verify:context-pack-not-dead": "node scripts/verify-context-pack-not-dead.mjs"
+    "verify:context-pack-not-dead": "node scripts/verify-context-pack-not-dead.mjs",
+    "verify:situational-awareness-engine": "node scripts/verify-situational-awareness-engine.js",
+    "verify:situational-awareness-runtime-wiring": "node scripts/verify-situational-awareness-runtime-wiring.js",
+    "verify:situational-awareness-dashboard": "node scripts/verify-situational-awareness-dashboard.js",
+    "verify:situational-awareness-privacy": "node scripts/verify-situational-awareness-privacy.js",
+    "verify:situational-awareness-tools": "node scripts/verify-situational-awareness-tools.js",
+    "verify:situational-awareness-proactive": "node scripts/verify-situational-awareness-proactive.js",
+    "verify:situational-awareness-not-dead": "node scripts/verify-situational-awareness-not-dead.js"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

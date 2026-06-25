@@ -158,6 +158,7 @@ function createHeartbeatService({
   generatedAudio,
   imageStylePresets,
   imageAppearancePresets,
+  situationalAwarenessEngine = null,
 }) {
   let interval = null;
   let running = false;
@@ -725,6 +726,23 @@ function createHeartbeatService({
         recentUserActivityMinutes: currentTimeContext.recentUserActivityMinutes,
         presenceSnapshot: mainUserPresenceSnapshot,
       };
+
+      if (situationalAwarenessEngine?.isEnabled?.()) {
+        try {
+          const awarenessContext = await situationalAwarenessEngine.buildProactiveAwarenessContext({
+            now,
+            tools,
+            recentMessages,
+          });
+          if (awarenessContext?.compact_prelude) {
+            heartbeatContext.awarenessPrelude = awarenessContext.compact_prelude;
+          }
+        } catch (error) {
+          logger.debug("[heartbeat] Situational awareness context build failed; continuing without it", {
+            error: error?.message || String(error),
+          });
+        }
+      }
 
       if ((config.heartbeat?.maxIdleHours || 0) > 0 && recentUserActivityHours !== null && recentUserActivityHours > config.heartbeat.maxIdleHours) {
         if (shouldRecordSkipEvent(gate)) {

@@ -140,6 +140,10 @@ function getAdminRouteState(pathname) {
     return { section: "systemTruth" };
   }
 
+  if (pathname === "/admin/awareness") {
+    return { section: "awareness" };
+  }
+
   if (pathname === "/admin/schedules" || pathname === "/admin/schedules/actions") {
     return { section: "schedules", tab: "actions" };
   }

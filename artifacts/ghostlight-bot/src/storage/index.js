@@ -98,6 +98,7 @@ const { createRecentDecisionStore, DECISION_TYPES } = require("./recentDecisions
 const { createConversationFollowupStore } = require("./conversationFollowupState");
 const { createTimedNotesStore, STATUSES: TIMED_NOTE_STATUSES } = require("./timedNotes");
 const { createProactiveVarietyMemoryStore } = require("./proactiveVarietyMemory");
+const { createSituationalAwarenessStore } = require("./situationalAwarenessSnapshots");
 
 module.exports = {
   createConversationStore,
@@ -136,6 +137,7 @@ module.exports = {
   createConversationFollowupStore,
   createTimedNotesStore,
   createProactiveVarietyMemoryStore,
+  createSituationalAwarenessStore,
   DECISION_TYPES,
   TIMED_NOTE_STATUSES,
   SUPPORTED_EVENT_TYPES,
