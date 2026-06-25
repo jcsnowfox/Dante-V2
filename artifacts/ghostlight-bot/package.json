@@ -82,7 +82,13 @@
     "verify:channel-awareness-map": "node scripts/verify-channel-awareness-map.mjs",
     "verify:human-simulation-foundation": "node scripts/verify-human-simulation-foundation.mjs",
     "verify:human-simulation-runtime-wiring": "node scripts/verify-human-simulation-runtime-wiring.mjs",
-    "verify:human-simulation-privacy": "node scripts/verify-human-simulation-privacy.mjs"
+    "verify:human-simulation-privacy": "node scripts/verify-human-simulation-privacy.mjs",
+    "verify:inner-weather": "node scripts/verify-inner-weather.mjs",
+    "verify:attention-residue": "node scripts/verify-attention-residue.mjs",
+    "verify:silence-behavior": "node scripts/verify-silence-behavior.mjs",
+    "verify:human-simulation-pack-2": "node scripts/verify-human-simulation-pack-2.mjs",
+    "verify:human-simulation-pack-2-runtime-wiring": "node scripts/verify-human-simulation-pack-2-runtime-wiring.mjs",
+    "verify:human-simulation-pack-2-privacy": "node scripts/verify-human-simulation-pack-2-privacy.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

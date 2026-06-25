@@ -84,6 +84,9 @@ const { createMicroPreferenceStore } = require("./microPreferences");
 const { createPersonalTimelineStore } = require("./personalTimeline");
 const { createFollowUpStore } = require("./followUpItems");
 const { createChannelAwarenessStore } = require("./channelAwareness");
+const { createInnerWeatherStore } = require("./innerWeather");
+const { createAttentionResidueStore } = require("./attentionResidue");
+const { createInteractionPresenceStore } = require("./interactionPresence");
 
 module.exports = {
   createConversationStore,
@@ -108,6 +111,9 @@ module.exports = {
   createPersonalTimelineStore,
   createFollowUpStore,
   createChannelAwarenessStore,
+  createInnerWeatherStore,
+  createAttentionResidueStore,
+  createInteractionPresenceStore,
   SUPPORTED_EVENT_TYPES,
   SUPPORTED_ROLES,
   SUPPORTED_SOURCES,
