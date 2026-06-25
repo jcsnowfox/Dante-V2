@@ -388,7 +388,16 @@ function createHealthServer({
         url.pathname === "/admin/memory/curator" ||
         url.pathname === "/admin/heartbeat" ||
         url.pathname.startsWith("/admin/heartbeat/") ||
-        url.pathname === "/admin/awareness"
+        url.pathname === "/admin/awareness" ||
+        url.pathname === "/admin/second-life" ||
+        url.pathname === "/admin/continuity" ||
+        url.pathname.startsWith("/admin/continuity/") ||
+        url.pathname === "/admin/games" ||
+        url.pathname === "/admin/system-truth" ||
+        url.pathname === "/admin/norwegian" ||
+        url.pathname.startsWith("/admin/norwegian/") ||
+        url.pathname === "/admin/human-simulation" ||
+        url.pathname.startsWith("/admin/human-simulation/")
       )) {
         return withAdmin(async (_req, innerRes, innerContext) => {
           setThemeCookie(innerRes, resolvedTheme);
