@@ -1,7 +1,7 @@
 const { applyRuntimeSettings } = require("../../config/runtimeSettings");
 const { registerDiscordCommands } = require("../../bot/registerCommands");
 const { canSyncMemories, syncMemoriesToQdrant } = require("../../memory/syncMemories");
-const { deleteCollection } = require("../../memory/qdrantClient");
+const { deleteCollection, checkQdrantHealth } = require("../../memory/qdrantClient");
 const { planSettingsSave, clearModelCapabilitiesCache } = require("../../llm/modelValidation");
 const {
   buildDailyThreadActionRecord,
@@ -339,6 +339,21 @@ async function handleAdminMaintenanceActions({
         }).end();
       }
 
+      const health = await checkQdrantHealth({ config: innerContext.config }).catch(() => ({ reachable: false, safeErrorReason: "health_check_failed" }));
+      if (!health.reachable) {
+        return innerRes.writeHead(303, {
+          Location: buildReturnLocation({
+            returnTo: fields.returnTo || fields.view,
+            fallbackPath: "/admin/admin",
+            error: `Cannot rebuild: Qdrant is not reachable (${health.safeErrorReason || "unknown"}). Your memories are safe — no changes made.`,
+            theme,
+            extra: {
+              page: fields.page || 1,
+            },
+          }),
+        }).end();
+      }
+
       const memories = await innerContext.memoryStore.listMemories({
         userScope: innerContext.config.memory.userScope,
         limit: 5000,
@@ -355,8 +370,9 @@ async function handleAdminMaintenanceActions({
         deps: { logger: innerContext.logger },
       });
 
+      const skippedNote = result.skippedCount > 0 ? ` ${result.skippedCount} skipped.` : "";
       const message = result.syncedCount
-        ? `Rebuilt the Qdrant memory index and resynced ${result.syncedCount} active memories.`
+        ? `Rebuilt the Qdrant memory index: ${result.syncedCount} active ${result.syncedCount === 1 ? "memory" : "memories"} resynced.${skippedNote}`
         : (result.skippedReason === "qdrant_or_embeddings_not_configured"
           ? "Qdrant unavailable or embeddings are not configured; Postgres memories remain saved but vector sync was skipped."
           : "Deleted the old Qdrant memory index. No active memories were available to resync.");

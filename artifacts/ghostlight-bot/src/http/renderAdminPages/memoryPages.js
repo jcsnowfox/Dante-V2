@@ -79,6 +79,8 @@ function renderMemoryMapPage({ mapData = {}, theme = "light", helpers }) {
   const availableDomains = Array.isArray(mapData.availableDomains) ? mapData.availableDomains : [];
   const availableMemoryTypes = Array.isArray(mapData.availableMemoryTypes) ? mapData.availableMemoryTypes : [];
   const points = Array.isArray(mapData.points) ? mapData.points : [];
+  const qdrantError = mapData.qdrantError || null;
+  const savedMemoryCount = Number(mapData.savedMemoryCount || totalActiveMemories || 0);
   const domainOptions = availableDomains.map((value) => (
     `<option value="${escapeHtml(value)}">${escapeHtml(formatDomainLabel(value))}</option>`
   )).join("");
@@ -111,21 +113,36 @@ function renderMemoryMapPage({ mapData = {}, theme = "light", helpers }) {
     capped ? "Showing the newest 1000 active memories." : "",
     omittedWithoutVectorCount > 0 ? `${omittedWithoutVectorCount} memories are not shown because they do not have embeddings yet.` : "",
   ].filter(Boolean).join(" ");
-  const emptyState = totalActiveMemories <= 0
+  const emptyState = qdrantError
     ? [
       "<section class=\"memory-map-empty-state\">",
-      "<h3>No active memories yet</h3>",
-      "<p class=\"meta\">Once you’ve saved a few active memories, they’ll appear here as a spatial map.</p>",
+      "<h3>Memory Map unavailable &mdash; vector index unreachable</h3>",
+      `<p class="meta">The Qdrant vector index could not be reached. Your ${escapeHtml(String(savedMemoryCount))} saved ${savedMemoryCount === 1 ? "memory is" : "memories are"} safe in the database.</p>`,
+      `<p class="meta"><code class="error-code">${escapeHtml(qdrantError)}</code></p>`,
+      "<div class=\"memory-action-row\" style=\"display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1rem\">",
+      "<form method=\"POST\" action=\"/admin/actions/memory-rebuild\">",
+      "<input type=\"hidden\" name=\"returnTo\" value=\"/admin/memory/map\">",
+      "<button type=\"submit\" class=\"toolbar-button primary\">Retry Resync</button>",
+      "</form>",
+      "<a href=\"/admin/memory/library\" class=\"toolbar-button secondary\">View Library</a>",
+      "</div>",
       "</section>",
     ].join("")
-    : plottedCount <= 0
+    : totalActiveMemories <= 0
       ? [
         "<section class=\"memory-map-empty-state\">",
-        "<h3>Map unavailable until memories are synced</h3>",
-        "<p class=\"meta\">Active memories were found, but none have usable embeddings yet. Run a memory resync and this view should wake up.</p>",
+        "<h3>No active memories yet</h3>",
+        "<p class=\"meta\">Once you’ve saved a few active memories, they’ll appear here as a spatial map.</p>",
         "</section>",
       ].join("")
-      : "";
+      : plottedCount <= 0
+        ? [
+          "<section class=\"memory-map-empty-state\">",
+          "<h3>Map unavailable until memories are synced</h3>",
+          "<p class=\"meta\">Active memories were found, but none have usable embeddings yet. Run a memory resync and this view should wake up.</p>",
+          "</section>",
+        ].join("")
+        : "";
   const serializedMapData = serializeForInlineScript({
     ...mapData,
     theme,

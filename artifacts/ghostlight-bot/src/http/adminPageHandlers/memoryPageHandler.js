@@ -113,12 +113,34 @@ async function handleMemoryPageRequest({ url, route, innerRes, innerContext, hel
   }
 
   if (route.tab === "map") {
-    const mapData = await prepareMemoryMapData({
-      memoryStore: innerContext.memoryStore,
-      config: innerContext.config,
-      theme,
-      buildAdminLocation: helpers.buildAdminLocation,
-    });
+    let mapData;
+    try {
+      mapData = await prepareMemoryMapData({
+        memoryStore: innerContext.memoryStore,
+        config: innerContext.config,
+        theme,
+        buildAdminLocation: helpers.buildAdminLocation,
+      });
+    } catch (err) {
+      innerContext.logger?.warn?.("[memory-map] Failed to load map data; rendering error state", {
+        error: err?.message || String(err),
+      });
+      const savedCount = typeof innerContext.memoryStore?.countMemories === "function"
+        ? await innerContext.memoryStore.countMemories({ userScope: innerContext.config?.memory?.userScope || "", activeOnly: true }).catch(() => 0)
+        : 0;
+      mapData = {
+        totalActiveMemories: savedCount,
+        plottedCount: 0,
+        omittedWithoutVectorCount: 0,
+        capped: false,
+        projectionMethod: "pca",
+        availableDomains: [],
+        availableMemoryTypes: [],
+        points: [],
+        qdrantError: err?.message || String(err),
+        savedMemoryCount: savedCount,
+      };
+    }
 
     innerRes.end(renderAdminShell({
       currentSection: "memory",
