@@ -103,6 +103,7 @@ function loadConfig() {
   const llmHttpReferer = process.env.OPENROUTER_HTTP_REFERER || "";
   const llmAppTitle = process.env.OPENROUTER_APP_TITLE || "Dorian Vale";
   const imageGenerationModel = process.env.IMAGE_GENERATION_MODEL || process.env.GETIMG_IMAGE_MODEL || "gemini-3-1-flash-image";
+  const imageGenerationReferenceModel = process.env.IMAGE_GENERATION_REFERENCE_MODEL || process.env.GETIMG_REFERENCE_IMAGE_MODEL || "";
   const imageGenerationResolution = process.env.IMAGE_GENERATION_RESOLUTION || "1K";
 
   const llmChat = buildCapabilityConfig({
@@ -251,6 +252,7 @@ function loadConfig() {
     imageGeneration: {
       enabled: readBoolean(process.env.IMAGE_GENERATION_ENABLED, false),
       model: String(imageGenerationModel || "").trim(),
+      referenceModel: String(imageGenerationReferenceModel || "").trim(),
       resolution: ["1K", "2K", "4K"].includes(String(imageGenerationResolution || "").trim().toUpperCase())
         ? String(imageGenerationResolution || "").trim().toUpperCase()
         : "1K",

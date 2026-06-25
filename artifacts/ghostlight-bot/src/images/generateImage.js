@@ -21,6 +21,13 @@ const MODEL_RESOLUTION_SUPPORT = Object.freeze({
   "seedream-4-5": ["2K", "4K"],
   "seedream-4": ["1K", "2K", "4K"],
 });
+// Models that do not support reference images via getimg.ai.
+// When reference images are present and the primary model is in this list,
+// the generation switches to config.imageGeneration.referenceModel if set.
+const MODELS_WITHOUT_REFERENCE_SUPPORT = Object.freeze(new Set([
+  "gemini-3-1-flash-image",
+  "z-image-turbo",
+]));
 
 function getAllowedAspectRatios(config = {}) {
   const configured = Array.isArray(config.imageGeneration?.allowedAspectRatios)
@@ -191,6 +198,19 @@ function resolveImageGenerationModel(config = {}) {
   return String(config.imageGeneration?.model || "").trim();
 }
 
+function resolveEffectiveModel(config = {}, { hasReferenceImages = false } = {}) {
+  const primaryModel = resolveImageGenerationModel(config);
+  if (!hasReferenceImages) return primaryModel;
+  if (!MODELS_WITHOUT_REFERENCE_SUPPORT.has(primaryModel)) return primaryModel;
+  const referenceModel = String(config.imageGeneration?.referenceModel || "").trim();
+  return referenceModel || primaryModel;
+}
+
+function primaryModelSupportsReferences(config = {}) {
+  const model = resolveImageGenerationModel(config);
+  return !MODELS_WITHOUT_REFERENCE_SUPPORT.has(model);
+}
+
 function resolveSupportedResolution({ model, requestedResolution = "1K" }) {
   const normalizedModel = String(model || "").trim();
   const normalizedRequestedResolution = String(requestedResolution || "1K").trim().toUpperCase() || "1K";
@@ -327,9 +347,9 @@ function createImageGenerationService({
         throw new Error("Image generation is disabled.");
       }
 
-      const model = resolveImageGenerationModel(config);
+      const primaryModel = resolveImageGenerationModel(config);
 
-      if (!model) {
+      if (!primaryModel) {
         throw new Error("No image generation model is configured.");
       }
 
@@ -357,8 +377,36 @@ function createImageGenerationService({
         throw new Error("getimg.ai credentials are not configured.");
       }
 
+      // Load reference images from appearance presets early so we can pick the
+      // correct model before building the request payload.
+      const referenceImages = await loadReferenceImagesFromAppearancePresets({
+        appearancePresets,
+        config,
+        logger,
+      });
+
+      // If the primary model doesn't support reference images and a reference
+      // model is configured, switch to it for this generation.
+      const model = resolveEffectiveModel(config, { hasReferenceImages: referenceImages.length > 0 });
+      if (model !== primaryModel && referenceImages.length > 0) {
+        logger.info?.("[images] Switching to reference-capable model for appearance presets", {
+          primaryModel,
+          referenceModel: model,
+          referenceImageCount: referenceImages.length,
+          appearancePresetNames: appearancePresets.map((preset) => preset.name),
+        });
+      } else if (MODELS_WITHOUT_REFERENCE_SUPPORT.has(primaryModel) && referenceImages.length > 0 && model === primaryModel) {
+        // Primary model doesn't support references and no reference model configured — skip refs.
+        logger.warn?.("[images] Primary model does not support reference images and no referenceModel configured; generating without references", {
+          model: primaryModel,
+          appearancePresetNames: appearancePresets.map((preset) => preset.name),
+        });
+        referenceImages.length = 0;
+      }
+
       logger.debug?.("[images] Generating image", {
         model,
+        primaryModel,
         requestedAspectRatio: aspectRatio || null,
         inferredAspectRatio,
         aspectRatio: selectedAspectRatio,
@@ -368,13 +416,9 @@ function createImageGenerationService({
         composedPromptLength: composedPrompt.length,
         stylePresetNames: stylePresets.map((preset) => preset.name),
         appearancePresetNames: appearancePresets.map((preset) => preset.name),
+        referenceImageCount: referenceImages.length,
       });
 
-      const referenceImages = await loadReferenceImagesFromAppearancePresets({
-        appearancePresets,
-        config,
-        logger,
-      });
       const requestPayload = buildImageRequestWithReferences({
         model,
         prompt: composedPrompt,
@@ -578,6 +622,9 @@ module.exports = {
   createImageGenerationService,
   extractGeneratedImageUrl,
   resolveImageGenerationModel,
+  resolveEffectiveModel,
+  primaryModelSupportsReferences,
+  MODELS_WITHOUT_REFERENCE_SUPPORT,
   resolveSupportedResolution,
   loadReferenceImagesFromAppearancePresets,
   MAX_REFERENCE_IMAGES,
