@@ -1,0 +1,2 @@
+[deploy]
+startCommand = "pnpm --filter @workspace/api-server start"
