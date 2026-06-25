@@ -406,8 +406,19 @@ function renderHeartbeatPage({
   const decisionItems = historyItems
     .filter((item) => item.status === "fired" || (item.status === "skipped" && ["low_confidence", "hold_back"].includes(item.reason)))
     .slice(0, HISTORY_LIMIT);
+  const SKIP_REASON_LABELS = {
+    no_available_actions: "No actions available (all targets failed to resolve)",
+    user_idle: "Skipped — user idle too long (maxIdleHours exceeded)",
+    global_cooldown: "Skipped — global cooldown not elapsed",
+    daily_cap: "Skipped — daily cap reached",
+    no_decision: "Skipped — conductor returned no decision",
+    invalid_action: "Skipped — conductor chose an action that wasn't in the available set",
+    quiet_hours_blocked: "Skipped — quiet hours active and action not allowed during quiet hours",
+    recent_user_activity_defer: "Skipped — user just spoke; deferred for a few minutes",
+    no_spotify_actions: "Skipped — Spotify actions available but playback not active",
+  };
   const debugItems = (Array.isArray(runtime.recentDebugEvents) ? runtime.recentDebugEvents : [])
-    .filter((item) => item.status === "failed")
+    .filter((item) => item.status === "failed" || item.status === "skipped")
     .slice(0, HISTORY_LIMIT);
   const historyMarkup = decisionItems.length
     ? [
@@ -433,18 +444,21 @@ function renderHeartbeatPage({
     ? [
       "<div class=\"form-divider\"></div>",
       "<div class=\"section-title section-title-inline\">",
-      "<h3>Errors</h3>",
+      "<h3>Recent Skips &amp; Errors</h3>",
       "<form method=\"post\" action=\"/admin/actions/heartbeat-errors-clear\">",
       withThemeField(theme),
       `<input type="hidden" name="returnTo" value="${escapeHtml(buildAdminLocation({ path: "/admin/heartbeat/overview", theme }))}">`,
-      "<button type=\"submit\" class=\"secondary\">Marked Done</button>",
+      "<button type=\"submit\" class=\"secondary\">Clear</button>",
       "</form>",
       "</div>",
       "<ul class=\"meta\" style=\"margin:0;padding-left:1.2rem\">",
       debugItems.map((item) => {
+        const label = item.status === "failed"
+          ? (item.reason || "error")
+          : (SKIP_REASON_LABELS[item.reason] || item.reason || "skipped");
         const parts = [
           formatDateTimeValue(item.at || null),
-          item.reason || item.status || "unknown",
+          label,
           item.actionId ? `(${item.actionId})` : "",
         ].filter(Boolean);
         return `<li>${escapeHtml(parts.join(" · "))}</li>`;
