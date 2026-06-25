@@ -82,6 +82,7 @@ const { createLifeEngine } = require("./lifeEngine");
 const { createCompanionEventProcessor } = require("./companion/processCompanionEvent");
 const { createGameSystem } = require("./games");
 const { createNorwegianLearningStore } = require("./norwegian");
+const { runSchemaGuard } = require("./storage/postgres/runSchemaGuard");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -134,6 +135,8 @@ async function startApp() {
   logger.info("[app] Starting Ghostlight", {
     nodeEnv: config.nodeEnv,
   });
+
+  await runStartupStep("schemaGuard", logger, () => runSchemaGuard({ config, logger }));
 
   const settingsStore = createSettingsStore({ config, logger });
   await runStartupStep("settingsStore.init", logger, () => settingsStore.init());
