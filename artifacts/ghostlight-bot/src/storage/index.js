@@ -94,6 +94,7 @@ const { createRecurringThemeStore } = require("./recurringThemes");
 const { createMemoryConfidenceProfileStore } = require("./memoryConfidenceProfiles");
 const { createSelfReflectionStore } = require("./selfReflectionEvents");
 const { createProactivePresenceRuleStore } = require("./proactivePresenceRules");
+const { createRecentDecisionStore, DECISION_TYPES } = require("./recentDecisions");
 
 module.exports = {
   createConversationStore,
@@ -128,6 +129,8 @@ module.exports = {
   createMemoryConfidenceProfileStore,
   createSelfReflectionStore,
   createProactivePresenceRuleStore,
+  createRecentDecisionStore,
+  DECISION_TYPES,
   SUPPORTED_EVENT_TYPES,
   SUPPORTED_ROLES,
   SUPPORTED_SOURCES,

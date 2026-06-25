@@ -46,6 +46,7 @@ const {
   createMemoryConfidenceProfileStore,
   createSelfReflectionStore,
   createProactivePresenceRuleStore,
+  createRecentDecisionStore,
 } = require("./storage");
 const { createWebSearchService } = require("./tools/webSearchService");
 const { createHumanSimulationEngine } = require("./humanSimulation/humanSimulationEngine");
@@ -171,6 +172,7 @@ async function startApp() {
   const memoryConfidenceStore = createMemoryConfidenceProfileStore({ config, logger });
   const selfReflectionStore = createSelfReflectionStore({ config, logger });
   const proactivePresenceStore = createProactivePresenceRuleStore({ config, logger });
+  const recentDecisionStore = createRecentDecisionStore({ config, logger });
   const webSearchService = createWebSearchService({ config, logger });
   const humanSimulation = createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore, innerWeatherStore, attentionResidueStore, interactionPresenceStore, boundaryConsentStore, doNotAskStore, userEnergyStore, recurringThemeStore, memoryConfidenceStore, selfReflectionStore, proactivePresenceStore });
   const spotify = createSpotifyService({ config, store: musicStore, logger });
@@ -236,6 +238,7 @@ async function startApp() {
     promiseLedger,
     humanSimulation,
     webSearchService,
+    recentDecisionStore,
   });
   const secondLifeReplyGenerator = createSecondLifeReplyGenerator({
     config,
@@ -362,6 +365,7 @@ async function startApp() {
     memoryConfidenceStore,
     selfReflectionStore,
     proactivePresenceStore,
+    recentDecisionStore,
     webSearchService,
     secondLife,
     secondLifeAdapter,
@@ -469,6 +473,7 @@ async function startApp() {
   await runStartupStep("emotionalArc.init", logger, () => emotionalArc.init());
   await runStartupStep("feedbackLearning.init", logger, () => feedbackLearning.init());
   await runStartupStep("relationalState.init", logger, () => relationalState.init());
+  await runStartupStep("recentDecisionStore.init", logger, () => recentDecisionStore.init());
   await runStartupStep("innerLife.init", logger, () => innerLife.init());
   await runStartupStep("continuity.init", logger, () => continuity.init());
   await runStartupStep("humanSimulation.init", logger, () => humanSimulation.init());

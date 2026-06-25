@@ -103,7 +103,13 @@
     "verify:memory-map-api": "node scripts/verify-memory-map-api.mjs",
     "verify:memory-dashboard-unindexed-visible": "node scripts/verify-memory-dashboard-unindexed-visible.mjs",
     "verify:memory-resync-retry": "node scripts/verify-memory-resync-retry.mjs",
-    "verify:memory-retrieval-db-fallback": "node scripts/verify-memory-retrieval-db-fallback.mjs"
+    "verify:memory-retrieval-db-fallback": "node scripts/verify-memory-retrieval-db-fallback.mjs",
+    "verify:continuity-inner-life-route": "node scripts/verify-continuity-inner-life-route.mjs",
+    "verify:continuity-inner-life-dashboard": "node scripts/verify-continuity-inner-life-dashboard.mjs",
+    "verify:recent-decisions-log": "node scripts/verify-recent-decisions-log.mjs",
+    "verify:continuity-inner-life-api": "node scripts/verify-continuity-inner-life-api.mjs",
+    "verify:continuity-inner-life-runtime-wiring": "node scripts/verify-continuity-inner-life-runtime-wiring.mjs",
+    "verify:continuity-inner-life-privacy": "node scripts/verify-continuity-inner-life-privacy.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

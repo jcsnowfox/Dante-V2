@@ -316,6 +316,37 @@ function createHealthServer({
         return;
       }
 
+      if (req.method === "GET" && url.pathname.startsWith("/admin/media/")) {
+        return withAdmin(async (_req, innerRes, innerContext) => {
+          const encodedKey = url.pathname.slice("/admin/media/".length);
+          const key = encodedKey
+            .split("/")
+            .map((segment) => decodeURIComponent(segment))
+            .join("/");
+          try {
+            const { buffer, mimeType } = await downloadBufferFromBucket({
+              config: innerContext.config,
+              key,
+            });
+            innerRes.writeHead(200, {
+              "Content-Type": mimeType || "application/octet-stream",
+              "Cache-Control": "no-store",
+            });
+            innerRes.end(buffer);
+          } catch (_error) {
+            innerRes.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+            innerRes.end("Media not found.");
+          }
+        })(req, res, context);
+      }
+
+      if (req.method === "GET" && (url.pathname === "/admin/inner-life" || url.pathname.startsWith("/admin/inner-life/"))) {
+        const redirectPath = url.pathname.replace(/^\/admin\/inner-life/, "/admin/continuity");
+        res.writeHead(302, { Location: redirectPath + (url.search || "") });
+        res.end();
+        return;
+      }
+
       if (req.method === "GET" && (
         url.pathname === "/admin" ||
         url.pathname === "/admin/home" ||

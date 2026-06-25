@@ -35,10 +35,38 @@ function createChatPipeline({
   emotionalArc = null,
   feedbackLearning = null,
   relationalState = null,
+  innerLife = null,
+  continuity = null,
+  emotionalBeatStore = null,
+  promiseLedger = null,
+  memoryStore = null,
+  humanSimulation = null,
+  webSearchService = null,
+  recentDecisionStore = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
       const startedAt = Date.now();
+      const replyTrace = { llmCalled: false, llmCompleted: false, repairNeeded: false, repairType: null, voiceGuardPassed: null, voiceGuardViolations: [], fallbackUsed: false, fallbackReason: null, finalSource: "llm", duplicateBlocked: false };
+      const logDecision = (type, summary, reason, extra = {}) => {
+        if (!recentDecisionStore?.logDecision) return;
+        const isAdult = extra.adultContext || false;
+        recentDecisionStore.logDecision({
+          user_scope: config.memory?.userScope || "user",
+          companion_id: config.memory?.companionId || config.companion?.id || "Dante",
+          decision_type: type,
+          decision_summary: summary,
+          reason_summary: reason,
+          inputs_used_json: extra.inputs || [],
+          source_channel_id: message.channelId || message.channel?.id || "",
+          source_thread_id: message.channel?.isThread?.() ? (message.channel?.id || "") : "",
+          source_message_id: message.id || "",
+          privacy_scope: isAdult ? "adult_private" : "normal",
+          adult_context: isAdult,
+          outcome_status: "recorded",
+        }).catch(() => {});
+      };
+      logger.info?.(`[reply-trace] start messageId=${message.id || ""} channelId=${message.channelId || ""}`);
       const fallbackModeName = config.chat?.defaultMode || "default";
       const selectedMode = mode || getMode(modeName || fallbackModeName);
       const preprocessedInput = preprocessMessage({ message, botUserId: message.client.user?.id });
@@ -314,6 +342,286 @@ function createChatPipeline({
         }
       }
 
+      // Inner Life & Aliveness Engine — additive layer. Captures mood, habits,
+      // micro-repairs, rituals, and room sense; injects a bounded private prelude
+      // section. Fully guarded; never overwrites the base prompt.
+      if (!inDevMode && innerLife) {
+        try {
+          const innerLifeResult = await innerLife.processMessage({
+            message: input.content,
+            channelContext: {
+              isDM: message.channel?.type === 1 || Boolean(message.channel?.isDMBased?.()),
+              isThread: Boolean(message.channel?.isThread?.()),
+              channelId: message.channel?.id || null,
+              channelName: message.channel?.name || "",
+            },
+            recentHistory,
+            sourceMessageId: message.id,
+            sourceChannelId: message.channel?.id || null,
+          });
+          if (innerLifeResult?.preludeSection) {
+            contextSections.push(innerLifeResult.preludeSection);
+            logger.debug?.("[chat] Inner life prelude injected", {
+              messageId: message.id,
+            });
+          }
+        } catch (error) {
+          logger.warn("[chat] Inner life processing failed; continuing without it", {
+            messageId: message.id,
+            error: error.message,
+          });
+        }
+      }
+
+
+      let rankedBeats = [];
+      let openPromises = [];
+
+      if (!inDevMode && emotionalBeatStore?.listBeats) {
+        try {
+          const allBeats = await emotionalBeatStore.listBeats({ ...beatScope, limit: 20 });
+          const messageMentionsProposal = isProposalText(input.content) || isForgotProposalText(input.content);
+          rankedBeats = allBeats
+            .filter((beat) => !beat.adult_context && (beat.must_recall_across_channels || beat.pinned || beat.importance === "critical" || beat.resolved === false))
+            .sort((a, b) => {
+              const proposalBoostA = messageMentionsProposal && a.event_type === "proposal" ? 100 : 0;
+              const proposalBoostB = messageMentionsProposal && b.event_type === "proposal" ? 100 : 0;
+              const imp = { critical: 4, high: 3, medium: 2, low: 1 };
+              return (proposalBoostB - proposalBoostA) || ((b.pinned ? 10 : 0) - (a.pinned ? 10 : 0)) || ((imp[b.importance] || 0) - (imp[a.importance] || 0));
+            })
+            .slice(0, 7);
+          const continuityPrelude = formatContinuityPrelude(rankedBeats, { channelContext: beatChannelContext });
+          if (continuityPrelude) {
+            contextSections.push(continuityPrelude);
+            await emotionalBeatStore.markRecalled?.(rankedBeats.map((beat) => beat.id).filter(Boolean));
+            logger.debug?.("[chat] Emotional continuity prelude injected", { messageId: message.id, beatCount: rankedBeats.length });
+          }
+        } catch (error) {
+          logger.warn("[chat] Emotional beat retrieval failed; continuing", { messageId: message.id, error: error.message });
+        }
+      }
+
+      if (!inDevMode && promiseLedger?.retrieveOpen) {
+        try {
+          openPromises = await promiseLedger.retrieveOpen({ ...beatScope, limit: 5, allowAdultPrivate: beatChannelContext.isAdultPrivate });
+          if (openPromises.length) {
+            contextSections.push({ label: "OPEN PROMISES", content: openPromises.map((p) => `* ${p.promise_text_summary}`).join("\n") });
+            await promiseLedger.markRecalled?.(openPromises.map((p) => p.id).filter(Boolean));
+          }
+        } catch (error) {
+          logger.warn("[chat] Promise retrieval failed; continuing", { messageId: message.id, error: error.message });
+        }
+      }
+
+      const toneDecision = !inDevMode ? resolveToneMode({
+        messageText: input.content,
+        channelContext: beatChannelContext,
+        emotionalBeats: rankedBeats,
+        openPromises,
+        settings: { allowFlirtyInNormalChannels: false, defaultMode: "neutral" },
+      }) : null;
+      if (toneDecision) { const toneText = formatTonePrelude(toneDecision); contextSections.push({ label: "TONE MODE", content: toneText.replace(/^TONE MODE:\n?/, "") }); logDecision("reply_tone_selected", `Tone: ${toneDecision.mode || "neutral"}`, toneDecision.reason || "tone resolver", { inputs: [toneDecision.mode] }); }
+      let repairResult = null;
+      if (!inDevMode) {
+        repairResult = await analyzeRepair({ messageText: input.content, emotionalBeats: rankedBeats, openPromises, durableMemories: memories, recentHistory, channelContext: beatChannelContext, userDisplayName: input.authorName || "Jenna" });
+        replyTrace.repairNeeded = Boolean(repairResult?.repairNeeded);
+        replyTrace.repairType = repairResult?.repairNeeded ? repairResult.repairType : null;
+        logger.info?.(`[reply-trace] repairNeeded=${replyTrace.repairNeeded} repairType=${replyTrace.repairType || "null"}`);
+        if (repairResult?.repairNeeded) {
+          const repairPrelude = buildRepairPrelude(repairResult, input.content);
+          if (repairPrelude) contextSections.push(repairPrelude);
+          updateSystemTruth("continuity", { relationshipRepairEngineEnabled: true, lastToneMode: "repair", lastRepairEvent: { type: repairResult.repairType, severity: repairResult.severity, evidenceCount: repairResult.retrievedEvidence.length, createdAt: new Date().toISOString() } });
+          logger.info?.(`[relationship-repair] prelude injected type=${repairResult.repairType} severity=${repairResult.severity} evidence=${repairResult.retrievedEvidence.length}`);
+          logDecision("repair_mode_triggered", `Repair: ${repairResult.repairType}`, `severity=${repairResult.severity}`, { inputs: [repairResult.repairType] });
+        }
+      }
+      if (!inDevMode) { const voiceText = buildVoiceRules(); contextSections.push({ label: "VOICE RULES", content: voiceText.replace(/^VOICE RULES:\n?/, "") }); }
+      logger.info?.(`[reply-context] continuity prelude built beats=${rankedBeats.length} promises=${openPromises.length} mode=${repairResult?.repairNeeded ? "repair" : (toneDecision?.mode || "dev")}`);
+
+      // Continuity Engine — carries open loops, future events, promises, decisions,
+      // repair threads, and boundaries as a bounded private prelude section.
+      // Additive only; never overwrites base prompt.
+      if (!inDevMode && continuity) {
+        try {
+          const continuityResult = await continuity.processMessage({
+            message: input.content,
+            channelContext: {
+              isDM: message.channel?.type === 1 || Boolean(message.channel?.isDMBased?.()),
+              isThread: Boolean(message.channel?.isThread?.()),
+              channelId: message.channel?.id || null,
+              channelName: message.channel?.name || "",
+            },
+            recentHistory,
+            sourceMessageId: message.id,
+            sourceChannelId: message.channel?.id || null,
+          });
+          if (continuityResult?.preludeSection) {
+            contextSections.push(continuityResult.preludeSection);
+            logger.debug?.("[chat] Continuity prelude injected", {
+              messageId: message.id,
+            });
+          }
+        } catch (error) {
+          logger.warn("[chat] Continuity processing failed; continuing without it", {
+            messageId: message.id,
+            error: error.message,
+          });
+        }
+      }
+
+      const adultMode = config.chat?.adultPrivateMode;
+      const adultScope = getAdultPrivateModeScope({
+        adultMode,
+        channelId: message.channelId,
+        inDevMode,
+      });
+
+      logger.info?.(`[adult-mode] scope check channel=${message.channelId || ""} configured=${adultScope.configuredChannelId || ""} active=${adultScope.active ? "true" : "false"} reason=${adultScope.reason}`, {
+        messageId: message.id,
+        channelId: message.channelId || null,
+        configuredChannelId: adultScope.configuredChannelId || null,
+        active: adultScope.active,
+        reason: adultScope.reason,
+      });
+
+      if (adultScope.reason === "missing_private_channel" || adultScope.reason === "invalid_private_channel") {
+        logger.warn?.("[adult-mode] enabled but no private channel configured; adult mode disabled", {
+          messageId: message.id,
+          channelId: message.channelId || null,
+        });
+      }
+
+      logger.debug?.("[adult-mode] scope check", {
+        channel: message.channelId,
+        configured: adultMode?.channelId || null,
+        active: adultScope.active,
+        reason: adultScope.reason,
+      });
+
+      let effectiveMode = selectedMode;
+      let adultSystemPromptPrefix = null;
+
+      if (adultScope.active) {
+        const safeword = String(adultMode.safeword || "red").trim().toLowerCase();
+        const messageText = String(input.content || "").trim().toLowerCase();
+        const safewordTriggered = safeword && messageText === safeword;
+
+        if (safewordTriggered && adultMode.aftercareEnabled && adultMode.aftercarePrompt) {
+          adultSystemPromptPrefix = String(adultMode.aftercarePrompt).trim();
+          logger.info?.("[chat] Adult private mode: safeword triggered; switching to aftercare", {
+            messageId: message.id,
+            channelId: message.channelId,
+          });
+        } else if (!safewordTriggered) {
+          const prefixParts = [];
+
+          if (adultMode.systemPrompt) {
+            prefixParts.push(String(adultMode.systemPrompt).trim());
+          }
+
+          const userPreferences = String(adultMode.userPreferences || "").trim();
+          const userWants = String(adultMode.userWants || "").trim();
+          const userNeeds = String(adultMode.userNeeds || "").trim();
+          const softLimits = String(adultMode.softLimits || "").trim();
+          const hardLimits = String(adultMode.hardLimits || "").trim();
+
+          if (userPreferences || userWants || userNeeds || softLimits || hardLimits) {
+            const profileLines = ["[User Profile for this space]"];
+
+            if (userPreferences) {
+              profileLines.push(`Preferences: ${userPreferences}`);
+            }
+
+            if (userWants) {
+              profileLines.push(`Wants: ${userWants}`);
+            }
+
+            if (userNeeds) {
+              profileLines.push(`Needs: ${userNeeds}`);
+            }
+
+            if (softLimits) {
+              profileLines.push(`Soft limits (approach with care): ${softLimits}`);
+            }
+
+            if (hardLimits) {
+              profileLines.push(`Hard limits (never cross): ${hardLimits}`);
+            }
+
+            prefixParts.push(profileLines.join("\n"));
+          }
+
+          if (prefixParts.length) {
+            adultSystemPromptPrefix = prefixParts.join("\n\n");
+          }
+
+          const adultModel = adultMode.model || config.llm?.romance?.model || null;
+
+          if (adultModel) {
+            effectiveMode = { ...selectedMode, chatModel: adultModel };
+          }
+
+          logger.info?.("[chat] Adult private mode active", {
+            messageId: message.id,
+            channelId: message.channelId,
+            modelOverride: adultModel || null,
+            modelSource: adultMode.model ? "adult_override" : adultModel ? "romance_model" : "default",
+            hasSystemPromptPrefix: Boolean(adultMode.systemPrompt),
+          });
+        }
+      }
+
+      // Human Simulation Foundation — injects channel awareness, micro-preferences,
+      // timeline anchors, and due follow-ups as bounded private prelude sections.
+      // Additive only; fully guarded; never breaks the base reply.
+      if (!inDevMode && humanSimulation) {
+        try {
+          const hsResult = await humanSimulation.processMessage({
+            message,
+            input,
+            repairResult,
+            adultScope,
+            beatType: rankedBeats[0]?.event_type || null,
+          });
+          if (hsResult?.preludeSections?.length) {
+            for (const section of hsResult.preludeSections) {
+              contextSections.push(section);
+            }
+            logger.debug?.("[chat] Human simulation preludes injected", { messageId: message.id, count: hsResult.preludeSections.length });
+          }
+        } catch (error) {
+          logger.warn("[chat] Human simulation processing failed; continuing without it", { messageId: message.id, error: error.message });
+        }
+      }
+      logger.info?.("[reply-trace] humanSimulation processed=true");
+
+      // Web Search — detect explicit search intent, run search, inject WEB SEARCH RESULTS section
+      if (webSearchService && !inDevMode) {
+        try {
+          const userText = String(input?.content || "");
+          const intent = webSearchService.detectSearchIntent(userText);
+          if (intent.shouldSearch && intent.confidence >= 0.7 && webSearchService.isEnabled()) {
+            logger.info?.(`[reply-trace] web-search intent=${intent.reason} confidence=${intent.confidence} query="${String(intent.searchQuery || "").slice(0, 50)}"`);
+            const searchResult = await webSearchService.search(intent.searchQuery, {});
+            if (!searchResult.unavailable && searchResult.results?.length) {
+              const lines = searchResult.results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`);
+              contextSections.push({ label: "WEB SEARCH RESULTS", content: lines.join("\n\n") });
+              logger.info?.(`[reply-trace] web-search results injected count=${searchResult.results.length}`);
+              logDecision("web_search_used", `Web search: ${String(intent.searchQuery || "").slice(0, 60)}`, `intent=${intent.reason}`, { inputs: [intent.searchQuery] });
+            } else if (searchResult.unavailable && searchResult.suggestedReply) {
+              logger.info?.(`[reply-trace] web-search unavailable reason=${searchResult.reason}`);
+            }
+          }
+        } catch (err) {
+          logger.warn?.("[chat] Web search failed; continuing without results", { messageId: message.id, error: err?.message });
+        }
+      }
+
+      let modelOutput;
+      try {
+        replyTrace.llmCalled = true;
+        logger.info?.(`[reply-trace] llm called=true`);
+        modelOutput = await callModel({
       const modelOutput = await callModel({
         config,
         logger,
@@ -343,6 +651,20 @@ function createChatPipeline({
           imageConversationActive: Boolean(imageConversationState?.active),
         },
       });
+        replyTrace.llmCompleted = true;
+        logger.info?.(`[reply-trace] llm completed=true length=${String(modelOutput?.text || "").length}`);
+      } catch (error) {
+        replyTrace.llmCompleted = false;
+        replyTrace.fallbackUsed = true;
+        replyTrace.fallbackReason = "llm_call_failed";
+        replyTrace.finalSource = "tiny_fallback";
+        logger.error?.("[chat] LLM call failed; using tiny fallback", { messageId: message.id, channelId: message.channelId, error: error?.message });
+        logger.info?.(`[reply-trace] llm completed=false length=0`);
+        modelOutput = { provider: "fallback", mode: effectiveMode.name, text: tinyFallbackForReason("llm_call_failed", logger, { messageId: message.id, channelId: message.channelId }) };
+        logDecision("fallback_used", "LLM call failed; tiny fallback used", error?.message || "llm_call_failed");
+      }
+
+      logger.info?.("[reply-trace] voiceGuard bypassed=true");
 
       if (shouldRefreshImageConversationFromAssistant({
         text: modelOutput.text,
