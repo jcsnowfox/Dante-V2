@@ -109,7 +109,17 @@
     "verify:recent-decisions-log": "node scripts/verify-recent-decisions-log.mjs",
     "verify:continuity-inner-life-api": "node scripts/verify-continuity-inner-life-api.mjs",
     "verify:continuity-inner-life-runtime-wiring": "node scripts/verify-continuity-inner-life-runtime-wiring.mjs",
-    "verify:continuity-inner-life-privacy": "node scripts/verify-continuity-inner-life-privacy.mjs"
+    "verify:continuity-inner-life-privacy": "node scripts/verify-continuity-inner-life-privacy.mjs",
+    "verify:conversation-followups": "node scripts/verify-conversation-followups.mjs",
+    "verify:timed-notes": "node scripts/verify-timed-notes.mjs",
+    "verify:time-sensitive-reminder-controls": "node scripts/verify-time-sensitive-reminder-controls.mjs",
+    "verify:variety-memory": "node scripts/verify-variety-memory.mjs",
+    "verify:daily-thread-tools": "node scripts/verify-daily-thread-tools.mjs",
+    "verify:review-queue-safe": "node scripts/verify-review-queue-safe.mjs",
+    "verify:notes-ui": "node scripts/verify-notes-ui.mjs",
+    "verify:context-pack-runtime-wiring": "node scripts/verify-context-pack-runtime-wiring.mjs",
+    "verify:context-pack-privacy": "node scripts/verify-context-pack-privacy.mjs",
+    "verify:context-pack-not-dead": "node scripts/verify-context-pack-not-dead.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",
