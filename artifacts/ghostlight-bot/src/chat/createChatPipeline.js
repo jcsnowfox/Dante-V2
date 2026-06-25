@@ -44,6 +44,7 @@ function createChatPipeline({
   humanSimulation = null,
   webSearchService = null,
   recentDecisionStore = null,
+  timedNotesStore = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
@@ -340,6 +341,50 @@ function createChatPipeline({
           logger.warn("[chat] Relational state processing failed; continuing without it", {
             messageId: message.id,
             error: error.message,
+          });
+        }
+      }
+
+      // Timed Notes Injection — additive layer. Injects active/upcoming time-based
+      // notes that are relevant to the current conversation. Fully guarded; never
+      // overwrites the base prompt and can never break the base reply.
+      if (timedNotesStore) {
+        try {
+          const userScope = config.memory?.userScope || "user";
+          const companionId = config.memory?.companionId || config.companion?.id || "Dante";
+          const now = new Date();
+          const activeNotes = await timedNotesStore.listNotes({
+            user_scope: userScope,
+            companion_id: companionId,
+            status: "active",
+          });
+          const upcomingNotes = await timedNotesStore.listNotes({
+            user_scope: userScope,
+            companion_id: companionId,
+            status: "upcoming",
+          });
+          const allRelevantNotes = [...(activeNotes || []), ...(upcomingNotes || [])].slice(0, 5);
+
+          if (allRelevantNotes.length > 0) {
+            const notesContent = allRelevantNotes
+              .map((note) => {
+                const status = note.ends_at && new Date(note.ends_at) < now ? "expired" : "active";
+                return `* [${status}] ${note.title}${note.content ? ": " + note.content : ""}`;
+              })
+              .join("\n");
+
+            if (notesContent) {
+              contextSections.push({ label: "TIME-SENSITIVE NOTES", content: notesContent });
+              logger.debug?.("[chat] Timed notes injected", {
+                messageId: message.id,
+                notesCount: allRelevantNotes.length,
+              });
+            }
+          }
+        } catch (error) {
+          logger.debug?.("[chat] Timed notes injection failed; continuing without it", {
+            messageId: message.id,
+            error: error?.message,
           });
         }
       }
