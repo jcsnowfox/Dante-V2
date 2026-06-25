@@ -81,11 +81,30 @@ function createChatPipeline({
   memoryStore = null,
   humanSimulation = null,
   webSearchService = null,
+  recentDecisionStore = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
       const startedAt = Date.now();
       const replyTrace = { llmCalled: false, llmCompleted: false, repairNeeded: false, repairType: null, voiceGuardPassed: null, voiceGuardViolations: [], fallbackUsed: false, fallbackReason: null, finalSource: "llm", duplicateBlocked: false };
+      const logDecision = (type, summary, reason, extra = {}) => {
+        if (!recentDecisionStore?.logDecision) return;
+        const isAdult = extra.adultContext || false;
+        recentDecisionStore.logDecision({
+          user_scope: config.memory?.userScope || "user",
+          companion_id: config.memory?.companionId || config.companion?.id || "Dante",
+          decision_type: type,
+          decision_summary: summary,
+          reason_summary: reason,
+          inputs_used_json: extra.inputs || [],
+          source_channel_id: message.channelId || message.channel?.id || "",
+          source_thread_id: message.channel?.isThread?.() ? (message.channel?.id || "") : "",
+          source_message_id: message.id || "",
+          privacy_scope: isAdult ? "adult_private" : "normal",
+          adult_context: isAdult,
+          outcome_status: "recorded",
+        }).catch(() => {});
+      };
       logger.info?.(`[reply-trace] start messageId=${message.id || ""} channelId=${message.channelId || ""}`);
       const fallbackModeName = config.chat?.defaultMode || "default";
       const selectedMode = mode || getMode(modeName || fallbackModeName);
@@ -447,7 +466,7 @@ function createChatPipeline({
         openPromises,
         settings: { allowFlirtyInNormalChannels: false, defaultMode: "neutral" },
       }) : null;
-      if (toneDecision) { const toneText = formatTonePrelude(toneDecision); contextSections.push({ label: "TONE MODE", content: toneText.replace(/^TONE MODE:\n?/, "") }); }
+      if (toneDecision) { const toneText = formatTonePrelude(toneDecision); contextSections.push({ label: "TONE MODE", content: toneText.replace(/^TONE MODE:\n?/, "") }); logDecision("reply_tone_selected", `Tone: ${toneDecision.mode || "neutral"}`, toneDecision.reason || "tone resolver", { inputs: [toneDecision.mode] }); }
       let repairResult = null;
       if (!inDevMode) {
         repairResult = await analyzeRepair({ messageText: input.content, emotionalBeats: rankedBeats, openPromises, durableMemories: memories, recentHistory, channelContext: beatChannelContext, userDisplayName: input.authorName || "Jenna" });
@@ -459,6 +478,7 @@ function createChatPipeline({
           if (repairPrelude) contextSections.push(repairPrelude);
           updateSystemTruth("continuity", { relationshipRepairEngineEnabled: true, lastToneMode: "repair", lastRepairEvent: { type: repairResult.repairType, severity: repairResult.severity, evidenceCount: repairResult.retrievedEvidence.length, createdAt: new Date().toISOString() } });
           logger.info?.(`[relationship-repair] prelude injected type=${repairResult.repairType} severity=${repairResult.severity} evidence=${repairResult.retrievedEvidence.length}`);
+          logDecision("repair_mode_triggered", `Repair: ${repairResult.repairType}`, `severity=${repairResult.severity}`, { inputs: [repairResult.repairType] });
         }
       }
       if (!inDevMode) { const voiceText = buildVoiceRules(); contextSections.push({ label: "VOICE RULES", content: voiceText.replace(/^VOICE RULES:\n?/, "") }); }
@@ -633,6 +653,7 @@ function createChatPipeline({
               const lines = searchResult.results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`);
               contextSections.push({ label: "WEB SEARCH RESULTS", content: lines.join("\n\n") });
               logger.info?.(`[reply-trace] web-search results injected count=${searchResult.results.length}`);
+              logDecision("web_search_used", `Web search: ${String(intent.searchQuery || "").slice(0, 60)}`, `intent=${intent.reason}`, { inputs: [intent.searchQuery] });
             } else if (searchResult.unavailable && searchResult.suggestedReply) {
               logger.info?.(`[reply-trace] web-search unavailable reason=${searchResult.reason}`);
             }
@@ -688,6 +709,7 @@ function createChatPipeline({
         logger.error?.("[chat] LLM call failed; using tiny fallback", { messageId: message.id, channelId: message.channelId, error: error?.message });
         logger.info?.(`[reply-trace] llm completed=false length=0`);
         modelOutput = { provider: "fallback", mode: effectiveMode.name, text: tinyFallbackForReason("llm_call_failed", logger, { messageId: message.id, channelId: message.channelId }) };
+        logDecision("fallback_used", "LLM call failed; tiny fallback used", error?.message || "llm_call_failed");
       }
 
       logger.info?.("[reply-trace] voiceGuard bypassed=true");

@@ -33,8 +33,7 @@ const {
 const { handleFeedbackLearningPageRequest } = require("./adminPageHandlers/feedbackLearningPageHandler");
 const { handleRelationalStatePageRequest } = require("./adminPageHandlers/relationalStatePageHandler");
 const { handleSecondLifePageRequest } = require("./adminPageHandlers/secondLifePageHandler");
-const { handleInnerLifePageRequest } = require("./adminPageHandlers/innerLifePageHandler");
-const { handleContinuityPageRequest } = require("./adminPageHandlers/continuityPageHandler");
+const { handleContinuityInnerLifePageRequest } = require("./adminPageHandlers/continuityInnerLifePageHandler");
 const { handleGameAdminPageRequest } = require("../games/http/gameAdminPageHandler");
 const { handleNorwegianLearningPageRequest } = require("./adminPageHandlers/norwegianLearningPageHandler");
 const { handleNorwegianDashboardRequest } = require("./adminPageHandlers/norwegianDashboardHandler");
@@ -364,13 +363,8 @@ async function handleAdminPageRequest({
     return;
   }
 
-  if (route.section === "innerLife") {
-    await handleInnerLifePageRequest({ url, route, innerRes, innerContext, helpers, theme, themeLinks });
-    return;
-  }
-
-  if (route.section === "continuity") {
-    await handleContinuityPageRequest({ url, route, innerRes, innerContext, helpers, theme, themeLinks });
+  if (route.section === "innerLife" || route.section === "continuity") {
+    await handleContinuityInnerLifePageRequest({ url, route, innerRes, innerContext, helpers, theme, themeLinks });
     return;
   }
 

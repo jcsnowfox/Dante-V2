@@ -385,6 +385,13 @@ function createHealthServer({
         })(req, res, context);
       }
 
+      if (req.method === "GET" && (url.pathname === "/admin/inner-life" || url.pathname.startsWith("/admin/inner-life/"))) {
+        const redirectPath = url.pathname.replace(/^\/admin\/inner-life/, "/admin/continuity");
+        res.writeHead(302, { Location: redirectPath + (url.search || "") });
+        res.end();
+        return;
+      }
+
       if (req.method === "GET" && (
         url.pathname === "/admin" ||
         url.pathname === "/admin/home" ||
