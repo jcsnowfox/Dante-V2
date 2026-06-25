@@ -8,7 +8,6 @@ const { deleteMemoryEverywhere } = require("../memory/deleteMemories");
 const { syncMemoriesToQdrant, syncMemoryToQdrant } = require("../memory/syncMemories");
 const { deleteCollection, deletePoints } = require("../memory/qdrantClient");
 const { applyRuntimeSettings } = require("../config/runtimeSettings");
-const { downloadBufferFromBucket } = require("../images/bucketStorage");
 const {
   SUPPORTED_HEARTBEAT_EXECUTOR_TYPES,
   SUPPORTED_HEARTBEAT_FREQUENCIES,
@@ -29,16 +28,10 @@ const { handleHeartbeatActions } = require("./actions/heartbeatActions");
 const { handleChannelModeActions } = require("./actions/channelModeActions");
 const { handleEmotionalArcActions } = require("./actions/emotionalArcActions");
 const { handleFeedbackLearningActions } = require("./actions/feedbackLearningActions");
-const { handleNorwegianActions } = require("./actions/norwegianActions");
 const { handleRelationalStateActions } = require("./actions/relationalStateActions");
-const { handleInnerLifeActions } = require("./actions/innerLifeActions");
-const { handleContinuityActions } = require("./actions/continuityActions");
 const { handleCompanionAvatarActions } = require("./actions/companionAvatarActions");
-const { handleGameActions } = require("./actions/gameActions");
 const { handleAdminMaintenanceActions } = require("./actions/adminMaintenanceActions");
 const { handleAdminExportActions } = require("./actions/adminExportActions");
-const { handleSecondLifeApiRequest } = require("./secondLifeApi");
-const { handleSecondLifeActions } = require("./actions/secondLifeActions");
 const {
   buildMemoryExportPayload,
   buildMemoryImportRecords,
@@ -61,12 +54,7 @@ const {
   isAuthorized,
   sendAuthRequired,
   redirect,
-  validateAdminCredentials,
-  issueSessionCookie,
-  clearSessionCookie,
-  prefersHtml,
 } = require("./adminRequestUtils");
-const { renderLoginPage, sanitizeNext } = require("./renderAdminPages/loginPage");
 const {
   normalizeTheme,
   buildThemeLinks,
@@ -97,7 +85,7 @@ const ASSET_CONTENT_TYPES = Object.freeze({
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
 });
-const THEME_COOKIE_NAME = "ghostlight_theme";
+const THEME_COOKIE_NAME = "cadence_theme";
 
 function parseCookieHeader(headerValue) {
   const cookies = {};
@@ -199,13 +187,6 @@ function withAdmin(handler) {
     }
 
     if (!isAuthorized(req, context.config.admin || {})) {
-      // Browser navigations get the cinematic login page; API/tooling keeps Basic Auth.
-      if (prefersHtml(req)) {
-        const requestUrl = new URL(req.url, "http://localhost");
-        const next = sanitizeNext(requestUrl.pathname + requestUrl.search);
-        redirect(res, `/admin/login?next=${encodeURIComponent(next)}`);
-        return;
-      }
       sendAuthRequired(res);
       return;
     }
@@ -273,47 +254,21 @@ function createHealthServer({
         return;
       }
 
-      if (url.pathname === "/admin/login") {
-        const adminConfig = context.config.admin || {};
-        const hasCreds = Boolean(
-          (String(adminConfig.username || "").trim() && String(adminConfig.password || ""))
-          || String(adminConfig.secret || "").trim(),
-        );
+      if (req.method === "GET" && url.pathname === "/diagnostics") {
+        const { buildContextDiagnostics, formatDiagnosticsAsJson, formatDiagnosticsAsHtml } = require("../context/diagnostics");
+        const format = url.searchParams.get("format") || "html";
+        const diagnostics = buildContextDiagnostics({
+          config: context.config,
+          logger: context.logger,
+        });
 
-        if (req.method === "GET") {
-          if (hasCreds && isAuthorized(req, adminConfig)) {
-            redirect(res, sanitizeNext(url.searchParams.get("next")));
-            return;
-          }
-          const error = hasCreds ? getError(url) : "Admin credentials are not configured on the server yet.";
+        if (format === "json") {
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(formatDiagnosticsAsJson(diagnostics));
+        } else {
           res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-          res.end(renderLoginPage({ error, next: url.searchParams.get("next") || "/admin" }));
-          return;
+          res.end(formatDiagnosticsAsHtml(diagnostics));
         }
-
-        if (req.method === "POST") {
-          const { fields } = await parseRequestForm(req);
-          const next = sanitizeNext(fields.next);
-
-          if (hasCreds && validateAdminCredentials(adminConfig, fields.username, fields.password)) {
-            issueSessionCookie(res, adminConfig);
-            redirect(res, next);
-            return;
-          }
-
-          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-          res.end(renderLoginPage({
-            error: hasCreds ? "Incorrect username or password." : "Admin credentials are not configured on the server yet.",
-            next,
-            username: typeof fields.username === "string" ? fields.username : "",
-          }));
-          return;
-        }
-      }
-
-      if (req.method === "GET" && url.pathname === "/admin/logout") {
-        clearSessionCookie(res);
-        redirect(res, "/admin/login");
         return;
       }
 
@@ -400,7 +355,6 @@ function createHealthServer({
         url.pathname === "/admin/emotional-arc" ||
         url.pathname === "/admin/feedback-learning" ||
         url.pathname === "/admin/relational-state" ||
-        url.pathname === "/admin/second-life" ||
         url.pathname === "/admin/gallery" ||
         url.pathname === "/admin/gallery/images" ||
         url.pathname.startsWith("/admin/gallery/images/detail/") ||
@@ -432,13 +386,7 @@ function createHealthServer({
         url.pathname === "/admin/memory/review" ||
         url.pathname === "/admin/memory/curator" ||
         url.pathname === "/admin/heartbeat" ||
-        url.pathname.startsWith("/admin/heartbeat/") ||
-        url.pathname === "/admin/inner-life" ||
-        url.pathname.startsWith("/admin/inner-life/") ||
-        url.pathname === "/admin/continuity" ||
-        url.pathname.startsWith("/admin/continuity/") ||
-        url.pathname === "/admin/games" ||
-        url.pathname === "/admin/norwegian"
+        url.pathname.startsWith("/admin/heartbeat/")
       )) {
         return withAdmin(async (_req, innerRes, innerContext) => {
           setThemeCookie(innerRes, resolvedTheme);
@@ -599,33 +547,7 @@ function createHealthServer({
       }
 
       {
-        const handled = await handleNorwegianActions({
-          req,
-          res,
-          url,
-          context,
-          withAdmin,
-        });
-        if (handled !== false) {
-          return handled;
-        }
-      }
-
-      {
         const handled = await handleRelationalStateActions({
-          req,
-          res,
-          url,
-          context,
-          withAdmin,
-        });
-        if (handled !== false) {
-          return handled;
-        }
-      }
-
-      {
-        const handled = await handleSecondLifeActions({
           req,
           res,
           url,
@@ -651,45 +573,6 @@ function createHealthServer({
       }
 
       {
-        const handled = await handleInnerLifeActions({
-          req,
-          res,
-          url,
-          context,
-          withAdmin,
-        });
-        if (handled !== false) {
-          return handled;
-        }
-      }
-
-      {
-        const handled = await handleContinuityActions({
-          req,
-          res,
-          url,
-          context,
-          withAdmin,
-        });
-        if (handled !== false) {
-          return handled;
-        }
-      }
-
-      {
-        const handled = await handleGameActions({
-          req,
-          res,
-          url,
-          context,
-          withAdmin,
-        });
-        if (handled !== false) {
-          return handled;
-        }
-      }
-
-      {
         const handled = await handleAdminMaintenanceActions({
           req,
           res,
@@ -698,15 +581,6 @@ function createHealthServer({
           withAdmin,
           buildAppStateImportRecords,
         });
-        if (handled !== false) {
-          return handled;
-        }
-      }
-
-      {
-        // Machine-to-machine Second Life bridge API — guarded by the shared
-        // secret, not admin basic-auth. Must run before the 404 fall-through.
-        const handled = await handleSecondLifeApiRequest({ req, res, url, context });
         if (handled !== false) {
           return handled;
         }

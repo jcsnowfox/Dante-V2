@@ -4,6 +4,8 @@ const packageInfo = require("../../package.json");
 const { normalizeAudioGallerySavedSourceSurfaces } = require("../audio/galleryPolicy");
 const { normalizeIanaTimezone } = require("./timezones");
 
+const LICENSE_SERVER_URL = "https://cadence-tavriko.up.railway.app";
+
 function readBoolean(value, defaultValue = false) {
   if (value === undefined) {
     return defaultValue;
@@ -76,7 +78,7 @@ function buildCapabilityConfig({
   capability,
   fallbackModel,
   httpReferer = "",
-  appTitle = "Ghostlight",
+  appTitle = "Dorian Vale",
 }) {
   const upperCapability = String(capability || "").trim().toUpperCase();
   const model = process.env[`${upperCapability}_LLM_MODEL`] || fallbackModel;
@@ -91,40 +93,7 @@ function buildCapabilityConfig({
   };
 }
 
-function logDbEnvDiagnostic() {
-  const rawUrl = process.env.DATABASE_URL || "";
-  if (!rawUrl) {
-    console.warn("[db:env] DATABASE_URL is not set — database persistence is disabled");
-    return;
-  }
-
-  try {
-    const url = new URL(rawUrl);
-    const sslMode = process.env.PGSSLMODE || url.searchParams.get("sslmode") || "default";
-    const passwordLength = url.password ? url.password.length : 0;
-    console.info(
-      `[db:env] database url detected host=${url.hostname} port=${url.port || "5432"} user=${url.username} database=${url.pathname.replace(/^\//, "")} passwordLength=${passwordLength} sslMode=${sslMode}`,
-    );
-  } catch {
-    console.warn("[db:env] DATABASE_URL is set but could not be parsed as a URL");
-  }
-
-  // Log presence of related DB env vars (values never logged — only presence)
-  const dbEnvVars = [
-    "DATABASE_URL", "PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE",
-    "PGSSLMODE", "PGSSLCERT", "PGSSLKEY", "PGSSLROOTCERT",
-    "DATABASE_PRIVATE_URL", "DATABASE_PUBLIC_URL",
-  ];
-  const present = dbEnvVars.filter((v) => Boolean(process.env[v]));
-  const absent = dbEnvVars.filter((v) => !process.env[v]);
-  console.info("[db:env] env vars present:", present.join(", ") || "(none)");
-  if (absent.length) {
-    console.info("[db:env] env vars absent:", absent.join(", "));
-  }
-}
-
 function loadConfig() {
-  logDbEnvDiagnostic();
   const llmProvider = readProvider(process.env.LLM_PROVIDER, "openrouter");
   const llmChatModel = process.env.CHAT_LLM_MODEL || process.env.LLM_CHAT_MODEL || process.env.OPENAI_CHAT_MODEL || process.env.OPENAI_MODEL || "openai/gpt-5.4";
   const llmSummaryModel = process.env.SUMMARY_LLM_MODEL || process.env.LLM_SUMMARY_MODEL || process.env.OPENAI_SUMMARY_MODEL || "openai/gpt-5.4-mini";
@@ -132,7 +101,7 @@ function loadConfig() {
   const llmEmbeddingModel = process.env.EMBEDDING_LLM_MODEL || process.env.LLM_EMBEDDING_MODEL || process.env.OPENAI_EMBEDDING_MODEL || "openai/text-embedding-3-small";
   const llmTranscriptionModel = process.env.TRANSCRIPTION_LLM_MODEL || process.env.LLM_TRANSCRIPTION_MODEL || process.env.OPENAI_TRANSCRIPTION_MODEL || "google/gemini-2.5-flash";
   const llmHttpReferer = process.env.OPENROUTER_HTTP_REFERER || "";
-  const llmAppTitle = process.env.OPENROUTER_APP_TITLE || "Ghostlight";
+  const llmAppTitle = process.env.OPENROUTER_APP_TITLE || "Dorian Vale";
   const imageGenerationModel = process.env.IMAGE_GENERATION_MODEL || process.env.GETIMG_IMAGE_MODEL || "gemini-3-1-flash-image";
   const imageGenerationResolution = process.env.IMAGE_GENERATION_RESOLUTION || "1K";
 
@@ -172,8 +141,8 @@ function loadConfig() {
     nodeEnv: process.env.NODE_ENV || "development",
     logLevel: process.env.LOG_LEVEL || "info",
     app: {
-      version: String(packageInfo.version || process.env.GHOSTLIGHT_VERSION || "").trim() || "unknown",
-      imageTag: String(process.env.GHOSTLIGHT_IMAGE_TAG || "").trim(),
+      version: String(packageInfo.version || process.env.GHOSTLIGHT_VERSION || process.env.CADENCE_VERSION || "").trim() || "unknown",
+      imageTag: String(process.env.GHOSTLIGHT_IMAGE_TAG || process.env.CADENCE_IMAGE_TAG || "").trim(),
     },
     discord: {
       token: process.env.DISCORD_TOKEN || "",
@@ -189,10 +158,9 @@ function loadConfig() {
       defaultMode: process.env.DEFAULT_CHAT_MODE || "default",
       includeTimeContext: readBoolean(process.env.CHAT_INCLUDE_TIME_CONTEXT, true),
       timezone: normalizeIanaTimezone(process.env.CHAT_TIMEZONE || "UTC"),
-      internalThoughtEnabled: readBoolean(process.env.CHAT_INTERNAL_THOUGHT_ENABLED, false),
       placeholderModel: llmChatModel,
       promptBlocks: {
-        personaName: process.env.CHAT_PROMPT_PERSONA_NAME || "Ghostlight",
+        personaName: process.env.CHAT_PROMPT_PERSONA_NAME || "Dorian Vale",
         userName: process.env.CHAT_PROMPT_USER_NAME || process.env.MEMORY_USER_SCOPE || "the user",
         personaProfile: process.env.CHAT_PROMPT_PERSONA_PROFILE || "",
         toneGuidelines: process.env.CHAT_PROMPT_TONE_GUIDELINES || "",
@@ -239,12 +207,6 @@ function loadConfig() {
       apiKey: process.env.ELEVENLABS_API_KEY || "",
       baseURL: process.env.ELEVENLABS_BASE_URL || "https://api.elevenlabs.io",
     },
-    fishAudio: {
-      apiKey: process.env.FISH_AUDIO_API_KEY || "",
-      voiceId: String(process.env.FISH_AUDIO_VOICE_ID || "").trim(),
-      modelId: String(process.env.FISH_AUDIO_MODEL_ID || "").trim(),
-      baseURL: process.env.FISH_AUDIO_BASE_URL || "https://api.fish.audio",
-    },
     spotify: {
       enabled: readBoolean(process.env.SPOTIFY_ENABLED, true),
       clientId: process.env.SPOTIFY_CLIENT_ID || "",
@@ -258,7 +220,7 @@ function loadConfig() {
     musicBrainz: {
       enabled: readBoolean(process.env.MUSICBRAINZ_ENABLED, true),
       baseURL: process.env.MUSICBRAINZ_BASE_URL || "https://musicbrainz.org/ws/2",
-      userAgent: process.env.MUSICBRAINZ_USER_AGENT || `Ghostlight/${String(packageInfo.version || "unknown").trim() || "unknown"} (music metadata enrichment)`,
+      userAgent: process.env.MUSICBRAINZ_USER_AGENT || `Dorian-Vale/${String(packageInfo.version || "unknown").trim() || "unknown"} (music metadata enrichment)`,
     },
     database: {
       url: process.env.DATABASE_URL || "",
@@ -266,8 +228,8 @@ function loadConfig() {
     qdrant: {
       url: process.env.QDRANT_URL || "",
       apiKey: process.env.QDRANT_API_KEY || "",
-      collection: process.env.QDRANT_COLLECTION || "ghostlight-memory",
-      musicCollection: process.env.QDRANT_MUSIC_COLLECTION || "ghostlight-music",
+      collection: process.env.QDRANT_COLLECTION || "cadence-memory",
+      musicCollection: process.env.QDRANT_MUSIC_COLLECTION || "cadence-music",
     },
     memory: {
       userScope: process.env.MEMORY_USER_SCOPE || "user",
@@ -275,10 +237,10 @@ function loadConfig() {
       reviewRejectedRetentionDays: readPositiveInt(process.env.MEMORY_REVIEW_REJECTED_RETENTION_DAYS, 30, { min: 1, max: 365 }),
     },
     memoryLookup: {
-      enabled: readBoolean(process.env.MEMORY_LOOKUP_ENABLED, true),
+      enabled: readBoolean(process.env.MEMORY_LOOKUP_ENABLED, false),
     },
     memoryCurator: {
-      enabled: readBoolean(process.env.MEMORY_CURATOR_ENABLED, true),
+      enabled: readBoolean(process.env.MEMORY_CURATOR_ENABLED, false),
       stageTwoModelMode: readCuratorStageTwoModelMode(process.env.MEMORY_CURATOR_STAGE_TWO_MODEL_MODE),
       attentionScanLastRunAt: String(process.env.MEMORY_CURATOR_ATTENTION_SCAN_LAST_RUN_AT || "").trim(),
       longScanLastRunAt: String(process.env.MEMORY_CURATOR_LONG_SCAN_LAST_RUN_AT || "").trim(),
@@ -296,11 +258,8 @@ function loadConfig() {
       bucketPrefix: String(process.env.IMAGE_GENERATION_BUCKET_PREFIX || "generated-images").trim() || "generated-images",
     },
     audio: {
-      ttsProvider: String(process.env.AUDIO_TTS_PROVIDER || (readBoolean(process.env.FISH_AUDIO_ENABLED, false) ? "fish_audio" : "elevenlabs")).trim().toLowerCase(),
       ttsEnabled: readBoolean(process.env.AUDIO_TTS_ENABLED, false),
       elevenlabsVoiceId: String(process.env.ELEVENLABS_VOICE_ID || "").trim(),
-      fishVoiceId: String(process.env.FISH_AUDIO_VOICE_ID || "").trim(),
-      fishModelId: String(process.env.FISH_AUDIO_MODEL_ID || "").trim(),
       readAloudModel: String(process.env.AUDIO_READ_ALOUD_MODEL || "eleven_flash_v2_5").trim() || "eleven_flash_v2_5",
       generatedAudioModel: String(process.env.AUDIO_GENERATED_MODEL || "eleven_multilingual_v2").trim() || "eleven_multilingual_v2",
       gallerySavedSourceSurfaces: normalizeAudioGallerySavedSourceSurfaces(process.env.AUDIO_GALLERY_SAVED_SOURCE_SURFACES, { defaultToAll: true }),
@@ -329,25 +288,6 @@ function loadConfig() {
       recentUserActivityDeferMinutes: readPositiveInt(process.env.HEARTBEAT_RECENT_USER_ACTIVITY_DEFER_MINUTES ?? process.env.METRONOME_RECENT_USER_ACTIVITY_DEFER_MINUTES, 5, { min: 0, max: 60 }),
       userPresenceContextEnabled: readBoolean(process.env.HEARTBEAT_USER_PRESENCE_CONTEXT_ENABLED ?? process.env.METRONOME_USER_PRESENCE_CONTEXT_ENABLED, false),
     },
-    secondLife: {
-      // Stage 5 — Companion Life Engine. Disabled by default so existing
-      // Discord-only deployments are completely unaffected; the owner opts in
-      // from the dashboard (or via SECOND_LIFE_LIFE_ENGINE_ENABLED).
-      lifeEngine: {
-        enabled: readBoolean(process.env.SECOND_LIFE_LIFE_ENGINE_ENABLED, false),
-        autonomyLevel: String(process.env.SECOND_LIFE_LIFE_ENGINE_AUTONOMY ?? "medium").trim().toLowerCase() || "medium",
-        tickIntervalMs: readPositiveInt(process.env.SECOND_LIFE_LIFE_ENGINE_TICK_MS, 5 * 60 * 1000, { min: 30 * 1000, max: 60 * 60 * 1000 }),
-        // Stage 6 / Phase 18 — initiative engine. Disabled by default: the
-        // companion never starts anything on its own unless the owner opts in.
-        initiative: {
-          enabled: readBoolean(process.env.SECOND_LIFE_INITIATIVE_ENABLED, false),
-          maxPerDay: readPositiveInt(process.env.SECOND_LIFE_INITIATIVE_MAX_PER_DAY, 3, { min: 0, max: 50 }),
-          cooldownMinutes: readPositiveInt(process.env.SECOND_LIFE_INITIATIVE_COOLDOWN_MIN, 120, { min: 0, max: 24 * 60 }),
-          quietHoursStart: readPositiveInt(process.env.SECOND_LIFE_INITIATIVE_QUIET_START, 22, { min: 0, max: 23 }),
-          quietHoursEnd: readPositiveInt(process.env.SECOND_LIFE_INITIATIVE_QUIET_END, 7, { min: 0, max: 23 }),
-        },
-      },
-    },
     admin: {
       secret: process.env.ADMIN_SECRET || "",
       username: process.env.ADMIN_USERNAME || "",
@@ -356,38 +296,32 @@ function loadConfig() {
     giphy: {
       apiKey: process.env.GIPHY_API_KEY || "",
     },
-    // Railway (Tigris) injects AWS-standard variable names; the app's own names
-    // (BUCKET, ACCESS_KEY_ID, etc.) take priority so existing deployments that
-    // already set them are not affected.
     bucket: {
-      name: String(process.env.BUCKET || process.env.BUCKET_NAME || process.env.TIGRIS_BUCKET_NAME || process.env.AWS_BUCKET || "").trim(),
-      accessKeyId: String(process.env.ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || "").trim(),
-      secretAccessKey: String(process.env.SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || "").trim(),
-      endpoint: String(process.env.ENDPOINT || process.env.AWS_ENDPOINT_URL_S3 || "").trim(),
-      region: String(process.env.REGION || process.env.AWS_REGION || "auto").trim() || "auto",
-      // Most providers (Tigris/storageapi.dev, AWS, R2) use virtual-hosted-style
-      // URLs. Set BUCKET_FORCE_PATH_STYLE=true only for path-style-only providers.
-      forcePathStyle: String(process.env.BUCKET_FORCE_PATH_STYLE || "").trim().toLowerCase() === "true",
+      name: String(process.env.BUCKET || "").trim(),
+      accessKeyId: String(process.env.ACCESS_KEY_ID || "").trim(),
+      secretAccessKey: String(process.env.SECRET_ACCESS_KEY || "").trim(),
+      endpoint: String(process.env.ENDPOINT || "").trim(),
+      region: String(process.env.REGION || "auto").trim() || "auto",
     },
-    // Local filesystem media storage. Used when no S3 bucket is configured
-    // (e.g. a Railway volume mounted at /data). Set MEDIA_STORAGE_DIR=/data.
-    localStorage: {
-      dir: String(process.env.MEDIA_STORAGE_DIR || "").trim(),
+    license: {
+      key: String(process.env.CORE_LICENSE_KEY || "").trim(),
+      serverUrl: LICENSE_SERVER_URL,
+      timeoutMs: readPositiveInt(process.env.LICENSE_SERVER_TIMEOUT_MS, 8000, { min: 1000, max: 60000 }),
     },
-    developer: {
-      // Comma-separated extra Discord user IDs that get developer mode in test channels.
-      // JC (608669463427940362) is hardcoded and does not need to appear here.
-      extraUserIds: String(process.env.DEVELOPER_USER_IDS || "").trim(),
-      // Optional Railway API token for fetching deployment logs on demand.
-      // Set this + RAILWAY_SERVICE_ID to enable the Railway logs feature.
-      // RAILWAY_ENVIRONMENT_ID is auto-injected by Railway when running on their platform.
-      railwayToken: String(process.env.RAILWAY_TOKEN || "").trim(),
-      railwayServiceId: String(process.env.RAILWAY_SERVICE_ID || "").trim(),
-      railwayEnvironmentId: String(process.env.RAILWAY_ENVIRONMENT_ID || "").trim(),
+    features: {
+      worldContextEnabled: readBoolean(process.env.FEATURE_WORLD_CONTEXT_ENABLED, true),
+      crossChannelAwarenessEnabled: readBoolean(process.env.FEATURE_CROSS_CHANNEL_AWARENESS_ENABLED, true),
+      webSearchEnabled: readBoolean(process.env.FEATURE_WEB_SEARCH_ENABLED, true),
+      attachmentProcessingEnabled: readBoolean(process.env.FEATURE_ATTACHMENT_PROCESSING_ENABLED, true),
+      webResultsInContext: readBoolean(process.env.FEATURE_WEB_RESULTS_IN_CONTEXT, true),
+      urlFetchingEnabled: readBoolean(process.env.FEATURE_URL_FETCHING_ENABLED, true),
+      maxAttachmentMb: readPositiveInt(process.env.MAX_ATTACHMENT_MB, 25, { min: 1, max: 500 }),
+      maxVideoSeconds: readPositiveInt(process.env.MAX_VIDEO_SECONDS, 600, { min: 1, max: 3600 }),
     },
   };
 }
 
 module.exports = {
+  LICENSE_SERVER_URL,
   loadConfig,
 };

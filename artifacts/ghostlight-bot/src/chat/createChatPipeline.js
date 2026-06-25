@@ -1,4 +1,3 @@
-const { isDevMode, DEV_SYSTEM_PROMPT } = require("../developer/devUtils");
 const { preprocessMessage } = require("./pipeline/preprocessMessage");
 const { enrichInput } = require("./pipeline/enrichInput");
 const { loadScopedRecentHistory } = require("./pipeline/loadRecentHistory");
@@ -10,7 +9,7 @@ const {
   listPresetsSafe,
   buildImagePresetContextSection,
 } = require("../images/presetContext");
-const { buildMainUserPresenceContextSection, buildMainUserSpeakerIdentitySection } = require("../bot/mainUserPresence");
+const { buildMainUserPresenceContextSection } = require("../bot/mainUserPresence");
 const {
   shouldSeedImageConversationFromUserText,
   shouldRefreshImageConversationFromAssistant,
@@ -18,47 +17,9 @@ const {
   markImageConversationActive,
   buildImageConversationContextSection,
 } = require("./imageConversationState");
-const { classifyEmotionalBeat, formatContinuityPrelude, isProposalText, isForgotProposalText } = require("../continuity/emotionalBeats");
-const { detectPromise } = require("../continuity/promiseLedger");
-const { resolveToneMode, formatTonePrelude } = require("../continuity/toneModeResolver");
-const { buildVoiceRules } = require("../continuity/voiceFingerprintGuard");
-const { tinyFallbackForReason, checkDuplicateReply, rememberReply } = require("../continuity/replyFallbacks");
-const { analyzeRepair, buildRepairPrelude, saveRepairBeat } = require("../relationshipRepair/engine");
-const { updateSystemTruth } = require("../systemTruth/runtimeState");
-const { curateRuntimeMemory } = require("../memory/runtimeCurator");
-
-function normalizeAdultPrivateChannelId(channelId) {
-  const value = String(channelId || "").trim();
-  return /^\d{17,20}$/.test(value) ? value : null;
-}
-
-function getAdultPrivateModeScope({ adultMode, channelId, inDevMode = false }) {
-  const rawConfiguredChannelId = String(adultMode?.channelId || "").trim();
-  const configuredChannelId = normalizeAdultPrivateChannelId(rawConfiguredChannelId);
-
-  if (inDevMode) {
-    return { active: false, configuredChannelId, reason: "dev_mode" };
-  }
-
-  if (!adultMode?.enabled) {
-    return { active: false, configuredChannelId, reason: "disabled" };
-  }
-
-  if (!rawConfiguredChannelId) {
-    return { active: false, configuredChannelId: "", reason: "missing_private_channel" };
-  }
-
-  if (!configuredChannelId) {
-    return { active: false, configuredChannelId: "", reason: "invalid_private_channel" };
-  }
-
-  const currentChannelId = String(channelId || "").trim();
-  if (currentChannelId !== configuredChannelId) {
-    return { active: false, configuredChannelId, reason: "channel_mismatch" };
-  }
-
-  return { active: true, configuredChannelId, reason: "channel_match" };
-}
+const { buildModelContext } = require("../context/modelContextBuilder");
+const { detectURLsInText, shouldFetchURL, fetchAndAnalyzeURL } = require("../context/urlHandler");
+const { buildAttachmentUnderstanding } = require("../context/attachmentUnderstanding");
 
 function createChatPipeline({
   config,
@@ -125,18 +86,6 @@ function createChatPipeline({
         return null;
       }
 
-      // Developer mode: JC (or DEVELOPER_USER_IDS) in a test channel.
-      // In dev mode the persona/roleplay system prompt is replaced with a plain
-      // technical prompt, and all companion engine preludes are skipped.
-      const inDevMode = isDevMode(message);
-      if (inDevMode) {
-        logger.info?.("[dev] Developer mode active — skipping persona prompt and engine preludes", {
-          messageId: message.id,
-          authorId: message.author.id,
-          channelId: message.channelId,
-        });
-      }
-
       logger.debug("[chat] Preprocessed input", {
         messageId: message.id,
         channelId: message.channelId,
@@ -183,60 +132,6 @@ function createChatPipeline({
 
       let memories = [];
 
-      const beatScope = {
-        user_scope: config.memory?.userScope || input.authorId || "user",
-        companion_id: config.memory?.companionId || config.companion?.id || "Dante",
-      };
-      const beatChannelContext = {
-        isDM: message.channel?.type === 1 || Boolean(message.channel?.isDMBased?.()),
-        isThread: Boolean(message.channel?.isThread?.()),
-        channelId: message.channel?.id || message.channelId || null,
-        isAdultPrivate: false,
-        modeName: selectedMode.name,
-      };
-      const saveBeat = async (beat, role) => {
-        if (!beat || !emotionalBeatStore?.upsertBeat) return null;
-        return emotionalBeatStore.upsertBeat({
-          ...beatScope,
-          event_type: beat.event_type,
-          title: beat.title,
-          summary: beat.summary,
-          emotional_weight: beat.emotional_weight,
-          importance: beat.importance,
-          source_channel_id: message.channelId || message.channel?.id || "",
-          source_message_id: role === "user" ? message.id : `${message.id}:assistant`,
-          privacy_scope: beat.privacy_scope,
-          adult_context: beat.adult_context,
-          must_recall_across_channels: beat.must_recall_across_channels,
-          tags_json: beat.tags,
-          pinned: beat.pinned,
-          resolved: false,
-        });
-      };
-      await curateRuntimeMemory({ text: input.content, role: "user", memoryStore, config, logger, source: { authorId: input.authorId, channelId: message.channelId || message.channel?.id, messageId: message.id } });
-
-      try {
-        const userBeat = classifyEmotionalBeat({
-          text: input.content,
-          role: "user",
-          companionId: beatScope.companion_id,
-          userDisplayName: input.authorName || "Jenna",
-          channelContext: beatChannelContext,
-        });
-        if (userBeat) await saveBeat(userBeat, "user");
-      } catch (error) {
-        logger.warn("[chat] Emotional beat curation failed; continuing", { messageId: message.id, error: error.message });
-      }
-
-      try {
-        const userPromise = detectPromise({ text: input.content, role: "user", channelContext: beatChannelContext });
-        if (userPromise && promiseLedger?.savePromise) {
-          await promiseLedger.savePromise({ ...beatScope, ...userPromise, source_channel_id: message.channelId || "", source_message_id: message.id });
-        }
-      } catch (error) {
-        logger.warn("[chat] User promise curation failed; continuing", { messageId: message.id, error: error.message });
-      }
-
       try {
         memories = await retrieveMemory({
           memory,
@@ -278,10 +173,6 @@ function createChatPipeline({
       if (presenceContext) {
         contextSections.push(presenceContext);
       }
-      const speakerIdentitySection = buildMainUserSpeakerIdentitySection({ config, userId: input.authorId });
-      if (speakerIdentitySection) {
-        contextSections.push(speakerIdentitySection);
-      }
       if (shouldSeedImageConversationFromUserText(input.content)) {
         imageConversationState = await markImageConversationActive({
           cache,
@@ -305,11 +196,74 @@ function createChatPipeline({
         contextSections.push(imagePresetContext);
       }
 
+      // Feature 1, 2, 4: WorldContext, CrossChannel, AttachmentUnderstanding
+      const companionConfig = {};
+      const customerConfig = { timezone: config.chat?.timezone || null };
+
+      let attachmentUnderstanding = null;
+      if (input.derivedAttachments && input.derivedAttachments.length > 0) {
+        const firstAttachment = input.derivedAttachments[0];
+        if (firstAttachment.kind === "image_analysis") {
+          attachmentUnderstanding = buildAttachmentUnderstanding({
+            url: firstAttachment.attachment?.url || "",
+            filename: firstAttachment.attachment?.name || "",
+            visionAnalysis: {
+              description: firstAttachment.text || "",
+            },
+          });
+        } else if (firstAttachment.kind === "audio_transcription") {
+          attachmentUnderstanding = buildAttachmentUnderstanding({
+            url: firstAttachment.attachment?.url || "",
+            filename: firstAttachment.attachment?.name || "",
+            transcript: firstAttachment.text || "",
+          });
+        }
+      }
+
+      let webSearchResults = null;
+      const urls = detectURLsInText(input.content);
+      if (urls.length > 0 && shouldFetchURL(input.content, urls)) {
+        try {
+          const primaryUrl = urls[0];
+          const urlMetadata = await fetchAndAnalyzeURL(primaryUrl, logger);
+          if (urlMetadata && !urlMetadata.blocked) {
+            webSearchResults = [{
+              title: urlMetadata.title || urlMetadata.url,
+              description: urlMetadata.description,
+              url: urlMetadata.url,
+              snippet: urlMetadata.readableText,
+            }];
+          }
+        } catch (error) {
+          logger?.debug("[chat] URL fetch failed", { error: error.message });
+        }
+      }
+
+      const modelContextResult = await buildModelContext({
+        message,
+        input,
+        config,
+        logger,
+        conversations,
+        companionConfig,
+        customerConfig,
+        attachment: attachmentUnderstanding,
+        webSearchResults,
+        enableWorldContext: true,
+        enableCrossChannel: config.features?.crossChannelAwareness !== false,
+        enableAttachment: config.features?.attachmentProcessing !== false,
+        enableWebResults: config.features?.webResults !== false,
+      });
+
+      contextSections.push(...modelContextResult.contextSections);
+
+      // Store diagnostics for later logging
+      const modelContextDiagnostics = modelContextResult.diagnostics;
+
       // Emotional Arc Engine — additive layer. Never mutates the base prompt;
       // only appends an optional internal prelude context section. Fully
-      // guarded so a failure here can never break the companion's base reply.
-      // Skipped in developer mode (persona is replaced; engines not relevant).
-      if (!inDevMode && emotionalArc) {
+      // guarded so a failure here can never break Cadence's base reply.
+      if (emotionalArc) {
         try {
           const isDM = message.channel?.isDMBased?.() ?? !message.guildId;
           const channelContext = {
@@ -340,7 +294,7 @@ function createChatPipeline({
       // Feedback & Learning Engine — additive layer. Mirrors the emotional arc
       // hook: appends an optional internal prelude section built from owner-
       // approved + applied rules. Fully guarded; can never break the base reply.
-      if (!inDevMode && feedbackLearning) {
+      if (feedbackLearning) {
         try {
           const feedbackResult = await feedbackLearning.processMessage({
             message: input.content,
@@ -365,7 +319,7 @@ function createChatPipeline({
       // feedback hooks: appends an OPTIONAL internal prelude built from the
       // owner-enabled relational state + expression gate. Fully guarded; never
       // overwrites the base prompt and can never break the base reply.
-      if (!inDevMode && relationalState) {
+      if (relationalState) {
         try {
           const relationalResult = await relationalState.processMessage({
             message: input.content,
@@ -668,18 +622,16 @@ function createChatPipeline({
         replyTrace.llmCalled = true;
         logger.info?.(`[reply-trace] llm called=true`);
         modelOutput = await callModel({
+      const modelOutput = await callModel({
         config,
         logger,
         tools,
-        mode: effectiveMode,
+        mode: selectedMode,
         message,
         input,
         recentHistory,
         memories,
         contextSections,
-        channelType: "discord",
-        overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
-        systemPromptPrefix: adultSystemPromptPrefix,
         toolContext: {
           surface: "chat",
           userScope: config.memory?.userScope,
@@ -737,7 +689,7 @@ function createChatPipeline({
       // Emotional Arc safety interception — if the output contains a
       // hard-blocked manipulative pattern, the unsafe reply is NOT sent as-is;
       // it is replaced with a neutral safe fallback before the reply is built.
-      // Guarded so a failure here can never break the companion's base reply.
+      // Guarded so a failure here can never break Cadence's base reply.
       if (emotionalArc) {
         try {
           const safety = await emotionalArc.validateOutputSafety({ text: modelOutput.text });
@@ -757,90 +709,7 @@ function createChatPipeline({
       }
 
       const reply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput });
-      if (!reply?.content?.trim()) {
-        reply.content = tinyFallbackForReason("empty_reply", logger, { messageId: message.id, channelId: message.channelId });
-        replyTrace.fallbackUsed = true;
-        replyTrace.fallbackReason = "empty_reply";
-        replyTrace.finalSource = "tiny_fallback";
-      }
 
-      const duplicateCheck = checkDuplicateReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: reply.content });
-      if (duplicateCheck.duplicate && replyTrace.finalSource !== "tiny_fallback") {
-        replyTrace.duplicateBlocked = true;
-        logger.info?.(`[reply-trace] duplicateBlocked=true`);
-        try {
-          const retryOutput = await callModel({
-            config, logger, tools, mode: effectiveMode, message, input, recentHistory, memories,
-            contextSections: [...contextSections, { label: "DUPLICATE REPLY REPAIR", content: "Do not repeat the previous reply. Answer the current user message directly in Dante’s voice." }],
-            channelType: "discord", overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null, systemPromptPrefix: adultSystemPromptPrefix,
-            toolContext: { surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode, currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id, currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory },
-          });
-          const retryReply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput: retryOutput });
-          if (!checkDuplicateReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: retryReply.content }).duplicate) {
-            reply.content = retryReply.content;
-            replyTrace.finalSource = "retry";
-          } else {
-            reply.content = "I’m stuck repeating myself. Ask me again and I’ll answer clean.";
-            replyTrace.fallbackUsed = true;
-            replyTrace.fallbackReason = "duplicate_reply";
-            replyTrace.finalSource = "tiny_fallback";
-          }
-        } catch (error) {
-          reply.content = tinyFallbackForReason("duplicate_retry_failed", logger, { messageId: message.id, channelId: message.channelId });
-          replyTrace.fallbackUsed = true;
-          replyTrace.fallbackReason = "duplicate_retry_failed";
-          replyTrace.finalSource = "tiny_fallback";
-        }
-      } else {
-        logger.info?.(`[reply-trace] duplicateBlocked=false`);
-      }
-      rememberReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: reply.content });
-      logger.info?.(`[reply-trace] fallbackUsed=${replyTrace.fallbackUsed} fallbackReason=${replyTrace.fallbackReason || "null"}`);
-      logger.info?.(`[reply-trace] finalSource=${replyTrace.finalSource}`);
-
-      // Human Simulation Pack 2 post-processing — updates presence last_companion_reply_at.
-      // Fire-and-forget: never delays the reply.
-      if (!inDevMode && humanSimulation?.postProcessMessage) {
-        humanSimulation.postProcessMessage({ message, reply: reply?.content || "", adultScope }).catch(() => {});
-      }
-      logger.info?.("[reply-trace] humanSimulationPack2 processed=true");
-
-      try {
-        if (repairResult?.repairNeeded) {
-          await saveRepairBeat({ emotionalBeatStore, scope: { ...beatScope, source_channel_id: message.channelId || "", source_message_id: message.id }, message: input.content, reply: reply?.content || "", repairResult });
-        }
-      } catch (error) {
-        logger.warn("[relationship-repair] Failed to save repair beat; continuing", { messageId: message.id, error: error.message });
-      }
-
-
-      await curateRuntimeMemory({ text: reply?.content || "", role: "assistant", memoryStore, config, logger, source: { authorId: input.authorId, channelId: message.channelId || message.channel?.id, messageId: `${message.id}:assistant` } });
-
-      try {
-        const companionPromise = detectPromise({ text: reply?.content || "", role: "assistant", channelContext: beatChannelContext });
-        if (companionPromise && promiseLedger?.savePromise) {
-          await promiseLedger.savePromise({ ...beatScope, ...companionPromise, source_channel_id: message.channelId || "", source_message_id: `${message.id}:assistant` });
-        }
-      } catch (error) {
-        logger.warn("[chat] Companion promise curation failed; continuing", { messageId: message.id, error: error.message });
-      }
-
-      try {
-        const companionBeat = classifyEmotionalBeat({
-          text: reply?.content || "",
-          role: "assistant",
-          companionId: beatScope.companion_id,
-          userDisplayName: input.authorName || "Jenna",
-          channelContext: beatChannelContext,
-        });
-        if (companionBeat) await saveBeat(companionBeat, "assistant");
-      } catch (error) {
-        logger.warn("[chat] Companion reply beat curation failed; continuing", { messageId: message.id, error: error.message });
-      }
-
-      updateSystemTruth("llm", { activeChatProvider: config.llm?.provider || config.openai?.provider || "unknown", activeModel: effectiveMode.chatModel || config.openai?.chatModel || "unknown", lastModelUsed: modelOutput.model || effectiveMode.chatModel || "unknown" });
-      updateSystemTruth("memory", { lastMemoryRetrieval: new Date().toISOString(), lastContinuityPreludeBuilt: new Date().toISOString(), lastCrossChannelRetrieval: rankedBeats.length ? new Date().toISOString() : undefined, lastEmotionalBeatSaved: rankedBeats[0]?.updated_at || rankedBeats[0]?.created_at || undefined });
-      updateSystemTruth("privacy", { privateAdultMemoryGatingEnabled: true, rawAudioStorageEnabled: false, rawTranscriptLoggingEnabled: false, safeErrorShieldEnabled: true });
       logger.debug?.("[chat] Pipeline completed", {
         messageId: message.id,
         mode: selectedMode.name,
@@ -848,6 +717,16 @@ function createChatPipeline({
         recentHistoryCount: recentHistory.length,
         memoryCount: memories.length,
         durationMs: Date.now() - startedAt,
+        contextDiagnostics: {
+          worldContext: modelContextDiagnostics?.worldContextInjected,
+          crossChannel: {
+            injected: modelContextDiagnostics?.crossChannelInjected,
+            eventsCount: modelContextDiagnostics?.crossChannelEventsCount,
+            platforms: modelContextDiagnostics?.crossChannelPlatforms,
+          },
+          attachment: modelContextDiagnostics?.attachmentInjected,
+          webResults: modelContextDiagnostics?.webResultsInjected,
+        },
       });
 
       return reply;
@@ -857,5 +736,4 @@ function createChatPipeline({
 
 module.exports = {
   createChatPipeline,
-  getAdultPrivateModeScope,
 };

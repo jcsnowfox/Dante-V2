@@ -325,7 +325,10 @@ function extractReplyDirectives(toolResults = []) {
 const CONTENT_FILTER_ERROR_PATTERN =
   /high risk|safety system|safety filter|moderat|content policy|content filter|not allowed|disallowed|flagged|violat|rejected because/i;
 
-function isContentFilterError(message) {
+function isContentFilterError(message, ignoreFilterErrors = false) {
+  if (ignoreFilterErrors) {
+    return false;
+  }
   return typeof message === "string" && CONTENT_FILTER_ERROR_PATTERN.test(message);
 }
 

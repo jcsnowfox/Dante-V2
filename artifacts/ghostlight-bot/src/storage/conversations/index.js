@@ -18,7 +18,7 @@ const SUPPORTED_ROLES = Object.freeze([
 const SUPPORTED_SOURCES = Object.freeze([
   "discord",
   "openai",
-  "ghostlight",
+  "cadence",
 ]);
 
 const SNIPPET_SEARCH_STOPWORDS = new Set([
@@ -56,54 +56,6 @@ const CREATE_CONVERSATION_EVENTS_TABLE_SQL = `
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 `;
-
-const ENSURE_CONVERSATION_EVENTS_COLUMNS_SQL = [
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS id BIGSERIAL;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS conversation_id TEXT;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS thread_id TEXT;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS channel_id TEXT;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS guild_id TEXT;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS discord_message_id TEXT;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS author_id TEXT;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS author_name TEXT;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS role TEXT;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS source TEXT;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS event_type TEXT;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS content_text TEXT;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;",
-  "ALTER TABLE conversation_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();",
-];
-
-const BACKFILL_CONVERSATION_EVENTS_REQUIRED_COLUMNS_SQL = `
-  UPDATE conversation_events
-  SET
-    conversation_id = COALESCE(conversation_id, thread_id, channel_id, 'legacy-conversation'),
-    channel_id = COALESCE(channel_id, thread_id, conversation_id, 'legacy-channel'),
-    role = COALESCE(role, 'user'),
-    source = COALESCE(source, 'discord'),
-    event_type = COALESCE(event_type, 'message'),
-    metadata = COALESCE(metadata, '{}'::jsonb),
-    created_at = COALESCE(created_at, NOW())
-  WHERE conversation_id IS NULL
-    OR channel_id IS NULL
-    OR role IS NULL
-    OR source IS NULL
-    OR event_type IS NULL
-    OR metadata IS NULL
-    OR created_at IS NULL;
-`;
-
-const ENFORCE_CONVERSATION_EVENTS_NOT_NULL_SQL = [
-  "ALTER TABLE conversation_events ALTER COLUMN conversation_id SET NOT NULL;",
-  "ALTER TABLE conversation_events ALTER COLUMN channel_id SET NOT NULL;",
-  "ALTER TABLE conversation_events ALTER COLUMN role SET NOT NULL;",
-  "ALTER TABLE conversation_events ALTER COLUMN source SET NOT NULL;",
-  "ALTER TABLE conversation_events ALTER COLUMN event_type SET NOT NULL;",
-  "ALTER TABLE conversation_events ALTER COLUMN metadata SET DEFAULT '{}'::jsonb;",
-  "ALTER TABLE conversation_events ALTER COLUMN metadata SET NOT NULL;",
-  "ALTER TABLE conversation_events ALTER COLUMN created_at SET DEFAULT NOW();",
-  "ALTER TABLE conversation_events ALTER COLUMN created_at SET NOT NULL;",
-];
 
 const CREATE_CONVERSATION_EVENTS_INDEXES_SQL = [
   "CREATE INDEX IF NOT EXISTS conversation_events_conversation_created_at_idx ON conversation_events (conversation_id, created_at DESC);",
@@ -167,22 +119,11 @@ function mapEventToHistoryItem(event) {
   };
 }
 
-// Summary transcripts feed an LLM and the generated summary is later persisted as a
-// memory artifact. A persisted image_analysis description can be explicit/flagged, so
-// folding it verbatim into a summary would re-introduce the same content the provider
-// rejects (and seed it into long-term memory). Collapse it to a neutral marker here —
-// this is the single chokepoint both the daily and weekly summarizers go through.
-const SUMMARY_IMAGE_PLACEHOLDER = "[An image was shared in the conversation.]";
-
 function formatEventAsPlainText(event) {
   const timestamp = new Date(event.created_at).toISOString();
   const author = event.author_name || event.role || "unknown";
-  const body =
-    event.event_type === "image_analysis"
-      ? SUMMARY_IMAGE_PLACEHOLDER
-      : buildEventContentText(event);
 
-  return `[${timestamp}] ${author}: ${body}`.trim();
+  return `[${timestamp}] ${author}: ${buildEventContentText(event)}`.trim();
 }
 
 function getConversationLabel(metadata = {}, fallbackConversationId = "") {
@@ -453,23 +394,25 @@ function createConversationStore({ config, logger }) {
     async init() {
       await pool.query(CREATE_CONVERSATION_EVENTS_TABLE_SQL);
 
-      for (const statement of ENSURE_CONVERSATION_EVENTS_COLUMNS_SQL) {
-        await pool.query(statement);
-      }
+      await pool.query(`
+        ALTER TABLE conversation_events
+        ADD COLUMN IF NOT EXISTS conversation_id TEXT;
+      `);
 
-      await pool.query(BACKFILL_CONVERSATION_EVENTS_REQUIRED_COLUMNS_SQL);
+      await pool.query(`
+        UPDATE conversation_events
+        SET conversation_id = COALESCE(conversation_id, thread_id, channel_id)
+        WHERE conversation_id IS NULL;
+      `);
 
-      for (const statement of ENFORCE_CONVERSATION_EVENTS_NOT_NULL_SQL) {
-        await pool.query(statement);
-      }
+      await pool.query(`
+        ALTER TABLE conversation_events
+        ALTER COLUMN conversation_id SET NOT NULL;
+      `);
 
       for (const statement of CREATE_CONVERSATION_EVENTS_INDEXES_SQL) {
         await pool.query(statement);
       }
-
-      logger.info?.("[db:migration] conversations schema ensured", {
-        table: "conversation_events",
-      });
 
       logger.debug?.("[storage] Conversation store ready", {
         provider: "postgres",
@@ -577,6 +520,84 @@ function createConversationStore({ config, logger }) {
       );
 
       return rows;
+    },
+
+    async listRecentEventsByAuthor({ userId, companionId = null, customerId = null, since = null, limit = 20 } = {}) {
+      const normalizedLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
+      const normalizedSince = since ? new Date(since) : new Date(Date.now() - (24 * 60 * 60 * 1000));
+
+      if (Number.isNaN(normalizedSince.getTime())) {
+        throw new Error("A valid since date is required.");
+      }
+
+      if (!userId || typeof userId !== "string") {
+        return [];
+      }
+
+      try {
+        const { rows } = await pool.query(
+          `
+            SELECT
+              id,
+              conversation_id,
+              thread_id,
+              channel_id,
+              guild_id,
+              discord_message_id,
+              author_id,
+              author_name,
+              role,
+              source,
+              event_type,
+              content_text,
+              metadata,
+              created_at
+            FROM conversation_events
+            WHERE author_id = $1
+              AND event_type = 'message'
+              AND created_at >= $2
+            ORDER BY created_at DESC
+            LIMIT $3
+          `,
+          [userId, normalizedSince, normalizedLimit],
+        );
+
+        return rows.map((row) => ({
+          id: row.id,
+          messageId: row.discord_message_id,
+          message_id: row.discord_message_id,
+          conversationId: row.conversation_id,
+          conversation_id: row.conversation_id,
+          threadId: row.thread_id,
+          thread_id: row.thread_id,
+          channelId: row.channel_id,
+          channel_id: row.channel_id,
+          guildId: row.guild_id,
+          guild_id: row.guild_id,
+          authorId: row.author_id,
+          author_id: row.author_id,
+          authorDisplayName: row.author_name,
+          author_display_name: row.author_name,
+          role: row.role,
+          source: row.source,
+          platform: row.source, // alias for source
+          eventType: row.event_type,
+          event_type: row.event_type,
+          contentText: row.content_text,
+          content_text: row.content_text,
+          metadata: row.metadata,
+          createdAt: row.created_at,
+          created_at: row.created_at,
+          privacyScope: row.metadata?.privacyScope || "public",
+          channelMode: row.metadata?.channelMode || "public",
+        }));
+      } catch (error) {
+        logger.warn("[storage] Cross-channel event retrieval failed", {
+          userId,
+          error: error.message,
+        });
+        return [];
+      }
     },
 
     async listConversations({ limit = 20, guildId = "", activeAfter = "", activeBefore = "" } = {}) {
