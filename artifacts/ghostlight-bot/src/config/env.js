@@ -208,6 +208,12 @@ function loadConfig() {
       apiKey: process.env.ELEVENLABS_API_KEY || "",
       baseURL: process.env.ELEVENLABS_BASE_URL || "https://api.elevenlabs.io",
     },
+    fishAudio: {
+      apiKey: process.env.FISH_AUDIO_API_KEY || "",
+      voiceId: process.env.FISH_AUDIO_VOICE_ID || "",
+      modelId: process.env.FISH_AUDIO_MODEL_ID || "",
+      baseURL: process.env.FISH_AUDIO_BASE_URL || "https://api.fish.audio",
+    },
     spotify: {
       enabled: readBoolean(process.env.SPOTIFY_ENABLED, true),
       clientId: process.env.SPOTIFY_CLIENT_ID || "",
