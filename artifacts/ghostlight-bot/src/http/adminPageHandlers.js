@@ -400,13 +400,16 @@ async function handleAdminPageRequest({
     const tab = url.searchParams.get("tab") || "preferences";
     const userScope = innerContext.config?.memory?.userScope || "user";
     const companionId = innerContext.config?.memory?.companionId || innerContext.config?.companion?.id || "Dante";
-    const [prefs, events, followUps, channels] = await Promise.all([
+    const [prefs, events, followUps, channels, weatherHistory, residues, presenceList] = await Promise.all([
       innerContext.microPreferenceStore?.listPreferences?.({ user_scope: userScope, companion_id: companionId, limit: 100 }).catch(() => []) || [],
       innerContext.personalTimelineStore?.listEvents?.({ user_scope: userScope, companion_id: companionId, limit: 100 }).catch(() => []) || [],
       innerContext.followUpStore?.listFollowUps?.({ user_scope: userScope, companion_id: companionId, limit: 100 }).catch(() => []) || [],
       innerContext.channelAwarenessStore?.listChannels?.({ user_scope: userScope, companion_id: companionId, limit: 200 }).catch(() => []) || [],
+      innerContext.innerWeatherStore?.listHistory?.({ user_scope: userScope, companion_id: companionId, limit: 50 }).catch(() => []) || [],
+      innerContext.attentionResidueStore?.listAll?.({ user_scope: userScope, companion_id: companionId, limit: 50 }).catch(() => []) || [],
+      innerContext.interactionPresenceStore?.listPresence?.({ user_scope: userScope, companion_id: companionId, limit: 50 }).catch(() => []) || [],
     ]);
-    innerRes.end(helpers.renderHumanSimulationPage({ tab, prefs, events, followUps, channels, helpers, theme, themeLinks }));
+    innerRes.end(helpers.renderHumanSimulationPage({ tab, prefs, events, followUps, channels, weatherHistory, residues, presenceList, helpers, theme, themeLinks }));
     return;
   }
 

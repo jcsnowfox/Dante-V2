@@ -754,6 +754,13 @@ function createChatPipeline({
       logger.info?.(`[reply-trace] fallbackUsed=${replyTrace.fallbackUsed} fallbackReason=${replyTrace.fallbackReason || "null"}`);
       logger.info?.(`[reply-trace] finalSource=${replyTrace.finalSource}`);
 
+      // Human Simulation Pack 2 post-processing — updates presence last_companion_reply_at.
+      // Fire-and-forget: never delays the reply.
+      if (!inDevMode && humanSimulation?.postProcessMessage) {
+        humanSimulation.postProcessMessage({ message, reply: reply?.content || "", adultScope }).catch(() => {});
+      }
+      logger.info?.("[reply-trace] humanSimulationPack2 processed=true");
+
       try {
         if (repairResult?.repairNeeded) {
           await saveRepairBeat({ emotionalBeatStore, scope: { ...beatScope, source_channel_id: message.channelId || "", source_message_id: message.id }, message: input.content, reply: reply?.content || "", repairResult });

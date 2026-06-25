@@ -36,6 +36,9 @@ const {
   createPersonalTimelineStore,
   createFollowUpStore,
   createChannelAwarenessStore,
+  createInnerWeatherStore,
+  createAttentionResidueStore,
+  createInteractionPresenceStore,
 } = require("./storage");
 const { createHumanSimulationEngine } = require("./humanSimulation/humanSimulationEngine");
 const { seedStarterHeartbeatActions } = require("./storage/heartbeatActions/seedStarterActions");
@@ -150,7 +153,10 @@ async function startApp() {
   const personalTimelineStore = createPersonalTimelineStore({ config, logger });
   const followUpStore = createFollowUpStore({ config, logger });
   const channelAwarenessStore = createChannelAwarenessStore({ config, logger });
-  const humanSimulation = createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore });
+  const innerWeatherStore = createInnerWeatherStore({ config, logger });
+  const attentionResidueStore = createAttentionResidueStore({ config, logger });
+  const interactionPresenceStore = createInteractionPresenceStore({ config, logger });
+  const humanSimulation = createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore, innerWeatherStore, attentionResidueStore, interactionPresenceStore });
   const spotify = createSpotifyService({ config, store: musicStore, logger });
   const musicBrainz = createMusicBrainzService({ config, logger });
   const musicLibrary = createMusicLibraryService({ config, store: musicStore, spotify, musicBrainz, logger });
@@ -329,6 +335,9 @@ async function startApp() {
     personalTimelineStore,
     followUpStore,
     channelAwarenessStore,
+    innerWeatherStore,
+    attentionResidueStore,
+    interactionPresenceStore,
     secondLife,
     secondLifeAdapter,
     secondLifeIdentityResolver,
@@ -392,6 +401,9 @@ async function startApp() {
     personalTimelineStore,
     followUpStore,
     channelAwarenessStore,
+    innerWeatherStore,
+    attentionResidueStore,
+    interactionPresenceStore,
   };
 
   const gameButtonHandler = gameSystem.createButtonHandler({ appContext });
