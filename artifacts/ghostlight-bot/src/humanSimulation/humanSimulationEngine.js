@@ -7,8 +7,11 @@ const { loadOrCreateChannelAwareness, formatChannelPrelude } = require("./channe
 const { detectEmotionalSignal, updateInnerWeather, formatInnerWeatherPrelude } = require("./innerWeatherEngine");
 const { maybeCreateResidue, retrieveActiveResidue, formatResiduePrelude } = require("./attentionResidueEngine");
 const { calculateSilenceBucket, determineReentryMode, updatePresenceUserMessage, updatePresenceCompanionReply, formatPresencePrelude } = require("./silenceBehaviorEngine");
+const { detectBoundaryLanguage, saveBoundaryConsent, retrieveRelevantBoundaries, formatBoundaryPrelude } = require("./boundaryConsentEngine");
+const { detectDoNotAskLanguage, saveDoNotAskRule, retrieveActiveRules, formatDoNotAskPrelude } = require("./doNotAskEngine");
+const { detectUserEnergy, saveEnergyObservation, retrieveRecentEnergy, formatUserEnergyPrelude } = require("./userEnergyEngine");
 
-function createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore, innerWeatherStore, attentionResidueStore, interactionPresenceStore }) {
+function createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore, innerWeatherStore, attentionResidueStore, interactionPresenceStore, boundaryConsentStore, doNotAskStore, userEnergyStore }) {
   const scope = {
     userScope: config?.memory?.userScope || "user",
     companionId: config?.memory?.companionId || config?.companion?.id || "Dante",
@@ -26,6 +29,9 @@ function createHumanSimulationEngine({ config, logger, microPreferenceStore, per
         innerWeatherStore?.init?.(),
         attentionResidueStore?.init?.(),
         interactionPresenceStore?.init?.(),
+        boundaryConsentStore?.init?.(),
+        doNotAskStore?.init?.(),
+        userEnergyStore?.init?.(),
       ].filter(Boolean));
       logger?.info?.("[human-simulation] all stores initialised");
     },
@@ -76,7 +82,61 @@ function createHumanSimulationEngine({ config, logger, microPreferenceStore, per
         logger?.warn?.("[human-simulation] micro-preference failed", { error: err?.message });
       }
 
-      // 3. Personal Timeline — auto-create + retrieve anchors
+      // 3. Boundary / Consent — detect from this message, retrieve active, inject
+      try {
+        const detectedBoundary = detectBoundaryLanguage(text);
+        if (detectedBoundary) {
+          await saveBoundaryConsent({
+            detected: detectedBoundary,
+            store: boundaryConsentStore,
+            userScope: scope.userScope,
+            companionId: scope.companionId,
+            sourceChannelId,
+            sourceMessageId,
+            adultPrivate,
+          });
+          logger?.debug?.(`[human-simulation] boundary saved type=${detectedBoundary.boundary_type}`);
+        }
+        const boundaries = await retrieveRelevantBoundaries({
+          store: boundaryConsentStore,
+          userScope: scope.userScope,
+          companionId: scope.companionId,
+          adultPrivate,
+        });
+        const boundarySection = formatBoundaryPrelude(boundaries, adultPrivate);
+        if (boundarySection) preludeSections.push(boundarySection);
+      } catch (err) {
+        logger?.warn?.("[human-simulation] boundary consent failed", { error: err?.message });
+      }
+
+      // 4. Do-Not-Ask Rules — detect from this message, retrieve active, inject
+      try {
+        const detectedRule = detectDoNotAskLanguage(text);
+        if (detectedRule) {
+          await saveDoNotAskRule({
+            detected: detectedRule,
+            store: doNotAskStore,
+            userScope: scope.userScope,
+            companionId: scope.companionId,
+            sourceChannelId,
+            sourceMessageId,
+            adultPrivate,
+          });
+          logger?.debug?.(`[human-simulation] do-not-ask rule saved type=${detectedRule.rule_type}`);
+        }
+        const rules = await retrieveActiveRules({
+          store: doNotAskStore,
+          userScope: scope.userScope,
+          companionId: scope.companionId,
+          adultPrivate,
+        });
+        const dnaSection = formatDoNotAskPrelude(rules, adultPrivate);
+        if (dnaSection) preludeSections.push(dnaSection);
+      } catch (err) {
+        logger?.warn?.("[human-simulation] do-not-ask failed", { error: err?.message });
+      }
+
+      // 5. Personal Timeline — auto-create + retrieve anchors
       try {
         await maybeCreateTimelineEvent({
           text,
@@ -149,7 +209,40 @@ function createHumanSimulationEngine({ config, logger, microPreferenceStore, per
         logger?.warn?.("[human-simulation] inner weather failed", { error: err?.message });
       }
 
-      // 6. Attention Residue — create from this message, retrieve active, inject
+      // 8. User Energy — detect from this message, save if confident, inject prelude
+      try {
+        const energyDetected = detectUserEnergy(text);
+        if (energyDetected && energyDetected.confidence >= 0.55) {
+          await saveEnergyObservation({
+            detected: energyDetected,
+            store: userEnergyStore,
+            userScope: scope.userScope,
+            companionId: scope.companionId,
+            sourceChannelId,
+            sourceMessageId,
+            adultPrivate,
+          });
+          const energySection = formatUserEnergyPrelude(energyDetected);
+          if (energySection) preludeSections.push(energySection);
+          logger?.debug?.(`[human-simulation] user energy saved state=${energyDetected.energy_state}`);
+        } else if (!energyDetected) {
+          // Fall back to most recent stored observation for style guidance
+          const recentEnergy = await retrieveRecentEnergy({
+            store: userEnergyStore,
+            userScope: scope.userScope,
+            companionId: scope.companionId,
+            adultPrivate,
+          });
+          if (recentEnergy && recentEnergy.confidence >= 0.7) {
+            const energySection = formatUserEnergyPrelude(recentEnergy);
+            if (energySection) preludeSections.push(energySection);
+          }
+        }
+      } catch (err) {
+        logger?.warn?.("[human-simulation] user energy failed", { error: err?.message });
+      }
+
+      // 9. Attention Residue — create from this message, retrieve active, inject
       try {
         await maybeCreateResidue({
           text,
@@ -238,6 +331,9 @@ function createHumanSimulationEngine({ config, logger, microPreferenceStore, per
       get innerWeather() { return innerWeatherStore; },
       get attentionResidue() { return attentionResidueStore; },
       get interactionPresence() { return interactionPresenceStore; },
+      get boundaryConsent() { return boundaryConsentStore; },
+      get doNotAsk() { return doNotAskStore; },
+      get userEnergy() { return userEnergyStore; },
     },
   };
 }
