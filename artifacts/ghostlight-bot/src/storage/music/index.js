@@ -2059,8 +2059,6 @@ function createMusicStore({ config, logger }) {
               ON CONFLICT (music_playlist_id, spotify_track_id)
               DO UPDATE SET
                 music_track_id = EXCLUDED.music_track_id,
-                position = LEAST(music_playlist_tracks.position, EXCLUDED.position),
-                source = EXCLUDED.source,
                 position = EXCLUDED.position,
                 source = EXCLUDED.source,
                 added_at = COALESCE(EXCLUDED.added_at, music_playlist_tracks.added_at),
