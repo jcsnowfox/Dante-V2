@@ -1,3 +1,4 @@
+const { isDevMode, DEV_SYSTEM_PROMPT } = require("../developer/devUtils");
 const { preprocessMessage } = require("./pipeline/preprocessMessage");
 const { enrichInput } = require("./pipeline/enrichInput");
 const { loadScopedRecentHistory } = require("./pipeline/loadRecentHistory");
@@ -66,6 +67,7 @@ function createChatPipeline({
           outcome_status: "recorded",
         }).catch(() => {});
       };
+      const inDevMode = isDevMode(message);
       logger.info?.(`[reply-trace] start messageId=${message.id || ""} channelId=${message.channelId || ""}`);
       const fallbackModeName = config.chat?.defaultMode || "default";
       const selectedMode = mode || getMode(modeName || fallbackModeName);
@@ -622,35 +624,37 @@ function createChatPipeline({
         replyTrace.llmCalled = true;
         logger.info?.(`[reply-trace] llm called=true`);
         modelOutput = await callModel({
-      const modelOutput = await callModel({
-        config,
-        logger,
-        tools,
-        mode: selectedMode,
-        message,
-        input,
-        recentHistory,
-        memories,
-        contextSections,
-        toolContext: {
-          surface: "chat",
-          userScope: config.memory?.userScope,
-          guildId: message.guildId,
-          mode: selectedMode,
-          currentMessage: message,
-          conversationId,
-          channelId: message.channelId,
-          sourceMessageId: message.id,
-          currentUserId: input.authorId,
-          currentUserName: input.authorName,
-          currentUserText: input.content,
+          config,
+          logger,
+          tools,
+          mode: effectiveMode,
+          message,
+          input,
           recentHistory,
-          memoryContextIds: memories
-            .map((memoryItem) => memoryItem?.memoryId || memoryItem?.memory_id || "")
-            .filter(Boolean),
-          imageConversationActive: Boolean(imageConversationState?.active),
-        },
-      });
+          memories,
+          contextSections,
+          channelType: "discord",
+          overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
+          systemPromptPrefix: adultSystemPromptPrefix,
+          toolContext: {
+            surface: "chat",
+            userScope: config.memory?.userScope,
+            guildId: message.guildId,
+            mode: selectedMode,
+            currentMessage: message,
+            conversationId,
+            channelId: message.channelId,
+            sourceMessageId: message.id,
+            currentUserId: input.authorId,
+            currentUserName: input.authorName,
+            currentUserText: input.content,
+            recentHistory,
+            memoryContextIds: memories
+              .map((memoryItem) => memoryItem?.memoryId || memoryItem?.memory_id || "")
+              .filter(Boolean),
+            imageConversationActive: Boolean(imageConversationState?.active),
+          },
+        });
         replyTrace.llmCompleted = true;
         logger.info?.(`[reply-trace] llm completed=true length=${String(modelOutput?.text || "").length}`);
       } catch (error) {
