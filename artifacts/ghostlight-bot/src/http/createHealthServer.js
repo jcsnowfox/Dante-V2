@@ -32,6 +32,7 @@ const { handleRelationalStateActions } = require("./actions/relationalStateActio
 const { handleCompanionAvatarActions } = require("./actions/companionAvatarActions");
 const { handleAdminMaintenanceActions } = require("./actions/adminMaintenanceActions");
 const { handleAdminExportActions } = require("./actions/adminExportActions");
+const { handleSituationalAwarenessActions } = require("./actions/situationalAwarenessActions");
 const {
   buildMemoryExportPayload,
   buildMemoryImportRecords,
@@ -386,7 +387,8 @@ function createHealthServer({
         url.pathname === "/admin/memory/review" ||
         url.pathname === "/admin/memory/curator" ||
         url.pathname === "/admin/heartbeat" ||
-        url.pathname.startsWith("/admin/heartbeat/")
+        url.pathname.startsWith("/admin/heartbeat/") ||
+        url.pathname === "/admin/awareness"
       )) {
         return withAdmin(async (_req, innerRes, innerContext) => {
           setThemeCookie(innerRes, resolvedTheme);
@@ -561,6 +563,19 @@ function createHealthServer({
 
       {
         const handled = await handleCompanionAvatarActions({
+          req,
+          res,
+          url,
+          context,
+          withAdmin,
+        });
+        if (handled !== false) {
+          return handled;
+        }
+      }
+
+      {
+        const handled = await handleSituationalAwarenessActions({
           req,
           res,
           url,

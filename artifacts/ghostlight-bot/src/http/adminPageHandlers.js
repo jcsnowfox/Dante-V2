@@ -38,6 +38,7 @@ const { handleGameAdminPageRequest } = require("../games/http/gameAdminPageHandl
 const { handleNorwegianLearningPageRequest } = require("./adminPageHandlers/norwegianLearningPageHandler");
 const { handleNorwegianDashboardRequest } = require("./adminPageHandlers/norwegianDashboardHandler");
 const { handleSystemTruthPageRequest } = require("./adminPageHandlers/systemTruthPageHandler");
+const { handleSituationalAwarenessPageRequest } = require("./adminPageHandlers/situationalAwarenessPageHandler");
 
 async function handleAdminPageRequest({
   req = null,
@@ -370,6 +371,11 @@ async function handleAdminPageRequest({
 
   if (route.section === "systemTruth") {
     await handleSystemTruthPageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });
+    return;
+  }
+
+  if (route.section === "awareness") {
+    await handleSituationalAwarenessPageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });
     return;
   }
 

@@ -47,9 +47,14 @@ const {
   createSelfReflectionStore,
   createProactivePresenceRuleStore,
   createRecentDecisionStore,
+  createConversationFollowupStore,
+  createTimedNotesStore,
+  createProactiveVarietyMemoryStore,
+  createSituationalAwarenessStore,
 } = require("./storage");
 const { createWebSearchService } = require("./tools/webSearchService");
 const { createHumanSimulationEngine } = require("./humanSimulation/humanSimulationEngine");
+const { createSituationalAwarenessEngine } = require("./awareness/situationalAwarenessEngine");
 const { seedStarterHeartbeatActions } = require("./storage/heartbeatActions/seedStarterActions");
 const { createCacheService } = require("./cache");
 const { createChannelModeService } = require("./channelModes");
@@ -173,8 +178,13 @@ async function startApp() {
   const selfReflectionStore = createSelfReflectionStore({ config, logger });
   const proactivePresenceStore = createProactivePresenceRuleStore({ config, logger });
   const recentDecisionStore = createRecentDecisionStore({ config, logger });
+  const conversationFollowupStore = createConversationFollowupStore({ config, logger });
+  const timedNotesStore = createTimedNotesStore({ config, logger });
+  const proactiveVarietyMemoryStore = createProactiveVarietyMemoryStore({ config, logger });
+  const situationalAwarenessStore = createSituationalAwarenessStore({ config, logger });
   const webSearchService = createWebSearchService({ config, logger });
   const humanSimulation = createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore, innerWeatherStore, attentionResidueStore, interactionPresenceStore, boundaryConsentStore, doNotAskStore, userEnergyStore, recurringThemeStore, memoryConfidenceStore, selfReflectionStore, proactivePresenceStore });
+  const situationalAwarenessEngine = createSituationalAwarenessEngine({ config, logger, timedNotesStore, conversationFollowupStore, proactiveVarietyMemoryStore, emotionalBeatStore, promiseLedger, recentDecisionStore, innerWeatherStore, situationalAwarenessStore });
   const spotify = createSpotifyService({ config, store: musicStore, logger });
   const musicBrainz = createMusicBrainzService({ config, logger });
   const musicLibrary = createMusicLibraryService({ config, store: musicStore, spotify, musicBrainz, logger });
@@ -239,6 +249,8 @@ async function startApp() {
     humanSimulation,
     webSearchService,
     recentDecisionStore,
+    timedNotesStore,
+    situationalAwarenessEngine,
   });
   const secondLifeReplyGenerator = createSecondLifeReplyGenerator({
     config,
@@ -294,6 +306,7 @@ async function startApp() {
     musicLibrary,
     imageStylePresets,
     imageAppearancePresets,
+    situationalAwarenessEngine,
   });
   const automationRunner = createAutomationRunner({
     client,
@@ -366,6 +379,11 @@ async function startApp() {
     selfReflectionStore,
     proactivePresenceStore,
     recentDecisionStore,
+    conversationFollowupStore,
+    timedNotesStore,
+    proactiveVarietyMemoryStore,
+    situationalAwarenessStore,
+    situationalAwarenessEngine,
     webSearchService,
     secondLife,
     secondLifeAdapter,
@@ -404,6 +422,11 @@ async function startApp() {
     journalStore,
     heartbeatActionStore,
     proactiveActionStore,
+    conversationFollowupStore,
+    timedNotesStore,
+    proactiveVarietyMemoryStore,
+    situationalAwarenessStore,
+    situationalAwarenessEngine,
     heartbeat,
     mainUserPresence,
     reactionContext,
@@ -474,6 +497,15 @@ async function startApp() {
   await runStartupStep("feedbackLearning.init", logger, () => feedbackLearning.init());
   await runStartupStep("relationalState.init", logger, () => relationalState.init());
   await runStartupStep("recentDecisionStore.init", logger, () => recentDecisionStore.init());
+  await runStartupStep("conversationFollowupStore.init", logger, () => conversationFollowupStore.init());
+  await runStartupStep("timedNotesStore.init", logger, () => timedNotesStore.init());
+  await runStartupStep("proactiveVarietyMemoryStore.init", logger, () => proactiveVarietyMemoryStore.init());
+  await runStartupStep("situationalAwarenessStore.init", logger, async () => {
+    if (config.situationalAwareness?.storeSnapshots) {
+      await situationalAwarenessStore.init();
+    }
+  });
+  await runStartupStep("situationalAwarenessEngine.init", logger, () => situationalAwarenessEngine.init());
   await runStartupStep("innerLife.init", logger, () => innerLife.init());
   await runStartupStep("continuity.init", logger, () => continuity.init());
   await runStartupStep("humanSimulation.init", logger, () => humanSimulation.init());
@@ -543,6 +575,9 @@ async function startApp() {
     reactionContext,
     settingsStore,
     norwegianLearning,
+    conversationFollowupStore,
+    timedNotesStore,
+    proactiveVarietyMemoryStore,
   });
 
   if (!config.discord.token) {

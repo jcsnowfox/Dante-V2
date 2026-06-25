@@ -282,7 +282,7 @@ async function sendTypingIndicatorSafely({
   }
 }
 
-function createMessageCreateHandler({ config, logger, chatPipeline, companion, conversations, channelModes, generatedImages, generatedAudio, cache, reactionContext, settingsStore = null, norwegianLearning = null }) {
+function createMessageCreateHandler({ config, logger, chatPipeline, companion, conversations, channelModes, generatedImages, generatedAudio, cache, reactionContext, settingsStore = null, norwegianLearning = null, conversationFollowupStore = null, timedNotesStore = null }) {
   return async (message) => {
     if (message.author.bot) {
       logger.debug?.("[chat] Ignoring Discord message from another bot", {
@@ -818,6 +818,29 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
               : {}),
           },
         });
+
+        if (conversationFollowupStore) {
+          try {
+            const isAdultContext = mode.name === "adult_private";
+            await conversationFollowupStore.createFollowUp({
+              user_scope: config.memory?.userScope || "user",
+              companion_id: config.memory?.companionId || config.companion?.id || "Dante",
+              channel_id: message.channelId || "",
+              thread_id: message.channel.isThread?.() ? message.channel.id : "",
+              last_user_message_id: message.id || "",
+              last_companion_message_id: sentReply.id || "",
+              last_topic_summary: persistedReplyText.slice(0, 200),
+              follow_up_due_at: null,
+              privacy_scope: isAdultContext ? "adult_private" : "normal",
+              adult_context: isAdultContext,
+            });
+          } catch (error) {
+            logger.debug?.("[followup] Failed to create conversation followup", {
+              conversationId,
+              error: error?.message,
+            });
+          }
+        }
 
         if (generatedImages && sentReply && replyPayload.generatedImageIds.length) {
           for (const imageId of replyPayload.generatedImageIds) {

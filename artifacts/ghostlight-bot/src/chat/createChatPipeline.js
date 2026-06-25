@@ -44,6 +44,8 @@ function createChatPipeline({
   humanSimulation = null,
   webSearchService = null,
   recentDecisionStore = null,
+  timedNotesStore = null,
+  situationalAwarenessEngine = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
@@ -262,6 +264,37 @@ function createChatPipeline({
       // Store diagnostics for later logging
       const modelContextDiagnostics = modelContextResult.diagnostics;
 
+      // Situational Awareness Engine — additive layer. Injects a compact
+      // multi-section prelude describing time, presence, conversation state,
+      // relationship, memories, projects, activity, and privacy scope. Fully
+      // guarded; can never break the base reply.
+      if (situationalAwarenessEngine) {
+        try {
+          const awarenessResult = await situationalAwarenessEngine.processMessage({
+            message,
+            input,
+            recentHistory,
+            memories,
+            mode: selectedMode,
+            tools,
+            presenceSnapshot: mainUserPresence?.getSnapshotForUser?.(input.authorId) || null,
+            worldContext: modelContextResult?.worldContext || null,
+          });
+          if (awarenessResult?.preludeSection) {
+            contextSections.push(awarenessResult.preludeSection);
+            logger.debug?.("[chat] Situational awareness prelude injected", {
+              messageId: message.id,
+              sectionsUsed: awarenessResult.awarenessContext?.sources_used?.length || 0,
+            });
+          }
+        } catch (error) {
+          logger.warn("[chat] Situational awareness processing failed; continuing without it", {
+            messageId: message.id,
+            error: error.message,
+          });
+        }
+      }
+
       // Emotional Arc Engine — additive layer. Never mutates the base prompt;
       // only appends an optional internal prelude context section. Fully
       // guarded so a failure here can never break Cadence's base reply.
@@ -340,6 +373,50 @@ function createChatPipeline({
           logger.warn("[chat] Relational state processing failed; continuing without it", {
             messageId: message.id,
             error: error.message,
+          });
+        }
+      }
+
+      // Timed Notes Injection — additive layer. Injects active/upcoming time-based
+      // notes that are relevant to the current conversation. Fully guarded; never
+      // overwrites the base prompt and can never break the base reply.
+      if (timedNotesStore) {
+        try {
+          const userScope = config.memory?.userScope || "user";
+          const companionId = config.memory?.companionId || config.companion?.id || "Dante";
+          const now = new Date();
+          const activeNotes = await timedNotesStore.listNotes({
+            user_scope: userScope,
+            companion_id: companionId,
+            status: "active",
+          });
+          const upcomingNotes = await timedNotesStore.listNotes({
+            user_scope: userScope,
+            companion_id: companionId,
+            status: "upcoming",
+          });
+          const allRelevantNotes = [...(activeNotes || []), ...(upcomingNotes || [])].slice(0, 5);
+
+          if (allRelevantNotes.length > 0) {
+            const notesContent = allRelevantNotes
+              .map((note) => {
+                const status = note.ends_at && new Date(note.ends_at) < now ? "expired" : "active";
+                return `* [${status}] ${note.title}${note.content ? ": " + note.content : ""}`;
+              })
+              .join("\n");
+
+            if (notesContent) {
+              contextSections.push({ label: "TIME-SENSITIVE NOTES", content: notesContent });
+              logger.debug?.("[chat] Timed notes injected", {
+                messageId: message.id,
+                notesCount: allRelevantNotes.length,
+              });
+            }
+          }
+        } catch (error) {
+          logger.debug?.("[chat] Timed notes injection failed; continuing without it", {
+            messageId: message.id,
+            error: error?.message,
           });
         }
       }
