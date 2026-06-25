@@ -21,6 +21,12 @@ const {
 const { buildModelContext } = require("../context/modelContextBuilder");
 const { detectURLsInText, shouldFetchURL, fetchAndAnalyzeURL } = require("../context/urlHandler");
 const { buildAttachmentUnderstanding } = require("../context/attachmentUnderstanding");
+const { classifyEmotionalBeat, formatContinuityPrelude, isProposalText, isForgotProposalText } = require("../continuity/emotionalBeats");
+const { resolveToneMode, formatTonePrelude } = require("../continuity/toneModeResolver");
+const { buildVoiceRules } = require("../continuity/voiceFingerprintGuard");
+const { analyzeRepair, buildRepairPrelude, saveRepairBeat } = require("../relationshipRepair/engine");
+const { updateSystemTruth } = require("../systemTruth/runtimeState");
+const { curateRuntimeMemory } = require("../memory/runtimeCurator");
 
 function createChatPipeline({
   config,
@@ -159,6 +165,18 @@ function createChatPipeline({
         messageId: message.id,
         memoryCount: memories.length,
       });
+
+      const beatScope = {
+        user_scope: config.memory?.userScope || input.authorId || "user",
+        companion_id: config.memory?.companionId || config.companion?.id || "Dante",
+      };
+      const beatChannelContext = {
+        isDM: message.channel?.type === 1 || Boolean(message.channel?.isDMBased?.()),
+        isThread: Boolean(message.channel?.isThread?.()),
+        channelId: message.channel?.id || message.channelId || null,
+        isAdultPrivate: false,
+        modeName: selectedMode.name,
+      };
 
       const [stylePresets, appearancePresets] = await Promise.all([
         listPresetsSafe(imageStylePresets, config.memory?.userScope),
