@@ -659,6 +659,7 @@ function createChatPipeline({
         channelType: "discord",
         overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
         systemPromptPrefix: adultSystemPromptPrefix,
+        adultModeActive: adultScope.active,
         toolContext: {
           surface: "chat",
           userScope: config.memory?.userScope,
@@ -750,7 +751,7 @@ function createChatPipeline({
           const retryOutput = await callModel({
             config, logger, tools, mode: effectiveMode, message, input, recentHistory, memories,
             contextSections: [...contextSections, { label: "DUPLICATE REPLY REPAIR", content: "Do not repeat the previous reply. Answer the current user message directly in Dante’s voice." }],
-            channelType: "discord", overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null, systemPromptPrefix: adultSystemPromptPrefix,
+            channelType: "discord", overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null, systemPromptPrefix: adultSystemPromptPrefix, adultModeActive: adultScope.active,
             toolContext: { surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode, currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id, currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory },
           });
           const retryReply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput: retryOutput });
