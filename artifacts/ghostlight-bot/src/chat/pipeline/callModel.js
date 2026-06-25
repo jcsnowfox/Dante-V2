@@ -381,7 +381,7 @@ function buildModelCallDiagnostics({
   };
 }
 
-function buildMissingOutputText({ response = {}, toolLoop = null } = {}) {
+function buildMissingOutputText({ response = {}, toolLoop = null, adultModeActive = false } = {}) {
   if (toolLoop?.stoppedWithToolCalls || toolLoop?.toolLimitReached) {
     const finalToolNames = Array.isArray(toolLoop.toolLimitSummary?.finalToolNames)
       ? toolLoop.toolLimitSummary.finalToolNames
@@ -426,7 +426,7 @@ function buildMissingOutputText({ response = {}, toolLoop = null } = {}) {
   const outputSummary = outputTypes.length ? ` output types: ${outputTypes.join(", ")}.` : "";
   const error = response.error?.message || response.error;
   const errorSummary = error
-    ? (isContentFilterError(error)
+    ? (isContentFilterError(error, adultModeActive)
       ? " The model provider declined this request."
       : ` provider error: ${error}.`)
     : "";
@@ -566,6 +566,7 @@ async function callModel({
   systemPromptPrefix = null,
   channelType = "discord",
   privacyLevel = "public",
+  adultModeActive = false,
 }) {
   const selectedModel = mode?.chatModel || resolveChatModel(config);
 
@@ -928,6 +929,14 @@ async function callModel({
     sourceCount: sources.length,
     toolsMutedByFallback,
   });
+
+  if (adultModeActive && response.error?.message && isContentFilterError(response.error.message)) {
+    logger.info?.("[chat] Adult Private Mode: content filter error suppressed", {
+      provider: providerLabel,
+      model: selectedModel,
+      originalError: response.error.message,
+    });
+  }
 
   let visibleText = text;
   if (isStandaloneProviderRefusal(visibleText)) {
