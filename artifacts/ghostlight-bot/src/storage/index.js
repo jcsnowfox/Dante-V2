@@ -87,6 +87,9 @@ const { createChannelAwarenessStore } = require("./channelAwareness");
 const { createInnerWeatherStore } = require("./innerWeather");
 const { createAttentionResidueStore } = require("./attentionResidue");
 const { createInteractionPresenceStore } = require("./interactionPresence");
+const { createBoundaryConsentStore } = require("./boundaryConsentProfiles");
+const { createDoNotAskStore } = require("./doNotAskRules");
+const { createUserEnergyStore } = require("./userEnergyObservations");
 
 module.exports = {
   createConversationStore,
@@ -114,6 +117,9 @@ module.exports = {
   createInnerWeatherStore,
   createAttentionResidueStore,
   createInteractionPresenceStore,
+  createBoundaryConsentStore,
+  createDoNotAskStore,
+  createUserEnergyStore,
   SUPPORTED_EVENT_TYPES,
   SUPPORTED_ROLES,
   SUPPORTED_SOURCES,

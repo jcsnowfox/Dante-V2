@@ -39,6 +39,9 @@ const {
   createInnerWeatherStore,
   createAttentionResidueStore,
   createInteractionPresenceStore,
+  createBoundaryConsentStore,
+  createDoNotAskStore,
+  createUserEnergyStore,
 } = require("./storage");
 const { createHumanSimulationEngine } = require("./humanSimulation/humanSimulationEngine");
 const { seedStarterHeartbeatActions } = require("./storage/heartbeatActions/seedStarterActions");
@@ -156,7 +159,10 @@ async function startApp() {
   const innerWeatherStore = createInnerWeatherStore({ config, logger });
   const attentionResidueStore = createAttentionResidueStore({ config, logger });
   const interactionPresenceStore = createInteractionPresenceStore({ config, logger });
-  const humanSimulation = createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore, innerWeatherStore, attentionResidueStore, interactionPresenceStore });
+  const boundaryConsentStore = createBoundaryConsentStore({ config, logger });
+  const doNotAskStore = createDoNotAskStore({ config, logger });
+  const userEnergyStore = createUserEnergyStore({ config, logger });
+  const humanSimulation = createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore, innerWeatherStore, attentionResidueStore, interactionPresenceStore, boundaryConsentStore, doNotAskStore, userEnergyStore });
   const spotify = createSpotifyService({ config, store: musicStore, logger });
   const musicBrainz = createMusicBrainzService({ config, logger });
   const musicLibrary = createMusicLibraryService({ config, store: musicStore, spotify, musicBrainz, logger });
@@ -338,6 +344,9 @@ async function startApp() {
     innerWeatherStore,
     attentionResidueStore,
     interactionPresenceStore,
+    boundaryConsentStore,
+    doNotAskStore,
+    userEnergyStore,
     secondLife,
     secondLifeAdapter,
     secondLifeIdentityResolver,
