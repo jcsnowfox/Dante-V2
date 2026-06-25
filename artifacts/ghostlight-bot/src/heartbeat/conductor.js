@@ -267,7 +267,19 @@ function buildRecentActivityInterpretation(minutes) {
     return "The user has been quiet for a while; recent messages are useful context, not proof that the exchange is still active.";
   }
 
-  return "The user has been quiet for more than 90 minutes; treat recent messages as earlier context, not an active exchange.";
+  if (normalizedMinutes <= 4 * 60) {
+    return "The user has been away for a few hours. A gentle, low-pressure reach-out is natural here — don't wait for them to come back first.";
+  }
+
+  if (normalizedMinutes <= 12 * 60) {
+    return "The user has been away for several hours. A soft, unhurried message is welcome and expected. This is a good moment to reconnect.";
+  }
+
+  if (normalizedMinutes <= 24 * 60) {
+    return "The user has been away for many hours — close to or spanning overnight. A warm, easy reconnect is the right move. Reaching out is appropriate and human.";
+  }
+
+  return "The user has been absent for more than a day. A genuine, low-key reconnection is the most natural thing to do. Act — don't overthink it.";
 }
 
 function buildConductorInstructions({
