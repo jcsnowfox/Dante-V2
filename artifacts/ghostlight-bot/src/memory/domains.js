@@ -10,6 +10,7 @@ const SUPPORTED_MEMORY_DOMAINS = Object.freeze([
   "places",
   "preferences",
   "projects",
+  "relationship",
   "rituals",
   "routines",
   "stressors",
