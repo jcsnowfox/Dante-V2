@@ -810,6 +810,22 @@ function createQdrantMemoryProvider({ config, logger, memoryStore = null }) {
         });
       }
 
+      const allLayersFailed = layerResults.length === 0 && failedLayers.length >= layerSearches.length && layerSearches.length > 0;
+      if (allLayersFailed && memoryStore) {
+        logger.warn("[memory] All Qdrant layers failed; falling back to database memories", {
+          userScope: config.memory.userScope,
+          firstError: failedLayers[0]?.error || "",
+        });
+        const fallbackMemories = await memoryStore.listMemories({
+          userScope: config.memory.userScope,
+          activeOnly: true,
+          pinned: true,
+          limit: 20,
+        }).catch(() => []);
+        logger.info(`[memory] qdrant failed, db fallback used count=${fallbackMemories.length}`);
+        return fallbackMemories;
+      }
+
       const rankedHits = mergeRankedHits(layerResults);
       const filteredHits = filterHitsByRelativeScoreWindow(rankedHits);
 

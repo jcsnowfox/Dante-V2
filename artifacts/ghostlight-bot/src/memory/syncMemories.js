@@ -6,6 +6,7 @@ const {
   ensureCollection,
   upsertPoints,
 } = require("./qdrantClient");
+const { updateSystemTruth } = require("../systemTruth/runtimeState");
 
 function chunkArray(items, size) {
   const chunks = [];
@@ -63,6 +64,7 @@ async function syncMemoriesToQdrant({ config, memories, deps = {} }) {
           vectorSize: vectors[0].length,
         });
       } catch (error) {
+        updateSystemTruth("memory", { qdrantConnected: false, qdrantLastError: error?.message || String(error) });
         throw annotateMemoryStageError(error, "memory sync qdrant ensureCollection");
       }
       collectionReady = true;
@@ -80,6 +82,7 @@ async function syncMemoriesToQdrant({ config, memories, deps = {} }) {
     syncedCount += batch.length;
   }
 
+  updateSystemTruth("memory", { qdrantConnected: true, qdrantLastSuccessfulSync: new Date().toISOString(), qdrantIndexedCount: syncedCount, qdrantLastError: null });
   logger.info?.(`[memory-qdrant] sync completed synced=${syncedCount} skipped=0`);
   return {
     syncedCount,

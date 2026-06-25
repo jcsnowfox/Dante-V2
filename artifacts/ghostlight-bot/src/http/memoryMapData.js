@@ -357,14 +357,22 @@ async function prepareMemoryMapData({
       availableDomains: [],
       availableMemoryTypes: [],
       points: [],
+      qdrantError: null,
+      savedMemoryCount: totalActiveMemories,
     };
   }
 
-  const qdrantPoints = await getPoints({
-    config,
-    ids: memories.map((memory) => memory.memoryId),
-    withVector: true,
-  });
+  let qdrantPoints = [];
+  let qdrantError = null;
+  try {
+    qdrantPoints = await getPoints({
+      config,
+      ids: memories.map((memory) => memory.memoryId),
+      withVector: true,
+    });
+  } catch (err) {
+    qdrantError = err?.message || String(err);
+  }
   const qdrantPointById = new Map(
     qdrantPoints.map((point) => [String(point?.payload?.memory_id || point?.id || "").trim(), point]),
   );
@@ -432,6 +440,8 @@ async function prepareMemoryMapData({
       .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" })),
     availableMemoryTypes: sortMemoryTypes([...new Set(pointsWithNeighbors.map((point) => point.memoryType).filter(Boolean))]),
     points: pointsWithNeighbors,
+    qdrantError,
+    savedMemoryCount: memories.length,
   };
 }
 
