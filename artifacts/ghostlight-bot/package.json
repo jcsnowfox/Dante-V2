@@ -94,7 +94,8 @@
     "verify:user-energy-detector": "node scripts/verify-user-energy-detector.mjs",
     "verify:human-simulation-pack-5a": "node scripts/verify-human-simulation-pack-5a.mjs",
     "verify:human-simulation-pack-5a-runtime-wiring": "node scripts/verify-human-simulation-pack-5a-runtime-wiring.mjs",
-    "verify:human-simulation-pack-5a-privacy": "node scripts/verify-human-simulation-pack-5a-privacy.mjs"
+    "verify:human-simulation-pack-5a-privacy": "node scripts/verify-human-simulation-pack-5a-privacy.mjs",
+    "verify:dante-final-live-systems": "node scripts/verify-dante-final-live-systems.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

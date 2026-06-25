@@ -42,7 +42,12 @@ const {
   createBoundaryConsentStore,
   createDoNotAskStore,
   createUserEnergyStore,
+  createRecurringThemeStore,
+  createMemoryConfidenceProfileStore,
+  createSelfReflectionStore,
+  createProactivePresenceRuleStore,
 } = require("./storage");
+const { createWebSearchService } = require("./tools/webSearchService");
 const { createHumanSimulationEngine } = require("./humanSimulation/humanSimulationEngine");
 const { seedStarterHeartbeatActions } = require("./storage/heartbeatActions/seedStarterActions");
 const { createCacheService } = require("./cache");
@@ -162,7 +167,12 @@ async function startApp() {
   const boundaryConsentStore = createBoundaryConsentStore({ config, logger });
   const doNotAskStore = createDoNotAskStore({ config, logger });
   const userEnergyStore = createUserEnergyStore({ config, logger });
-  const humanSimulation = createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore, innerWeatherStore, attentionResidueStore, interactionPresenceStore, boundaryConsentStore, doNotAskStore, userEnergyStore });
+  const recurringThemeStore = createRecurringThemeStore({ config, logger });
+  const memoryConfidenceStore = createMemoryConfidenceProfileStore({ config, logger });
+  const selfReflectionStore = createSelfReflectionStore({ config, logger });
+  const proactivePresenceStore = createProactivePresenceRuleStore({ config, logger });
+  const webSearchService = createWebSearchService({ config, logger });
+  const humanSimulation = createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore, innerWeatherStore, attentionResidueStore, interactionPresenceStore, boundaryConsentStore, doNotAskStore, userEnergyStore, recurringThemeStore, memoryConfidenceStore, selfReflectionStore, proactivePresenceStore });
   const spotify = createSpotifyService({ config, store: musicStore, logger });
   const musicBrainz = createMusicBrainzService({ config, logger });
   const musicLibrary = createMusicLibraryService({ config, store: musicStore, spotify, musicBrainz, logger });
@@ -225,6 +235,7 @@ async function startApp() {
     emotionalBeatStore,
     promiseLedger,
     humanSimulation,
+    webSearchService,
   });
   const secondLifeReplyGenerator = createSecondLifeReplyGenerator({
     config,
@@ -347,6 +358,11 @@ async function startApp() {
     boundaryConsentStore,
     doNotAskStore,
     userEnergyStore,
+    recurringThemeStore,
+    memoryConfidenceStore,
+    selfReflectionStore,
+    proactivePresenceStore,
+    webSearchService,
     secondLife,
     secondLifeAdapter,
     secondLifeIdentityResolver,

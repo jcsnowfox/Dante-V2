@@ -24,6 +24,10 @@ const TABS = [
   { id: "boundaries", label: "Boundaries / Consent" },
   { id: "donotask", label: "Don't Ask Again" },
   { id: "energy", label: "User Energy" },
+  { id: "recurringthemes", label: "Recurring Themes" },
+  { id: "memconfidence", label: "Memory Confidence" },
+  { id: "selfreflection", label: "Self-Reflection" },
+  { id: "proactiverules", label: "Proactive Rules" },
 ];
 
 function renderTabNav(activeTab, helpers) {
@@ -206,7 +210,82 @@ function renderEnergyTab({ energyObservations, helpers }) {
   return latestBlock + `<table class="admin-table"><thead><tr><th>Created</th><th>Energy State</th><th>Confidence</th><th>Evidence</th><th>Scope</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-function renderHumanSimulationPage({ tab, prefs, events, followUps, channels, weatherHistory, residues, presenceList, boundaries, doNotAskRules, energyObservations, helpers, theme, themeLinks }) {
+function renderRecurringThemesTab({ recurringThemes, helpers }) {
+  const esc = helpers?.escapeHtml || escHtml;
+  if (!recurringThemes?.length) return "<p>No recurring themes detected yet.</p>";
+  const rows = recurringThemes.map((t) => `<tr>
+    <td>${esc(t.theme_key)}</td>
+    <td>${esc(t.theme_label)}</td>
+    <td>${t.evidence_count}</td>
+    <td>${esc(t.evidence_summary?.slice(0, 100))}</td>
+    <td>${t.adult_context ? "private" : "normal"}</td>
+    <td>${t.active ? "active" : "inactive"}</td>
+    <td>${fmtDate(t.last_seen_at)}</td>
+  </tr>`).join("");
+  return `<table class="admin-table"><thead><tr><th>Key</th><th>Label</th><th>Count</th><th>Evidence</th><th>Scope</th><th>Status</th><th>Last Seen</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderMemConfidenceTab({ memoryConfidenceProfiles, helpers }) {
+  const esc = helpers?.escapeHtml || escHtml;
+  if (!memoryConfidenceProfiles?.length) return "<p>No memory confidence profiles yet.</p>";
+  const rows = memoryConfidenceProfiles.map((p) => `<tr>
+    <td>${esc(p.topic_key)}</td>
+    <td>${esc(p.topic_summary?.slice(0, 80))}</td>
+    <td>${esc(p.confidence_level)}</td>
+    <td>${esc(p.evidence_summary?.slice(0, 80))}</td>
+    <td>${p.adult_context ? "private" : "normal"}</td>
+    <td>${p.active ? "active" : "inactive"}</td>
+    <td>${fmtDate(p.last_verified_at)}</td>
+  </tr>`).join("");
+  return `<table class="admin-table"><thead><tr><th>Topic Key</th><th>Summary</th><th>Confidence</th><th>Evidence</th><th>Scope</th><th>Status</th><th>Last Verified</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderSelfReflectionTab({ selfReflections, helpers }) {
+  const esc = helpers?.escapeHtml || escHtml;
+  if (!selfReflections?.length) return "<p>No self-reflection events yet.</p>";
+  const rows = selfReflections.map((r) => `<tr>
+    <td>${fmtDate(r.created_at)}</td>
+    <td>${esc(r.reflection_type)}</td>
+    <td>${esc(r.trigger_summary?.slice(0, 80))}</td>
+    <td>${esc(r.reflection_text?.slice(0, 100))}</td>
+    <td>${esc(r.emotional_tone)}</td>
+    <td>${r.adult_context ? "private" : "normal"}</td>
+  </tr>`).join("");
+  return `<table class="admin-table"><thead><tr><th>Created</th><th>Type</th><th>Trigger</th><th>Reflection</th><th>Tone</th><th>Scope</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderProactiveRulesTab({ proactivePresenceRules, helpers }) {
+  const esc = helpers?.escapeHtml || escHtml;
+  if (!proactivePresenceRules?.length) return "<p>No proactive presence rules saved yet.</p>";
+  const rows = proactivePresenceRules.map((r) => `<tr>
+    <td>${esc(r.topic_key)}</td>
+    <td>${esc(r.rule_type)}</td>
+    <td>${esc(r.rule_summary?.slice(0, 80))}</td>
+    <td>${r.cooldown_seconds}s</td>
+    <td>${r.requires_approval ? "yes" : "no"}</td>
+    <td>${r.adult_context ? "private" : "normal"}</td>
+    <td>${r.active ? "active" : "inactive"}</td>
+    <td>${fmtDate(r.last_triggered_at)}</td>
+  </tr>`).join("");
+  return `<table class="admin-table"><thead><tr><th>Topic</th><th>Type</th><th>Summary</th><th>Cooldown</th><th>Approval</th><th>Scope</th><th>Active</th><th>Last Triggered</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderWebSearchStatusBlock({ webSearchStatus }) {
+  if (!webSearchStatus) return "";
+  const s = webSearchStatus;
+  const keyDisplay = s.apiKeyConfigured ? `${escHtml(s.apiKeyMasked || "")} (configured)` : "not configured";
+  return `<div style="background:var(--bg-card,#1a1a2e);padding:1rem;border-radius:6px;margin-bottom:1.5rem">
+    <strong>Web Search:</strong> ${s.enabled ? "<span style='color:green'>enabled</span>" : "<span style='color:#aaa'>disabled</span>"}
+    &nbsp;|&nbsp; Provider: ${escHtml(s.provider)}
+    &nbsp;|&nbsp; API Key: ${keyDisplay}
+    &nbsp;|&nbsp; Max Results: ${s.maxResults}
+    &nbsp;|&nbsp; Timeout: ${s.timeoutMs}ms
+    ${s.lastSearchTime ? `<br><small>Last search: ${fmtDate(s.lastSearchTime)} — ${s.lastResultCount} results — query: ${escHtml(s.lastQuerySummary || "")}</small>` : ""}
+    ${s.lastSafeError ? `<br><small style="color:orange">Last error: ${escHtml(s.lastSafeError)}</small>` : ""}
+  </div>`;
+}
+
+function renderHumanSimulationPage({ tab, prefs, events, followUps, channels, weatherHistory, residues, presenceList, boundaries, doNotAskRules, energyObservations, recurringThemes, memoryConfidenceProfiles, selfReflections, proactivePresenceRules, webSearchStatus, helpers, theme, themeLinks }) {
   const { renderAdminShell } = helpers;
   const activeTab = tab || "preferences";
   const tabNav = renderTabNav(activeTab, helpers);
@@ -222,9 +301,14 @@ function renderHumanSimulationPage({ tab, prefs, events, followUps, channels, we
   else if (activeTab === "boundaries") tabContent = renderBoundariesTab({ boundaries: boundaries || [], helpers });
   else if (activeTab === "donotask") tabContent = renderDoNotAskTab({ doNotAskRules: doNotAskRules || [], helpers });
   else if (activeTab === "energy") tabContent = renderEnergyTab({ energyObservations: energyObservations || [], helpers });
+  else if (activeTab === "recurringthemes") tabContent = renderRecurringThemesTab({ recurringThemes: recurringThemes || [], helpers });
+  else if (activeTab === "memconfidence") tabContent = renderMemConfidenceTab({ memoryConfidenceProfiles: memoryConfidenceProfiles || [], helpers });
+  else if (activeTab === "selfreflection") tabContent = renderSelfReflectionTab({ selfReflections: selfReflections || [], helpers });
+  else if (activeTab === "proactiverules") tabContent = renderProactiveRulesTab({ proactivePresenceRules: proactivePresenceRules || [], helpers });
 
   const pageBody = [
-    renderPageIntro({ title: "Human Simulation", subtitle: "Micro-preferences, personal timeline, follow-up scheduler, channel awareness, inner weather, attention residue, presence, boundaries/consent, don't-ask-again rules, and user energy.", helpers }),
+    renderPageIntro({ title: "Human Simulation", subtitle: "Micro-preferences, personal timeline, follow-up scheduler, channel awareness, inner weather, attention residue, presence, boundaries/consent, don't-ask-again rules, user energy, recurring themes, memory confidence, self-reflection, and proactive presence rules.", helpers }),
+    renderWebSearchStatusBlock({ webSearchStatus }),
     `<nav class="subnav">${tabNav}</nav>`,
     `<section style="margin-top:1.5rem">${tabContent}</section>`,
   ].join("\n");

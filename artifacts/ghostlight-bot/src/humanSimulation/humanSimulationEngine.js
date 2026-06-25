@@ -10,8 +10,9 @@ const { calculateSilenceBucket, determineReentryMode, updatePresenceUserMessage,
 const { detectBoundaryLanguage, saveBoundaryConsent, retrieveRelevantBoundaries, formatBoundaryPrelude } = require("./boundaryConsentEngine");
 const { detectDoNotAskLanguage, saveDoNotAskRule, retrieveActiveRules, formatDoNotAskPrelude } = require("./doNotAskEngine");
 const { detectUserEnergy, saveEnergyObservation, retrieveRecentEnergy, formatUserEnergyPrelude } = require("./userEnergyEngine");
+const { detectRecurringTheme, saveRecurringTheme, retrieveRecurringThemes, formatRecurringThemePrelude, maybeCreateSelfReflection, checkProactivePresenceRules } = require("./pack5bEngine");
 
-function createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore, innerWeatherStore, attentionResidueStore, interactionPresenceStore, boundaryConsentStore, doNotAskStore, userEnergyStore }) {
+function createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore, innerWeatherStore, attentionResidueStore, interactionPresenceStore, boundaryConsentStore, doNotAskStore, userEnergyStore, recurringThemeStore, memoryConfidenceStore, selfReflectionStore, proactivePresenceStore }) {
   const scope = {
     userScope: config?.memory?.userScope || "user",
     companionId: config?.memory?.companionId || config?.companion?.id || "Dante",
@@ -32,6 +33,10 @@ function createHumanSimulationEngine({ config, logger, microPreferenceStore, per
         boundaryConsentStore?.init?.(),
         doNotAskStore?.init?.(),
         userEnergyStore?.init?.(),
+        recurringThemeStore?.init?.(),
+        memoryConfidenceStore?.init?.(),
+        selfReflectionStore?.init?.(),
+        proactivePresenceStore?.init?.(),
       ].filter(Boolean));
       logger?.info?.("[human-simulation] all stores initialised");
     },
@@ -268,6 +273,21 @@ function createHumanSimulationEngine({ config, logger, microPreferenceStore, per
         logger?.warn?.("[human-simulation] attention residue failed", { error: err?.message });
       }
 
+      // 10. Recurring Themes + Self-Reflection (Pack 5B)
+      try {
+        const detectedTheme = detectRecurringTheme(text);
+        if (detectedTheme) {
+          await saveRecurringTheme({ detected: detectedTheme, store: recurringThemeStore, userScope: scope.userScope, companionId: scope.companionId, adultPrivate });
+          logger?.debug?.(`[human-simulation] recurring theme saved key=${detectedTheme.theme_key}`);
+        }
+        const themes = await retrieveRecurringThemes({ store: recurringThemeStore, userScope: scope.userScope, companionId: scope.companionId, adultPrivate });
+        const themesSection = formatRecurringThemePrelude(themes);
+        if (themesSection) preludeSections.push(themesSection);
+        await maybeCreateSelfReflection({ store: selfReflectionStore, userScope: scope.userScope, companionId: scope.companionId, text, adultPrivate });
+      } catch (err) {
+        logger?.warn?.("[human-simulation] pack5b themes/reflection failed", { error: err?.message });
+      }
+
       // 7. Silence Behavior — calculate bucket/reentry, update presence, inject
       try {
         const presence = await interactionPresenceStore?.getPresence?.({
@@ -334,6 +354,10 @@ function createHumanSimulationEngine({ config, logger, microPreferenceStore, per
       get boundaryConsent() { return boundaryConsentStore; },
       get doNotAsk() { return doNotAskStore; },
       get userEnergy() { return userEnergyStore; },
+      get recurringThemes() { return recurringThemeStore; },
+      get memoryConfidence() { return memoryConfidenceStore; },
+      get selfReflection() { return selfReflectionStore; },
+      get proactivePresence() { return proactivePresenceStore; },
     },
   };
 }

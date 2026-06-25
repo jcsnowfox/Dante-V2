@@ -90,6 +90,10 @@ const { createInteractionPresenceStore } = require("./interactionPresence");
 const { createBoundaryConsentStore } = require("./boundaryConsentProfiles");
 const { createDoNotAskStore } = require("./doNotAskRules");
 const { createUserEnergyStore } = require("./userEnergyObservations");
+const { createRecurringThemeStore } = require("./recurringThemes");
+const { createMemoryConfidenceProfileStore } = require("./memoryConfidenceProfiles");
+const { createSelfReflectionStore } = require("./selfReflectionEvents");
+const { createProactivePresenceRuleStore } = require("./proactivePresenceRules");
 
 module.exports = {
   createConversationStore,
@@ -120,6 +124,10 @@ module.exports = {
   createBoundaryConsentStore,
   createDoNotAskStore,
   createUserEnergyStore,
+  createRecurringThemeStore,
+  createMemoryConfidenceProfileStore,
+  createSelfReflectionStore,
+  createProactivePresenceRuleStore,
   SUPPORTED_EVENT_TYPES,
   SUPPORTED_ROLES,
   SUPPORTED_SOURCES,

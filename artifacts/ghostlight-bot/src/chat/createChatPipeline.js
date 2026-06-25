@@ -80,6 +80,7 @@ function createChatPipeline({
   promiseLedger = null,
   memoryStore = null,
   humanSimulation = null,
+  webSearchService = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
@@ -619,6 +620,27 @@ function createChatPipeline({
         }
       }
       logger.info?.("[reply-trace] humanSimulation processed=true");
+
+      // Web Search — detect explicit search intent, run search, inject WEB SEARCH RESULTS section
+      if (webSearchService && !inDevMode) {
+        try {
+          const userText = String(input?.content || "");
+          const intent = webSearchService.detectSearchIntent(userText);
+          if (intent.shouldSearch && intent.confidence >= 0.7 && webSearchService.isEnabled()) {
+            logger.info?.(`[reply-trace] web-search intent=${intent.reason} confidence=${intent.confidence} query="${String(intent.searchQuery || "").slice(0, 50)}"`);
+            const searchResult = await webSearchService.search(intent.searchQuery, {});
+            if (!searchResult.unavailable && searchResult.results?.length) {
+              const lines = searchResult.results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`);
+              contextSections.push({ label: "WEB SEARCH RESULTS", content: lines.join("\n\n") });
+              logger.info?.(`[reply-trace] web-search results injected count=${searchResult.results.length}`);
+            } else if (searchResult.unavailable && searchResult.suggestedReply) {
+              logger.info?.(`[reply-trace] web-search unavailable reason=${searchResult.reason}`);
+            }
+          }
+        } catch (err) {
+          logger.warn?.("[chat] Web search failed; continuing without results", { messageId: message.id, error: err?.message });
+        }
+      }
 
       let modelOutput;
       try {
