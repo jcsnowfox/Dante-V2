@@ -102,11 +102,18 @@ function buildHeartbeatContextInstruction(automation) {
 }
 
 function buildAutomationInstruction({ config, automation }) {
-  if (!automation?.prompt?.trim()) {
-    return "";
-  }
-
   const userName = automation.userName || config.chat?.promptBlocks?.userName || "the user";
+
+  if (!automation?.prompt?.trim()) {
+    const actionType = getAutomationActionType(automation);
+    return [
+      `This is a scheduled automation trigger, not a direct message from ${userName}.`,
+      `Action type: ${actionType}.`,
+      "No specific prompt was provided for this trigger.",
+      "Do not describe, explain, or acknowledge the trigger system, your internal reasoning, or any system mechanics in your reply.",
+      "Respond naturally and in character as you normally would.",
+    ].join("\n");
+  }
   const actionType = getAutomationActionType(automation);
   const messageActionContinuityInstruction = buildMessageActionContinuityInstruction(automation);
   const heartbeatContextInstruction = buildHeartbeatContextInstruction(automation);
