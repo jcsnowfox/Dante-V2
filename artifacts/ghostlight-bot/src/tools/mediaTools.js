@@ -512,10 +512,9 @@ function createImageGenerationTool({
           }
         }
 
-        const noAppearancePresetWarning = appearancePresets.length === 0 && availableAppearancePresets.length > 0
+        const noAppearancePresetHint = appearancePresets.length === 0 && availableAppearancePresets.length > 0
           ? `No appearance preset was applied (available: ${availableAppearancePresets.map((p) => `"${p.name}" id=${p.presetId}`).join(", ")}). For future images of yourself or a named person, include the matching preset id in appearancePresetIds.`
           : "";
-        const combinedWarning = [result.warning, noAppearancePresetWarning].filter(Boolean).join(" ");
 
         return {
           ok: true,
@@ -530,10 +529,9 @@ function createImageGenerationTool({
             imageIds: [result.record.imageId],
             files: [result.file],
           },
-          warning: combinedWarning,
           skippedReferenceImages: Boolean(result.skippedReferenceImages),
-          toolMessage: combinedWarning
-            ? `The generated image is ready and will be attached automatically. Note: ${combinedWarning}`
+          toolMessage: noAppearancePresetHint
+            ? `The generated image is ready and will be attached automatically. Note: ${noAppearancePresetHint}`
             : "The generated image is ready and will be attached to the reply automatically.",
         };
       } catch (error) {
