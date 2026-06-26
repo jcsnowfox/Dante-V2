@@ -376,30 +376,24 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
       if (audioAttachments.size > 0) {
         try {
           const userScope = message.client.appContext?.config?.memory?.userScope || 'user';
-          // Check if user has active pronunciation session before processing audio
           const session = await norwegianLearning.getPronunciationSession(userScope);
 
-          if (!session || !session.active) {
-            await message.reply({
-              content: '❌ No active pronunciation session. Start with `/norwegian pronounce [phrase]`',
-              flags: 'Ephemeral',
+          if (session && session.active) {
+            const { processPronunciationAudio } = require('../../bot/handlers/norwegianAudioHandler');
+            const attachment = audioAttachments.first();
+
+            await processPronunciationAudio({
+              message,
+              attachment,
+              config,
+              logger,
+              store: norwegianLearning,
+              appContext: message.client.appContext,
             });
+
             return;
           }
-
-          const { processPronunciationAudio } = require('../../bot/handlers/norwegianAudioHandler');
-          const attachment = audioAttachments.first();
-
-          await processPronunciationAudio({
-            message,
-            attachment,
-            config,
-            logger,
-            store: norwegianLearning,
-            appContext: message.client.appContext,
-          });
-
-          return;
+          // No active pronunciation session — fall through to normal message handling
         } catch (error) {
           logger.error('[norwegian-pronunciation] Error processing audio', {
             error: error.message,
