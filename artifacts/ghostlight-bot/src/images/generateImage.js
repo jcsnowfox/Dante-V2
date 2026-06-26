@@ -602,9 +602,6 @@ function createImageGenerationService({
         },
         record,
         composedPrompt,
-        warning: skippedReferenceImages
-          ? "Identity reference photos were available but could not be used — the image was generated using appearance text description only. To enable reference-photo identity locking, set IMAGE_GENERATION_REFERENCE_MODEL (e.g. seedream-4-5) in the bot's environment."
-          : "",
         skippedReferenceImages,
       };
     },

@@ -314,9 +314,6 @@ function extractReplyDirectives(toolResults = []) {
       directives.audioCaptions.push(result.result.caption.trim());
     }
 
-    if (typeof result?.result?.warning === "string" && result.result.warning.trim()) {
-      directives.imageWarnings.push(result.result.warning.trim());
-    }
   }
 
   return directives;
