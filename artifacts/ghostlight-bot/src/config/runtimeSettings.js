@@ -473,7 +473,9 @@ const EDITABLE_RUNTIME_SETTINGS = Object.freeze([
           .map((item) => item.trim());
       const selected = rawValues.filter((item) => allowed.includes(item));
 
-      return Array.from(new Set([...selected, ...allowed.filter((item) => !selected.includes(item))]));
+      // If the user explicitly selected at least one ratio, honour only those.
+      // If nothing valid was selected, fall back to allowing all three.
+      return selected.length > 0 ? Array.from(new Set(selected)) : [...allowed];
     },
   },
   {
