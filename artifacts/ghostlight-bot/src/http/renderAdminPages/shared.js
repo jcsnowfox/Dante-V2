@@ -190,6 +190,7 @@ function getRuntimeState({ config, dailyThreadAutomation = null, conversationSto
         ? config.audio.gallerySavedSourceSurfaces
         : ["read_aloud", "chat", "scheduled", "heartbeat"],
     audioV3DeliveryTags: runtimeSettings["audio.v3DeliveryTags"] || config.audio?.v3DeliveryTags || "",
+    audioFishNlTags: runtimeSettings["audio.fishNlTags"] || config.audio?.fishNlTags || "",
     audioVoiceSettingsEnabled: Boolean(runtimeSettings["audio.voiceSettingsEnabled"] ?? config.audio?.voiceSettingsEnabled),
     audioVoiceStability: runtimeSettings["audio.voiceStability"] ?? config.audio?.voiceStability ?? 0.7,
     audioVoiceSimilarityBoost: runtimeSettings["audio.voiceSimilarityBoost"] ?? config.audio?.voiceSimilarityBoost ?? 0.85,

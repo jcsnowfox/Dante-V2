@@ -63,6 +63,10 @@ function normalizeV3DeliveryTags(value = "") {
   return bareTag ? `[${bareTag}]` : "";
 }
 
+function normalizeFishNlTags(value = "") {
+  return String(value || "").trim().slice(0, 500);
+}
+
 function applyV3DeliveryTags(text = "", { model = "", config = {} } = {}) {
   const normalizedText = String(text || "").trim();
   const tags = normalizeV3DeliveryTags(config.audio?.v3DeliveryTags || "");
@@ -500,6 +504,7 @@ module.exports = {
   isElevenV3AudioModel,
   listElevenLabsVoices,
   normalizeV3DeliveryTags,
+  normalizeFishNlTags,
   normalizeElevenLabsVoice,
   resolveElevenLabsVoiceSettings,
   resolveAudioMimeType,

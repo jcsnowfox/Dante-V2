@@ -128,6 +128,11 @@ const EDITABLE_RUNTIME_SETTINGS = Object.freeze([
     normalize: (value) => String(value || "").trim().replace(/\s+/g, " ").slice(0, 240),
   },
   {
+    key: "audio.fishNlTags",
+    path: ["audio", "fishNlTags"],
+    normalize: (value) => String(value || "").trim().slice(0, 500),
+  },
+  {
     key: "audio.voiceSettingsEnabled",
     path: ["audio", "voiceSettingsEnabled"],
     normalize: (value) => {
