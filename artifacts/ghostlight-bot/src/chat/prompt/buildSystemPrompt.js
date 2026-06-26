@@ -261,6 +261,7 @@ function buildImageGenerationInstruction({ config, availableToolNames = null }) 
     "If you decide to generate an image, call generate_image first; do not send a visible 'generating' status message instead.",
     "After deciding to generate an image, make the prompt concrete and cinematic: include the subject, pose or action, expression, outfit, setting, lighting, framing, and mood.",
     "If a recurring named person or character is actually present in the requested image and a matching appearance preset is available, use that appearance preset id when you call the tool.",
+    "When the image includes yourself — a selfie, a portrait, an image of you with the user — you MUST include your own appearance preset ID if one is listed for your name in the image generation context. Do not generate an image of yourself without your appearance preset; if none is configured, tell the user they need to set one up in the appearance presets panel before you can send a consistent selfie.",
     "Do not introduce a new person or character just to use an appearance preset.",
   ].join("\n");
 }
