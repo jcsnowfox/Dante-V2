@@ -154,7 +154,7 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
   });
   const recentJournalEntries = await innerContext.journalStore.listRecentEntries({
     userScope: innerContext.config.memory.userScope,
-    limit: 5,
+    limit: 12,
   }).catch((error) => {
     innerContext.logger.warn("[admin] Failed to load recent journals for home dashboard", {
       error: error?.message || String(error),
