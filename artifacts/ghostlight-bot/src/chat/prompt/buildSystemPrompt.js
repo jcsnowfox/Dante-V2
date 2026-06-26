@@ -1,4 +1,4 @@
-const { isElevenV3AudioModel, normalizeV3DeliveryTags } = require("../../audio/generateAudio");
+const { isElevenV3AudioModel, normalizeV3DeliveryTags, normalizeFishNlTags } = require("../../audio/generateAudio");
 const { assembleCompanionPrompt } = require("../../companion/assembleCompanionPrompt");
 
 function addSection(sections, title, content) {
@@ -390,10 +390,13 @@ function buildAudioGenerationInstruction({ config, availableToolNames = null }) 
     return "";
   }
 
-  const generatedAudioUsesV3 = isElevenV3AudioModel(config.audio?.generatedAudioModel);
+  const provider = String(config.audio?.ttsProvider || "elevenlabs").trim().toLowerCase();
+  const isFishAudio = provider === "fish_audio" || provider === "fish";
+  const generatedAudioUsesV3 = !isFishAudio && isElevenV3AudioModel(config.audio?.generatedAudioModel);
   const v3DeliveryTags = config.audio?.voiceSettingsEnabled
     ? normalizeV3DeliveryTags(config.audio?.v3DeliveryTags || "")
     : "";
+  const fishNlTags = isFishAudio ? normalizeFishNlTags(config.audio?.fishNlTags || "") : "";
 
   return [
     "Audio generation is available when the user directly asks for an audio clip, voice note, narration, spoken message, or sound-ready text.",
@@ -401,13 +404,20 @@ function buildAudioGenerationInstruction({ config, availableToolNames = null }) 
     "Do not say or imply that a voice note, audio clip, narration, or spoken message is being generated, attached, ready, or sent unless generate_audio has succeeded in this reply.",
     "If you decide to create audio, call generate_audio first; do not send a visible 'recording' or 'voice note incoming' status message instead.",
     "Do not use generate_audio for ordinary text replies or for read-aloud of your latest message; /read handles that.",
-    generatedAudioUsesV3
-      ? "Generated audio is configured to use Eleven v3. When useful, you may include sparse Eleven v3 audio tags in square brackets for delivery only, such as [chuckles], [clears throat], [sighs], [whispers], [pause], or [softly]. Use them only when they improve the performance, not as decoration."
-      : "When you call generate_audio, write the text as plain spoken language with no Markdown, lists, code blocks, URLs, visual formatting, or bracketed stage directions.",
+    isFishAudio
+      ? "Generated audio uses Fish Audio. You may embed free-form natural language style cues in square brackets directly in the spoken text, such as [sighs softly] or [laughing warmly]. Place them where they fit naturally in the flow — use them only when they genuinely improve the delivery, not as decoration."
+      : generatedAudioUsesV3
+        ? "Generated audio is configured to use Eleven v3. When useful, you may include sparse Eleven v3 audio tags in square brackets for delivery only, such as [chuckles], [clears throat], [sighs], [whispers], [pause], or [softly]. Use them only when they improve the performance, not as decoration."
+        : "When you call generate_audio, write the text as plain spoken language with no Markdown, lists, code blocks, URLs, visual formatting, or bracketed stage directions.",
+    isFishAudio && fishNlTags
+      ? `The user has configured preferred Fish Audio natural language tags: ${fishNlTags}. Draw on these styles when they suit the moment.`
+      : "",
     generatedAudioUsesV3 && v3DeliveryTags
       ? `The user has configured preferred Eleven v3 delivery tags for generated audio: ${v3DeliveryTags}. Make use of these tags when writing the spoken text.`
       : "",
-    "Outside Eleven v3 audio tags, keep generated audio text speech-ready and uncluttered.",
+    isFishAudio
+      ? "Outside bracket style cues, keep generated audio text speech-ready and uncluttered."
+      : "Outside Eleven v3 audio tags, keep generated audio text speech-ready and uncluttered.",
     "Use the caption field for a short flavour line to show beside the attachment.",
   ].filter(Boolean).join("\n");
 }

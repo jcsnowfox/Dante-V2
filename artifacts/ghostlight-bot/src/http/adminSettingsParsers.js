@@ -200,6 +200,7 @@ function parseAudioSettingsFields(fields) {
   includeField(raw, fields, "audio.generatedAudioModel", "audioGeneratedAudioModel");
   includeField(raw, fields, "audio.gallerySavedSourceSurfaces", "audioGallerySavedSourceSurfaces", (value) => readListField(value));
   includeField(raw, fields, "audio.v3DeliveryTags", "audioV3DeliveryTags");
+  includeField(raw, fields, "audio.fishNlTags", "audioFishNlTags");
   includeField(raw, fields, "audio.voiceSettingsEnabled", "audioVoiceSettingsEnabled", (value) => {
     return readBooleanField(value);
   });

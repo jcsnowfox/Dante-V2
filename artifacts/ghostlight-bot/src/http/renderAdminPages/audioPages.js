@@ -4,6 +4,14 @@ const { AUDIO_GALLERY_SOURCE_SURFACES } = require("../../audio/galleryPolicy");
 const ELEVEN_V3_AUDIO_TAG_HELP = "Eleven v3 can use sparse delivery tags in the spoken text, such as [chuckles], [clears throat], [sighs], [whispers], or [pause]. Ghostlight will only be prompted to use these when this model is selected.";
 const ELEVEN_V3_DELIVERY_TAGS_HELP = "Optional tags to prepend to Eleven v3 audio requests, such as [British accent] or [softly]. These only apply when the selected read-aloud or generated-audio model is Eleven v. 3.";
 const ADVANCED_VOICE_SETTINGS_HELP = "Optional per-request ElevenLabs voice tuning. Leave this off to use the saved voice defaults exactly as ElevenLabs provides them.";
+const FISH_NL_TAGS_HELP = "Fish Audio models support free-form natural language style cues in square brackets, such as [whispers sweetly] or [laughing nervously]. List suggested tags here — Ghostlight will weave them into generated audio text where they fit naturally.";
+
+const FISH_AUDIO_MODEL_OPTIONS = Object.freeze([
+  { value: "speech-1.6", label: "Speech 1.6 (latest)" },
+  { value: "speech-1.5", label: "Speech 1.5" },
+  { value: "s2.1-pro", label: "S2.1 Pro" },
+  { value: "s2.1", label: "S2.1" },
+]);
 
 const AUDIO_MODEL_OPTIONS = Object.freeze([
   { value: "eleven_flash_v2_5", label: "Eleven Flash v. 2.5" },
@@ -392,8 +400,8 @@ function renderAudioSettingsPage({ config, voiceOptions = [], theme = "light", h
     `<input id="audioFishVoiceId" name="audioFishVoiceId" type="text" value="${escapeHtml(state.audioFishVoiceId || "")}" placeholder="Paste a Fish Audio voice ID">`,
     "</div>",
     "<div>",
-    "<label for=\"audioFishModelId\">Fish Audio Model ID</label>",
-    `<input id="audioFishModelId" name="audioFishModelId" type="text" value="${escapeHtml(state.audioFishModelId || "")}" placeholder="Optional Fish model ID">`,
+    "<label for=\"audioFishModelId\">Fish Audio Model</label>",
+    `<select id="audioFishModelId" name="audioFishModelId">${renderOptions(FISH_AUDIO_MODEL_OPTIONS, state.audioFishModelId || "speech-1.6", helpers)}</select>`,
     "</div>",
     "<div class=\"image-settings-save\">",
     "<label>&nbsp;</label>",
@@ -439,6 +447,14 @@ function renderAudioSettingsPage({ config, voiceOptions = [], theme = "light", h
     `<input id="audioV3DeliveryTags" name="audioV3DeliveryTags" type="text" value="${escapeHtml(state.audioV3DeliveryTags || "")}" placeholder="[British accent]">`,
     "<p class=\"meta\">Only applied when advanced settings are enabled and the selected audio model is Eleven v. 3.</p>",
     "</div>",
+    `<div class="audio-settings-v3-tags-row"${state.audioTtsProvider === "fish_audio" ? "" : " hidden"} data-audio-fish-nl-tags-row>`,
+    "<label class=\"field-label-with-help\" for=\"audioFishNlTags\">",
+    "<span>Fish Audio Natural Language Tags</span>",
+    renderHelpIcon({ help: FISH_NL_TAGS_HELP }, helpers),
+    "</label>",
+    `<input id="audioFishNlTags" name="audioFishNlTags" type="text" value="${escapeHtml(state.audioFishNlTags || "")}" placeholder="[whispers sweetly], [laughing nervously]">`,
+    "<p class=\"meta\">Free-form bracket tags Ghostlight may use inline in generated Fish Audio text.</p>",
+    "</div>",
     "<div class=\"audio-voice-settings-grid\">",
     renderVoiceSlider({ id: "audioVoiceStability", label: "Stability", value: state.audioVoiceStability, helpers }),
     renderVoiceSlider({ id: "audioVoiceSimilarityBoost", label: "Similarity", value: state.audioVoiceSimilarityBoost, helpers }),
@@ -462,14 +478,21 @@ function renderAudioSettingsPage({ config, voiceOptions = [], theme = "light", h
   const select = document.getElementById('audioGeneratedAudioModel');
   const help = document.querySelector('[data-audio-v3-tag-help]');
   const tagRow = document.querySelector('[data-audio-v3-tags-row]');
+  const fishNlTagRow = document.querySelector('[data-audio-fish-nl-tags-row]');
   const voiceSettingsToggle = document.getElementById('audioVoiceSettingsEnabled');
   const voiceSettingsPanel = document.querySelector('[data-audio-voice-settings-panel]');
+  const providerRadios = document.querySelectorAll('[name="audioTtsProvider"]');
   if (!select || !help) return;
+  const getProvider = () => {
+    const checked = document.querySelector('[name="audioTtsProvider"]:checked');
+    return checked ? checked.value : 'none';
+  };
   const sync = () => {
     const generatedIsV3 = select.value === 'eleven_v3';
     const anyIsV3 = generatedIsV3 || (readSelect && readSelect.value === 'eleven_v3');
     help.hidden = !generatedIsV3;
     if (tagRow) tagRow.hidden = !anyIsV3;
+    if (fishNlTagRow) fishNlTagRow.hidden = getProvider() !== 'fish_audio';
   };
   const syncVoiceSettings = () => {
     if (voiceSettingsPanel && voiceSettingsToggle) voiceSettingsPanel.hidden = !voiceSettingsToggle.checked;
@@ -485,6 +508,7 @@ function renderAudioSettingsPage({ config, voiceOptions = [], theme = "light", h
   });
   if (readSelect) readSelect.addEventListener('change', sync);
   select.addEventListener('change', sync);
+  providerRadios.forEach((r) => r.addEventListener('change', sync));
   if (voiceSettingsToggle) voiceSettingsToggle.addEventListener('change', syncVoiceSettings);
   sync();
   syncVoiceSettings();
