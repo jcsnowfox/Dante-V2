@@ -13,6 +13,7 @@ const {
 } = require("../reactions/customEmojiPalette");
 const { safeJsonParse } = require("./toolUtils");
 const { normalizeGiphyItem, getGifSendMode } = require("../media/gifUrlNormalizer");
+const { normalizePresetName } = require("../images/presetContext");
 
 const DEFAULT_GIF_RESULT_LIMIT = 3;
 const MAX_GIF_RESULT_LIMIT = 5;
@@ -412,21 +413,32 @@ function createImageGenerationTool({
 
       const resolvedStylePresets = resolveSelectedPresets(selectedStylePresetIds, availableStylePresets);
       const resolvedAppearancePresets = resolveSelectedPresets(selectedAppearancePresetIds, availableAppearancePresets);
-      const stylePresets = resolvedStylePresets.presets;
-      const appearancePresets = resolvedAppearancePresets.presets;
+      let stylePresets = resolvedStylePresets.presets;
+      let appearancePresets = resolvedAppearancePresets.presets;
 
-      logger.debug?.("[tools] generate_image requested", {
+      logger.info?.("[tools:generate_image:diagnostic] Preset resolution complete", {
+        companionId: config.memory?.companionId || config.companion?.id || "",
+        personaName: config.chat?.promptBlocks?.personaName || "",
+        userScope,
         surface: context.surface || "unknown",
         conversationId: context.conversationId || null,
         channelId: context.channelId || null,
+        currentUserText: String(context.currentUserText || "").slice(0, 200),
         promptPreview: prompt.slice(0, 200),
         requestedAspectRatio: selectedAspectRatio || null,
         resolvedAspectRatio: aspectRatio,
         allowedAspectRatios,
-        selectedStylePresetIds,
-        selectedAppearancePresetIds,
-        resolvedStylePresetNames: stylePresets.map((preset) => preset.name),
-        resolvedAppearancePresetNames: appearancePresets.map((preset) => preset.name),
+        dashboardModel: config.imageGeneration?.model || "",
+        dashboardResolution: config.imageGeneration?.resolution || "",
+        imageGenerationEnabled: Boolean(config.imageGeneration?.enabled),
+        availableStylePresets: availableStylePresets.map((p) => ({ id: p.presetId, name: p.name })),
+        availableAppearancePresets: availableAppearancePresets.map((p) => ({ id: p.presetId, name: p.name, hasReferenceImage: Boolean(p.referenceImageStorageKey) })),
+        llmSelectedStylePresetIds: selectedStylePresetIds,
+        llmSelectedAppearancePresetIds: selectedAppearancePresetIds,
+        resolvedStylePresetNames: stylePresets.map((p) => p.name),
+        resolvedAppearancePresetNames: appearancePresets.map((p) => p.name),
+        unresolvedStyle: resolvedStylePresets.unresolved,
+        unresolvedAppearance: resolvedAppearancePresets.unresolved,
       });
 
       if (resolvedStylePresets.unresolved.length) {
@@ -471,6 +483,58 @@ function createImageGenerationTool({
           ok: false,
           error: `One or more selected appearance presets do not exist: ${errorMessage}.`,
         };
+      }
+
+      // Backend auto-injection: force companion's own appearance preset for self-images.
+      // This runs even when the LLM omitted appearancePresetIds — the backend detects the
+      // self-image signal and injects the preset so identity is consistent without LLM inference.
+      const companionPersonaName = String(config.chat?.promptBlocks?.personaName || "").trim();
+      if (companionPersonaName && availableAppearancePresets.length > 0) {
+        const normalizedPersonaName = normalizePresetName(companionPersonaName);
+        const companionOwnPreset = availableAppearancePresets.find((p) => {
+          const n = normalizePresetName(p.name);
+          return n === normalizedPersonaName || n.includes(normalizedPersonaName) || normalizedPersonaName.includes(n);
+        });
+        if (companionOwnPreset) {
+          const alreadyIncluded = appearancePresets.some((p) => p.presetId === companionOwnPreset.presetId);
+          const lowerPrompt = prompt.toLowerCase();
+          const userText = String(context.currentUserText || "").toLowerCase();
+          const nameParts = companionPersonaName.toLowerCase().split(/\s+/).filter((part) => part.length > 2);
+          const selfKeywords = /\b(selfie|self.?portrait|of\s+(yourself|you\b)|photo\s+of\s+(you\b)|pic\s+of\s+(you\b)|show\s+me\s+(you|yourself))\b/;
+          const isSelfImage = selfKeywords.test(userText) || nameParts.some((part) => lowerPrompt.includes(part));
+          if (isSelfImage && !alreadyIncluded) {
+            appearancePresets = [companionOwnPreset, ...appearancePresets];
+            logger.info?.("[tools:generate_image:diagnostic] Auto-injected companion own appearance preset", {
+              companionId: config.memory?.companionId || config.companion?.id || "",
+              personaName: companionPersonaName,
+              normalizedPersonaName,
+              presetId: companionOwnPreset.presetId,
+              presetName: companionOwnPreset.name,
+              forced: true,
+              isSelfImage,
+              lowerPromptPreview: lowerPrompt.slice(0, 100),
+              userTextPreview: userText.slice(0, 100),
+            });
+          } else {
+            logger.info?.("[tools:generate_image:diagnostic] Companion own preset check — no injection needed", {
+              companionId: config.memory?.companionId || config.companion?.id || "",
+              personaName: companionPersonaName,
+              presetId: companionOwnPreset.presetId,
+              presetName: companionOwnPreset.name,
+              alreadyIncluded,
+              isSelfImage,
+              lowerPromptPreview: lowerPrompt.slice(0, 100),
+              userTextPreview: userText.slice(0, 100),
+            });
+          }
+        } else {
+          logger.info?.("[tools:generate_image:diagnostic] No companion own preset found by name match", {
+            companionId: config.memory?.companionId || config.companion?.id || "",
+            personaName: companionPersonaName,
+            normalizedPersonaName,
+            availablePresetNames: availableAppearancePresets.map((p) => p.name),
+          });
+        }
       }
 
       const imageId = crypto.randomUUID();
