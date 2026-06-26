@@ -419,6 +419,9 @@ function buildAudioGenerationInstruction({ config, availableToolNames = null }) 
       ? "Outside bracket style cues, keep generated audio text speech-ready and uncluttered."
       : "Outside Eleven v3 audio tags, keep generated audio text speech-ready and uncluttered.",
     "Use the caption field for a short flavour line to show beside the attachment.",
+    "The caption replaces your text reply when audio is attached — do not also write a separate sentence announcing or describing the voice note. The attachment speaks for itself.",
+    "One voice note per turn. If generate_audio has already been called once this turn, do not call it again.",
+    "If the user reports receiving two voice notes, two messages, or two different voices: that is an infrastructure-level issue (two server instances briefly running at once). You have no backend access or logs. Acknowledge the glitch plainly, stay in character, and confirm that the underlying system is being corrected — do not invent a story about what you did wrong at the model level.",
   ].filter(Boolean).join("\n");
 }
 
