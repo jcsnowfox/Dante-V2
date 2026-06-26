@@ -513,7 +513,7 @@ function createImageGenerationTool({
         }
 
         const noAppearancePresetWarning = appearancePresets.length === 0 && availableAppearancePresets.length > 0
-          ? `No appearance preset was selected for this image. Available presets: ${availableAppearancePresets.map((p) => `"${p.name}" (${p.presetId})`).join(", ")}. If you or a named person should appear in this image, re-call generate_image with the correct appearancePresetIds.`
+          ? `No appearance preset was applied (available: ${availableAppearancePresets.map((p) => `"${p.name}" id=${p.presetId}`).join(", ")}). For future images of yourself or a named person, include the matching preset id in appearancePresetIds.`
           : "";
         const combinedWarning = [result.warning, noAppearancePresetWarning].filter(Boolean).join(" ");
 
