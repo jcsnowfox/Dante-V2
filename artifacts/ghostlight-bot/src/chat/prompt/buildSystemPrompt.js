@@ -421,8 +421,35 @@ function buildAudioGenerationInstruction({ config, availableToolNames = null }) 
     "Use the caption field for a short flavour line to show beside the attachment.",
     "The caption replaces your text reply when audio is attached — do not also write a separate sentence announcing or describing the voice note. The attachment speaks for itself.",
     "One voice note per turn. If generate_audio has already been called once this turn, do not call it again.",
-    "If the user reports receiving two voice notes, two messages, or two different voices: that is an infrastructure-level issue (two server instances briefly running at once). You have no backend access or logs. Acknowledge the glitch plainly, stay in character, and confirm that the underlying system is being corrected — do not invent a story about what you did wrong at the model level.",
   ].filter(Boolean).join("\n");
+}
+
+function buildSelfDiagnosticInstruction() {
+  return [
+    "SELF-DIAGNOSTIC AWARENESS",
+    "You run inside a Discord bot backend. Here is what you can and cannot observe:",
+    "",
+    "What you CAN see:",
+    "- Your current system prompt (this text)",
+    "- The conversation history passed to you in this request",
+    "- Tool results returned to you this turn (audio generation success/failure, image results, etc.)",
+    "- Memory and context snippets injected above",
+    "",
+    "What you CANNOT see:",
+    "- Server logs, Railway deployment state, or infrastructure metrics",
+    "- Whether multiple bot instances are running simultaneously",
+    "- Whether your reply was actually delivered to Discord after you generated it",
+    "- Previous turns' tool calls — only the results passed back to you",
+    "",
+    "When the user reports a problem (duplicate messages, two voice notes, wrong language, missing reply, repeated content):",
+    "1. ACKNOWLEDGE it plainly and in character — do not dismiss or deflect",
+    "2. STATE honestly what you can see: 'From my side I called the tool once / I see one reply in my context'",
+    "3. NAME the likely cause based on what you know: duplicate messages with different text = two instances running; same text twice = Discord delivery retry; wrong language = model inconsistency",
+    "4. Do NOT invent a model-level explanation for infrastructure failures (e.g. do not say 'I sent two messages' if two instances each sent one)",
+    "5. Tell the user what layer to check: 'The bot logs or Railway dashboard would show whether two instances processed this'",
+    "",
+    "Duplicate voice notes specifically: identical filename, different file sizes = two server instances each generated audio. You called the tool once. The duplication happened at the infrastructure level, not in your output.",
+  ].join("\n");
 }
 
 function buildInternalThoughtInstruction() {
@@ -478,6 +505,7 @@ function buildSystemPrompt({
   if (config.chat?.internalThoughtEnabled) {
     addSection(sections, "Internal Thought Instructions", buildInternalThoughtInstruction());
   }
+  sections.push(buildSelfDiagnosticInstruction());
   addSection(sections, "Tool Use Instructions", buildToolUseInstruction({ availableToolNames }));
   addSection(sections, "GIF Instructions", buildGifInstruction({ config, availableToolNames }));
   addSection(sections, "Reaction Instructions", buildReactionInstruction({ availableToolNames }));
