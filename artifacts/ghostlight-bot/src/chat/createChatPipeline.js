@@ -383,12 +383,17 @@ function createChatPipeline({
             isThread: message.channel?.isThread?.() ?? false,
             isPrivate: isDM,
           };
-          const arcResult = await emotionalArc.processMessage({
-            message: input.content,
-            recentHistory,
-            channelContext,
-            memoryContext: memories,
-          });
+          const arcResult = await Promise.race([
+            emotionalArc.processMessage({
+              message: input.content,
+              recentHistory,
+              channelContext,
+              memoryContext: memories,
+            }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("emotional arc timeout")), 5000),
+            ),
+          ]);
           if (arcResult?.preludeSection) {
             contextSections.push(arcResult.preludeSection);
             logger.debug?.("[chat] Emotional arc prelude injected", {
