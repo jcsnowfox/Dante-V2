@@ -80,6 +80,7 @@ async function loadImagePresetContextSection({
 }
 
 module.exports = {
+  normalizePresetName,
   listPresetsSafe,
   buildImagePresetContextSection,
   loadImagePresetContextSection,
