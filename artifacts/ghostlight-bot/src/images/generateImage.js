@@ -404,10 +404,9 @@ function createImageGenerationService({
         referenceImages.length = 0;
       }
 
-      // Track whether reference images were available but couldn't be used (proactively
-      // skipped because no reference model is configured, or dropped via 400 retry).
-      const hadReferenceImages = appearancePresets.some((p) => p?.referenceImageStorageKey && p?.referenceImageMimeType);
-      let skippedReferenceImages = hadReferenceImages && referenceImages.length === 0;
+      // Only warn users when references were unexpectedly dropped (API rejection retry).
+      // Proactive skips for models that don't support references are expected and silent.
+      let skippedReferenceImages = false;
 
       logger.debug?.("[images] Generating image", {
         model,
