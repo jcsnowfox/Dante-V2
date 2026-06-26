@@ -512,6 +512,11 @@ function createImageGenerationTool({
           }
         }
 
+        const noAppearancePresetWarning = appearancePresets.length === 0 && availableAppearancePresets.length > 0
+          ? `No appearance preset was selected for this image. Available presets: ${availableAppearancePresets.map((p) => `"${p.name}" (${p.presetId})`).join(", ")}. If you or a named person should appear in this image, re-call generate_image with the correct appearancePresetIds.`
+          : "";
+        const combinedWarning = [result.warning, noAppearancePresetWarning].filter(Boolean).join(" ");
+
         return {
           ok: true,
           imageId: result.record.imageId,
@@ -525,10 +530,10 @@ function createImageGenerationTool({
             imageIds: [result.record.imageId],
             files: [result.file],
           },
-          warning: result.warning || "",
+          warning: combinedWarning,
           skippedReferenceImages: Boolean(result.skippedReferenceImages),
-          toolMessage: result.warning
-            ? `The generated image is ready and will be attached automatically. Note: ${result.warning}`
+          toolMessage: combinedWarning
+            ? `The generated image is ready and will be attached automatically. Note: ${combinedWarning}`
             : "The generated image is ready and will be attached to the reply automatically.",
         };
       } catch (error) {

@@ -397,12 +397,17 @@ function createImageGenerationService({
         });
       } else if (MODELS_WITHOUT_REFERENCE_SUPPORT.has(primaryModel) && referenceImages.length > 0 && model === primaryModel) {
         // Primary model doesn't support references and no reference model configured — skip refs.
-        logger.warn?.("[images] Primary model does not support reference images and no referenceModel configured; generating without references", {
+        logger.warn?.("[images] Primary model does not support reference images and no referenceModel configured; generating without references. Set IMAGE_GENERATION_REFERENCE_MODEL (e.g. seedream-4-5) to enable identity photos.", {
           model: primaryModel,
           appearancePresetNames: appearancePresets.map((preset) => preset.name),
         });
         referenceImages.length = 0;
       }
+
+      // Track whether reference images were available but couldn't be used (proactively
+      // skipped because no reference model is configured, or dropped via 400 retry).
+      const hadReferenceImages = appearancePresets.some((p) => p?.referenceImageStorageKey && p?.referenceImageMimeType);
+      let skippedReferenceImages = hadReferenceImages && referenceImages.length === 0;
 
       logger.debug?.("[images] Generating image", {
         model,
@@ -444,7 +449,6 @@ function createImageGenerationService({
       };
       const requestUrl = `${resolveGetimgBaseUrl(config)}/v2/images/generations`;
       let effectiveRequestPayload = requestPayload;
-      let skippedReferenceImages = false;
       let response = await fetchImpl(requestUrl, {
         method: "POST",
         headers: requestHeaders,
@@ -600,7 +604,7 @@ function createImageGenerationService({
         record,
         composedPrompt,
         warning: skippedReferenceImages
-          ? `${model} could not complete this generation with reference images, so Ghostlight retried it using appearance text only.`
+          ? "Identity reference photos were available but could not be used — the image was generated using appearance text description only. To enable reference-photo identity locking, set IMAGE_GENERATION_REFERENCE_MODEL (e.g. seedream-4-5) in the bot's environment."
           : "",
         skippedReferenceImages,
       };
