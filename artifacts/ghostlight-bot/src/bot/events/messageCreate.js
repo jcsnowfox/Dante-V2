@@ -341,6 +341,28 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
       return;
     }
 
+    // Cross-instance deduplication: claim this message in the shared cache
+    // (atomic INSERT ... ON CONFLICT DO NOTHING) so a second container running
+    // concurrently during a Railway rolling deploy does not also reply.
+    if (cache?.claimMessageProcessing) {
+      try {
+        const claimed = await cache.claimMessageProcessing({ messageId: message.id });
+
+        if (!claimed) {
+          logger.info?.("[chat] Message already claimed by another instance; skipping", {
+            messageId: message.id,
+            channelId: message.channelId,
+          });
+          return;
+        }
+      } catch (claimError) {
+        logger.warn("[chat] Message claim check failed; proceeding anyway", {
+          messageId: message.id,
+          error: claimError.message,
+        });
+      }
+    }
+
     const botUserId = message.client.user?.id;
     const wasMentioned = Boolean(botUserId && message.mentions.users.has(botUserId));
     const conversationId = message.channel.isThread?.() ? message.channel.id : message.channelId;

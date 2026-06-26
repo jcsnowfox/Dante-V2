@@ -63,6 +63,23 @@ function createCacheService({ store, config }) {
       });
     },
 
+    async claimMessageProcessing({ messageId } = {}) {
+      if (!store.setIfAbsent || !messageId) {
+        return true;
+      }
+
+      const expiresAt = new Date(Date.now() + 120_000).toISOString();
+      const claimed = await store.setIfAbsent({
+        cacheKey: `msg-claim:${messageId}`,
+        cacheValue: 1,
+        expiresAt,
+      }, {
+        userScope: getUserScope(),
+      });
+
+      return claimed !== null;
+    },
+
     async getThreadTts({ threadId, userScope } = {}) {
       return this.get(`TTS:${String(threadId || "").trim()}`, { userScope });
     },
