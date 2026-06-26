@@ -313,7 +313,29 @@ function createHeartbeatService({
       }
 
       if (!target?.channelId) {
-        continue;
+        // Journal actions write to the journal store and don't require a Discord
+        // channel target. Fall back to the configured allowed channel so the
+        // executor has conversation context available; skip only if no channel
+        // is configured at all.
+        // Journal actions write to the journal store; thread actions start a
+        // new thread. Neither requires a pre-configured Discord channel target —
+        // fall back to the configured allowed channel so context is available.
+        if (action.actionType === "journal" || action.actionType === "thread") {
+          const fallbackChannelId = String(config.discord?.allowedChannelId || "").trim();
+
+          if (!fallbackChannelId) {
+            continue;
+          }
+
+          target = {
+            channelId: fallbackChannelId,
+            parentChannelId: null,
+            matchedBy: "fallback_allowed_channel",
+            mode: null,
+          };
+        } else {
+          continue;
+        }
       }
 
       const state = await getActionState(action, now);
