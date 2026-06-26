@@ -349,18 +349,28 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
         const claimed = await cache.claimMessageProcessing({ messageId: message.id });
 
         if (!claimed) {
-          logger.info?.("[chat] Message already claimed by another instance; skipping", {
+          logger.info("[chat] Message already claimed by another instance; skipping", {
             messageId: message.id,
             channelId: message.channelId,
           });
           return;
         }
+
+        logger.info("[chat] Message claim acquired; processing", {
+          messageId: message.id,
+          channelId: message.channelId,
+        });
       } catch (claimError) {
         logger.warn("[chat] Message claim check failed; proceeding anyway", {
           messageId: message.id,
           error: claimError.message,
         });
       }
+    } else {
+      logger.warn("[chat] claimMessageProcessing unavailable; deduplication skipped", {
+        messageId: message.id,
+        hasCacheObject: Boolean(cache),
+      });
     }
 
     const botUserId = message.client.user?.id;
