@@ -538,7 +538,7 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
       });
 
       try {
-        await conversations.recordEvent({
+        const claimed = await conversations.recordEvent({
           message,
           role: "user",
           source: "discord",
@@ -552,6 +552,20 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
             retrievalAccess: mode.retrievalAccess,
           },
         });
+
+        // conversations.recordEvent returns false when another instance already
+        // inserted this discord_message_id (ON CONFLICT DO NOTHING). This is
+        // the authoritative cross-instance dedup guard backed by the shared
+        // conversations DB (the conversations table must be shared for any
+        // continuity to work, making this reliable even with separate Railway
+        // services that have separate cache DBs).
+        if (claimed === false) {
+          logger.info("[chat] Message already recorded by another instance; skipping", {
+            messageId: message.id,
+            channelId: message.channelId,
+          });
+          return;
+        }
       } catch (error) {
         logger.error("[storage] Failed to persist inbound Discord message", {
           messageId: message.id,
