@@ -399,13 +399,14 @@ function createEmotionalArcStore({ config, logger }) {
 
   async function appendAuditLog({ companionId, eventType, decision, reason = null, inputSummary = null, outputSummary = null }) {
     if (!pool) return null;
-    const result = await pool.query(
+    // Fire-and-forget — audit writes must never block the reply pipeline.
+    pool.query(
       `INSERT INTO companion_emotion_audit_log
         (companion_id, event_type, decision, reason, input_summary, output_summary)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6)`,
       [companionId, eventType, decision, reason, inputSummary, outputSummary],
-    );
-    return result.rows[0] ? mapAuditRow(result.rows[0]) : null;
+    ).catch(() => {});
+    return null;
   }
 
   async function listAuditLog({ companionId, limit = 50 }) {
