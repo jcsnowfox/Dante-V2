@@ -438,7 +438,7 @@ function createConversationStore({ config, logger }) {
         metadata,
       });
 
-      await pool.query(
+      const { rows } = await pool.query(
         `
           INSERT INTO conversation_events (
             conversation_id,
@@ -456,6 +456,9 @@ function createConversationStore({ config, logger }) {
             created_at
           )
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13)
+          ON CONFLICT (discord_message_id) WHERE discord_message_id IS NOT NULL AND event_type = 'message'
+          DO NOTHING
+          RETURNING id
         `,
         [
           getConversationId(message),
@@ -473,6 +476,10 @@ function createConversationStore({ config, logger }) {
           createdAt || new Date(message.createdTimestamp || Date.now()),
         ],
       );
+
+      // Returns true if this was the first insert (this instance claimed the
+      // message), false if another instance already recorded it (duplicate).
+      return rows.length > 0;
     },
 
     async listEventsByConversationId({ conversationId, limit = 500 }) {
