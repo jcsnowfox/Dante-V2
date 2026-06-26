@@ -181,6 +181,41 @@ function createCacheStore({ config, logger }) {
       return mapCacheRow(row);
     },
 
+    async setIfAbsent(record, defaults = {}) {
+      const normalized = normalizeCacheRecord(record, defaults);
+      const { rows } = await pool.query(
+        `
+          INSERT INTO cache (
+            user_scope,
+            cache_key,
+            cache_value,
+            expires_at,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3::jsonb, $4, NOW(), NOW())
+          ON CONFLICT (user_scope, cache_key)
+          DO NOTHING
+          RETURNING
+            id,
+            user_scope,
+            cache_key,
+            cache_value,
+            expires_at,
+            created_at,
+            updated_at
+        `,
+        [
+          normalized.userScope,
+          normalized.cacheKey,
+          JSON.stringify(normalized.cacheValue),
+          normalized.expiresAt,
+        ],
+      );
+
+      return rows.length > 0 ? mapCacheRow(rows[0]) : null;
+    },
+
     async set(record, defaults = {}) {
       const normalized = normalizeCacheRecord(record, defaults);
       const { rows } = await pool.query(
