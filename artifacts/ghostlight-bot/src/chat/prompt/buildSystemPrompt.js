@@ -102,7 +102,7 @@ function buildHeartbeatContextInstruction(automation) {
 }
 
 function buildAutomationInstruction({ config, automation }) {
-  const userName = automation.userName || config.chat?.promptBlocks?.userName || "the user";
+  const userName = automation?.userName || config.chat?.promptBlocks?.userName || "the user";
 
   if (!automation?.prompt?.trim()) {
     const actionType = getAutomationActionType(automation);
