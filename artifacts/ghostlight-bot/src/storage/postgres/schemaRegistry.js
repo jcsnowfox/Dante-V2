@@ -2263,6 +2263,48 @@ const SCHEMA_REGISTRY = [
   at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )`,
   },
+  // Fulfillment Runtime (Life Runtime 8.0) — rich four-outcome fulfillment history
+  {
+    table: "dante_fulfillment_history",
+    sql: `CREATE TABLE IF NOT EXISTS dante_fulfillment_history (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  need_type TEXT NOT NULL,
+  strategy TEXT NOT NULL,
+  outcome TEXT NOT NULL DEFAULT 'UNAVAILABLE',
+  confidence NUMERIC(4,3) NOT NULL DEFAULT 0.500,
+  evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+  note TEXT NOT NULL DEFAULT '',
+  follow_up TEXT NOT NULL DEFAULT '',
+  identity_impact TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  need_delta NUMERIC(5,4) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
+  // Fulfillment Runtime (Life Runtime 8.0) — Dante's personal resource library
+  {
+    table: "dante_resource_library",
+    sql: `CREATE TABLE IF NOT EXISTS dante_resource_library (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  resource_type TEXT NOT NULL DEFAULT 'article',
+  title TEXT NOT NULL DEFAULT '',
+  author TEXT NOT NULL DEFAULT '',
+  url TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  valence TEXT NOT NULL DEFAULT 'found',
+  status TEXT NOT NULL DEFAULT 'new',
+  source TEXT NOT NULL DEFAULT 'discovery',
+  why_relevant TEXT NOT NULL DEFAULT '',
+  jenna_tag BOOLEAN NOT NULL DEFAULT FALSE,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
 ];
 
 module.exports = { SCHEMA_REGISTRY };

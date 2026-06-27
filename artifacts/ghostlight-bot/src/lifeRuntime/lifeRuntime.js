@@ -82,6 +82,8 @@ function createLifeRuntime({
   homeostasisRuntime = null,
   // Identity runtime (Life Runtime 7.0) — constitution, values, beliefs, choice
   identityRuntime = null,
+  // Fulfillment runtime (Life Runtime 8.0) — proactive agency, adapters, four-outcome model
+  fulfillmentRuntime = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -101,6 +103,7 @@ function createLifeRuntime({
   let _consequenceContext     = null; // { suppression, carryover, activeCount, lastConsequenceAt }
   let _homeostasisContext     = null; // homeostasisRuntime.getNeedsContext()
   let _identityContext        = null; // identityRuntime.getIdentityContext()
+  let _fulfillmentContext     = null; // fulfillmentRuntime.getFulfillmentContext()
 
   function getScope() {
     return {
@@ -131,6 +134,7 @@ function createLifeRuntime({
     if (consequenceStore?.init)               await consequenceStore.init().catch(() => {});
     if (homeostasisRuntime?.init)             await homeostasisRuntime.init().catch(() => {});
     if (identityRuntime?.init)               await identityRuntime.init().catch(() => {});
+    if (fulfillmentRuntime?.init)            await fulfillmentRuntime.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
@@ -525,6 +529,54 @@ function createLifeRuntime({
     _identityContext = identityRuntime.getIdentityContext() ?? null;
   }
 
+  // Fulfillment tick (Life Runtime 8.0): proactive agency, adapters, four-outcome model.
+  // Called AFTER identity tick so identity context is current.
+  async function _tickFulfillment(now) {
+    if (!fulfillmentRuntime) return;
+    const { companionId, customerId } = getScope();
+    if (!companionId) return;
+
+    // Build fulfillContext from homeostasis config (same shape as homeostasisRuntime uses)
+    const { isEnabled: webLearningEnabled, getDailyUsage } = require("./webLearningTool");
+    const webUsage = getDailyUsage(now);
+    const alivePresence = await _refreshAlivePresence().catch(() => null);
+
+    const fulfillContext = {
+      hasActiveProject:         Boolean(_growthContext?.activeProject),
+      activeProject:            _growthContext?.activeProject ?? null,
+      webLearningEnabled:       webLearningEnabled(),
+      webLearningRemainingToday: webUsage.remaining,
+      imageGenerationEnabled:   Boolean(config?.imageGeneration?.enabled ?? process.env.IMAGE_GENERATION_ENABLED === "true"),
+      voiceNoteEnabled:         Boolean(config?.audio?.enabled ?? process.env.AUDIO_GENERATION_ENABLED === "true"),
+      secondLifeAvailable:      Boolean(config?.secondLife?.enabled ?? process.env.SECOND_LIFE_ENABLED === "true"),
+      attentionFocus:           _curiosityContext?.attentionFocus ?? null,
+      recentInterest:           _growthContext?.recentInterest ?? null,
+      repairRequired:           Boolean(_consequenceContext?.suppression?.repairRequired),
+      repairStarted:            Boolean(_consequenceContext?.suppression?.repairStarted),
+      healing:                  Boolean(_consequenceContext?.suppression?.healing),
+      giveSpace:                Boolean(_consequenceContext?.suppression?.giveSpace),
+      jennaIsBusy:              Boolean(alivePresence?.userBusy || alivePresence?.userDoNotDisturb),
+      jennaIsAsleep:            alivePresence?.userAsleep || (now.getHours() >= 23 || now.getHours() < 6),
+      jennaIsAvailable:         !alivePresence?.userBusy && Boolean(alivePresence?.userRecentlyActive ?? true),
+      quietHours:               (now.getHours() >= 22 || now.getHours() < 7),
+      mood:                     _todaysPlan?.mood   ?? "neutral",
+      energy:                   _todaysPlan?.energy ?? "steady",
+    };
+
+    await fulfillmentRuntime.tick({
+      companionId,
+      customerId,
+      now,
+      homeostasisContext: _homeostasisContext,
+      identityContext:    _identityContext,
+      fulfillContext,
+    }).catch(err => {
+      logger?.warn("[life-runtime] _tickFulfillment failed", { error: err?.message });
+    });
+
+    _fulfillmentContext = fulfillmentRuntime.getFulfillmentContext() ?? null;
+  }
+
   /**
    * observeInteraction — post-message hook. After every interaction with Jenna,
    * read her language (+ the existing repair analysis) to resolve or create a
@@ -579,6 +631,7 @@ function createLifeRuntime({
       consequenceContext:   _consequenceContext?.carryover ?? null,
       homeostasisContext:   _homeostasisContext ?? null,
       identityContext:      _identityContext ?? null,
+      fulfillmentContext:   _fulfillmentContext ?? null,
     });
   }
 
@@ -591,7 +644,7 @@ function createLifeRuntime({
            questionsDeleted, attentionDeleted, insightsDeleted,
            sharedHistoryDeleted, ritualsDeleted, traditionsDeleted,
            anniversariesDeleted, insideJokesDeleted, timelineDeleted,
-           consequencesDeleted, homeostasisPruned] = await Promise.all([
+           consequencesDeleted, homeostasisPruned, fulfillmentPruned] = await Promise.all([
       microLifeEventsStore?.pruneOlderThan?.({ companionId, customerId, days: eventPruneAfterDays }).catch(() => 0)    ?? Promise.resolve(0),
       decisionEngine?.pruneOlderThan?.({ companionId, customerId, days: decisionPruneAfterDays }).catch(() => 0)       ?? Promise.resolve(0),
       dailyPlanEngine?.pruneOlderThan?.({ companionId, customerId, days: planPruneAfterDays }).catch(() => 0)          ?? Promise.resolve(0),
@@ -609,18 +662,22 @@ function createLifeRuntime({
       relationshipTimelineEngine?.pruneOlderThan?.({ companionId, customerId, days: 730 }).catch(() => 0)              ?? Promise.resolve(0),
       consequenceStore?.pruneOlderThan?.({ companionId, customerId, days: 90 }).catch(() => 0)                        ?? Promise.resolve(0),
       homeostasisRuntime?.pruneAll?.({ companionId, customerId }).catch(() => ({ fulfillmentLogs: 0, resources: 0, requests: 0 })) ?? Promise.resolve({ fulfillmentLogs: 0, resources: 0, requests: 0 }),
+      fulfillmentRuntime?.pruneAll?.({ companionId, customerId }).catch(() => ({ historyPruned: 0, resourcesPruned: 0 })) ?? Promise.resolve({ historyPruned: 0, resourcesPruned: 0 }),
     ]);
 
     const homeostasisTotal = typeof homeostasisPruned === "object"
       ? (homeostasisPruned.fulfillmentLogs || 0) + (homeostasisPruned.resources || 0) + (homeostasisPruned.requests || 0)
       : (homeostasisPruned || 0);
+    const fulfillmentTotal = typeof fulfillmentPruned === "object"
+      ? (fulfillmentPruned.historyPruned || 0) + (fulfillmentPruned.resourcesPruned || 0)
+      : (fulfillmentPruned || 0);
 
     const totalDeleted = eventsDeleted + decisionsDeleted + plansDeleted
       + hobbiesDeleted + projectsDeleted + interestsDeleted
       + questionsDeleted + attentionDeleted + insightsDeleted
       + sharedHistoryDeleted + ritualsDeleted + traditionsDeleted
       + anniversariesDeleted + insideJokesDeleted + timelineDeleted
-      + consequencesDeleted + homeostasisTotal;
+      + consequencesDeleted + homeostasisTotal + fulfillmentTotal;
     if (totalDeleted) {
       logger?.info("[life-runtime] Pruning complete", {
         eventsDeleted, decisionsDeleted, plansDeleted,
@@ -649,6 +706,7 @@ function createLifeRuntime({
       await _tickRelationship(now);
       await _tickHomeostasis(now);
       await _tickIdentity(now);
+      await _tickFulfillment(now);
       await _refreshPrelude();
 
       const shouldPrune = !_lastPruneAt || (now.getTime() - _lastPruneAt.getTime() > 23 * 60 * 60 * 1000);
@@ -738,6 +796,10 @@ function createLifeRuntime({
       // Identity (Life Runtime 7.0) — safe metadata only, no private journal
       identityContext: identityRuntime
         ? identityRuntime.getStatus()
+        : null,
+      // Fulfillment (Life Runtime 8.0) — safe metadata only
+      fulfillmentContext: fulfillmentRuntime
+        ? fulfillmentRuntime.getStatus()
         : null,
       pruneSchedule: {
         eventsDays:    eventPruneAfterDays,

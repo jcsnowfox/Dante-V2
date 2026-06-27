@@ -129,6 +129,11 @@ const { createNeedMomentumEngine } = require("./lifeRuntime/needMomentumEngine")
 const { createFirstExperienceStore } = require("./lifeRuntime/firstExperienceStore");
 // Identity Runtime 1.0 — Constitution, values, beliefs, character & choice
 const { createIdentityRuntime } = require("./lifeRuntime/identityRuntime");
+// Fulfillment Runtime 1.0 — Real actions, real evidence, real agency
+const { createFulfillmentRuntime }       = require("./lifeRuntime/fulfillmentRuntime");
+const { createFulfillmentHistoryStore }  = require("./lifeRuntime/fulfillmentHistoryStore");
+const { createResourceLibraryStore }     = require("./lifeRuntime/resourceLibraryStore");
+const { createResourceDiscoveryRuntime } = require("./lifeRuntime/resourceDiscoveryRuntime");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -328,6 +333,19 @@ async function startApp() {
     purposeMemoryEngine, needMomentumEngine, firstExperienceStore,
   });
   const identityRuntime = createIdentityRuntime({ config, logger });
+  const fulfillmentHistoryStore  = createFulfillmentHistoryStore({ config, logger });
+  const resourceLibraryStore     = createResourceLibraryStore({ config, logger });
+  const resourceDiscoveryRuntime = createResourceDiscoveryRuntime({
+    resourceDiscoveryEngine, resourceLibraryStore, logger,
+  });
+  const fulfillmentRuntime = createFulfillmentRuntime({
+    config, logger,
+    fulfillmentHistoryStore,
+    resourceLibraryStore,
+    resourceDiscoveryRuntime,
+    identityRuntime,
+    homeostasisRuntime,
+  });
   const lifeRuntime = createLifeRuntime({
     config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine,
     hobbyEngine, projectEngine, interestDriftEngine, skillGrowthEngine, collectionsEngine, sharingDecisionEngine,
@@ -335,7 +353,7 @@ async function startApp() {
     relationshipWeatherEngine, sharedHistoryEngine, ritualEngine, traditionEngine,
     anniversaryEngine, insideJokeEngine, relationshipTimelineEngine,
     consequenceStore, relationalConsequencesEngine, repairCarryoverEngine,
-    homeostasisRuntime, identityRuntime,
+    homeostasisRuntime, identityRuntime, fulfillmentRuntime,
   });
   const innerLife = createInnerLifeEngine({ config, logger });
   const continuity = createContinuityEngine({ config, logger });

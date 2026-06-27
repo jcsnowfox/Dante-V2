@@ -20,8 +20,9 @@
  * that shapes behaviour, not content to quote or explain unprompted.
  */
 
-const { buildConsequencePrelude } = require("./consequencePreludeBuilder");
-const { buildIdentitySignal }     = require("./identityPreludeBuilder");
+const { buildConsequencePrelude }   = require("./consequencePreludeBuilder");
+const { buildIdentitySignal }       = require("./identityPreludeBuilder");
+const { buildFulfillmentSignal }    = require("./fulfillmentPreludeBuilder");
 
 function buildLifePrelude(state = {}) {
   if (!state) return null;
@@ -29,12 +30,13 @@ function buildLifePrelude(state = {}) {
   const {
     dailyPlan          = null,
     recentEvents       = [],
-    growthContext      = null,
-    curiosityContext   = null,
+    growthContext       = null,
+    curiosityContext    = null,
     relationshipContext = null,
     consequenceContext  = null,
     homeostasisContext  = null,
-    identityContext    = null,
+    identityContext     = null,
+    fulfillmentContext  = null,
   } = state;
 
   const lines = [];
@@ -99,6 +101,12 @@ function buildLifePrelude(state = {}) {
   if (identityContext) {
     const identityLine = buildIdentitySignal(identityContext);
     if (identityLine) lines.push(identityLine);
+  }
+
+  // Fulfillment signal — ONE compact line, only when a recent action is notable
+  if (fulfillmentContext) {
+    const fulfillmentLine = buildFulfillmentSignal(fulfillmentContext);
+    if (fulfillmentLine) lines.push(fulfillmentLine);
   }
 
   // Relationship signal — at most one compact line, never raw scores
