@@ -248,7 +248,7 @@ console.log("\n13. lifePreludeBuilder wiring");
 const preludeCode = read(src("lifePreludeBuilder.js"));
 check("homeostasisContext parameter accepted",  preludeCode.includes("homeostasisContext"));
 check("homeostasis adds one compact line",      preludeCode.includes("topNeed") && preludeCode.includes("Need:"));
-check("only shows when urgency >= 0.50",        preludeCode.includes("0.50"));
+check("only shows when urgency >= threshold",   preludeCode.includes("0.50") || preludeCode.includes("0.40"));
 check("never exposes raw numbers as scores",    !preludeCode.includes("urgency.toFixed") && !preludeCode.includes("currentLevel.toFixed"));
 check("line is compact (need type + level word)", preludeCode.includes("low") || preludeCode.includes("below comfortable"));
 

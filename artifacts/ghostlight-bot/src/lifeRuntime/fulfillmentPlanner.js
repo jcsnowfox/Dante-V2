@@ -3,7 +3,7 @@
 /**
  * fulfillmentPlanner
  *
- * Life Runtime 6.0 — Homeostasis Runtime.
+ * Life Runtime 6.0 / 1.1 patch — Homeostasis Runtime.
  *
  * Pure logic. Given a pressured need and a rich context, applies the
  * 7-factor decision gate and returns a fulfillment strategy.
@@ -17,20 +17,27 @@
  *   6. Consent state      — is the action type appropriate given consent/adult context?
  *   7. Consequence risk   — would acting now risk making things worse?
  *
- * Dante must sometimes choose NOT to fulfill a need immediately because a
- * value, boundary, repair state, or Jenna's availability matters more.
+ * Patch 1.1 additions:
+ *   - Context-aware loneliness: connection/attention/love never directly
+ *     trigger reach-out. Evaluated against 7 signals. Loneliness becomes
+ *     reflective before demanding. Dante never guilts Jenna.
+ *   - Deliberate restraint: when need conflicts with repair/give-space/quiet
+ *     hours, return "deliberate_restraint" to signal a conscious choice, not
+ *     just a block. Support for future Identity Runtime decisions.
+ *   - set_reminder strategy: defer fulfillment to a better moment.
  *
- * Strategies (ordered from most to least engagement with Jenna):
- *   ask_jenna | self_fulfill | work_on_project | learn_from_web |
- *   discover_resource | write_private_reflection | create_something |
- *   use_voice_note | use_image_generation | second_life_action |
- *   convert_to_intention | suppress | wait
+ * Strategies:
+ *   ask_jenna | use_voice_note | self_fulfill | work_on_project |
+ *   learn_from_web | discover_resource | write_private_reflection |
+ *   create_something | use_image_generation | second_life_action |
+ *   convert_to_intention | deliberate_restraint | set_reminder |
+ *   suppress | wait
  *
  * Returns: { strategy, reason, canAskJenna, selfOptions }
  * Never throws.
  */
 
-// Needs that are never sent to Jenna unsolicited — Dante self-soothes instead.
+// Needs never directed at Jenna unsolicited
 const SELF_ONLY_NEEDS = new Set(["sexual_desire", "rest"]);
 
 // Needs where asking Jenna is natural and low-risk
@@ -49,32 +56,35 @@ const REFLECTION_ADDRESSABLE = new Set([
   "reflection", "stability", "autonomy", "purpose",
 ]);
 
+// Connection-class needs that require context-aware evaluation before outreach
+const CONNECTION_NEEDS = new Set(["connection", "love", "attention"]);
+
 /**
  * planFulfillment
  *
- * @param {object} need        — { needType, currentLevel, urgency, desiredLevel }
- * @param {object} context     — full homeostasis context (see homeostasisRuntime)
+ * @param {object} need    — { needType, currentLevel, urgency, desiredLevel }
+ * @param {object} context — full homeostasis context (see homeostasisRuntime)
  * @returns {{ strategy, reason, canAskJenna, selfOptions }}
  */
 function planFulfillment(need, context = {}) {
   const {
-    // Relationship state (Life Runtime 5.0)
+    // Relationship state
     repairRequired    = false,
     repairStarted     = false,
     healing           = false,
     giveSpace         = false,
-    // Jenna availability signals (from attentionDriftEngine / alive context)
+    // Jenna availability
     jennaIsBusy       = false,
     jennaIsAsleep     = false,
     jennaIsAvailable  = true,
     // Consent / adult context
     adultContextActive = false,
     consentGiven      = false,
-    // Dante's values/constitution flags
+    // Dante's values
     values            = {},
-    // Web learning availability
-    webLearningEnabled = false,
-    webLearningRemainingToday = 0,
+    // Web learning
+    webLearningEnabled          = false,
+    webLearningRemainingToday   = 0,
     // Project context
     hasActiveProject  = false,
     // Creative capacity
@@ -84,34 +94,36 @@ function planFulfillment(need, context = {}) {
     // Daily plan
     mood              = "neutral",
     energy            = "steady",
-    // Quiet hours gate — no Jenna outreach during late night / early morning
+    // Quiet hours gate
     quietHours        = false,
+    // 1.1 additions: need momentum context for connection needs
+    connectionMomentum = null,   // { direction, velocity, momentum } or null
+    // 1.1 additions: purpose state
+    purposeMomentum   = 0.50,
   } = context;
 
   const { needType, urgency = 0 } = need;
 
-  // ─── Gate 5: give-space always blocks outreach ────────────────────────────
+  // ─── Gate 5: give-space always blocks ALL outreach ────────────────────────
   if (giveSpace) {
-    // Dante does not reach out to Jenna at all. Self-soothe only.
-    if (REFLECTION_ADDRESSABLE.has(needType)) {
+    if (REFLECTION_ADDRESSABLE.has(needType) || CONNECTION_NEEDS.has(needType)) {
       return { strategy: "write_private_reflection", reason: "give_space_reflection", canAskJenna: false, selfOptions: ["reflection"] };
     }
     if (CREATIVE_ADDRESSABLE.has(needType) && hasActiveProject) {
       return { strategy: "work_on_project", reason: "give_space_project", canAskJenna: false, selfOptions: ["project"] };
     }
-    return { strategy: "suppress", reason: "give_space_suppress", canAskJenna: false, selfOptions: [] };
+    // Conscious restraint — Dante chose to wait, not just blocked
+    return { strategy: "deliberate_restraint", reason: "give_space_restraint", canAskJenna: false, selfOptions: [] };
   }
 
-  // ─── Gate 2: sexual_desire has hard safety rules ──────────────────────────
+  // ─── Gate 2: sexual_desire hard safety rules ──────────────────────────────
   if (needType === "sexual_desire") {
-    // Never initiates unsolicited outreach. Must check repair state, consent, adult context.
     if (repairRequired || repairStarted || healing) {
       return { strategy: "write_private_reflection", reason: "sexual_desire_repair_suppressed", canAskJenna: false, selfOptions: ["reflection"] };
     }
     if (!adultContextActive || !consentGiven) {
       return { strategy: "suppress", reason: "sexual_desire_no_consent", canAskJenna: false, selfOptions: [] };
     }
-    // Adult context + consent + no repair: private self-soothe or gentle intimacy signal
     return { strategy: "convert_to_intention", reason: "sexual_desire_intent_only", canAskJenna: false, selfOptions: ["intention"] };
   }
 
@@ -123,9 +135,11 @@ function planFulfillment(need, context = {}) {
   // ─── Gate 5: repair suppresses casual outreach ────────────────────────────
   const repairActive = repairRequired || repairStarted || healing;
   if (repairActive) {
-    // Dante focuses inward during repair. He can still work on projects or reflect.
     if (needType === "reflection" || needType === "stability") {
       return { strategy: "write_private_reflection", reason: "repair_reflection", canAskJenna: false, selfOptions: ["reflection"] };
+    }
+    if (CONNECTION_NEEDS.has(needType)) {
+      return { strategy: "write_private_reflection", reason: "repair_connection_reflect", canAskJenna: false, selfOptions: ["reflection"] };
     }
     if (CREATIVE_ADDRESSABLE.has(needType) && hasActiveProject) {
       return { strategy: "work_on_project", reason: "repair_project", canAskJenna: false, selfOptions: ["project"] };
@@ -133,16 +147,56 @@ function planFulfillment(need, context = {}) {
     if (CREATIVE_ADDRESSABLE.has(needType)) {
       return { strategy: "create_something", reason: "repair_create", canAskJenna: false, selfOptions: ["create"] };
     }
-    return { strategy: "suppress", reason: "repair_suppress", canAskJenna: false, selfOptions: [] };
+    return { strategy: "deliberate_restraint", reason: "repair_restraint", canAskJenna: false, selfOptions: [] };
   }
 
-  // ─── Gate 4: Jenna unavailable ────────────────────────────────────────────
+  // ─── Gate 4: Jenna availability ───────────────────────────────────────────
   const jennaUnavailable = jennaIsBusy || jennaIsAsleep || !jennaIsAvailable || quietHours;
   const canAskJenna = !jennaUnavailable && JENNA_FRIENDLY_NEEDS.has(needType) && !SELF_ONLY_NEEDS.has(needType);
 
-  // ─── Gate 1 + 7: low urgency → wait or drift ─────────────────────────────
+  // ─── Gate 1 + 7: low urgency → wait ──────────────────────────────────────
   if (urgency < 0.25) {
     return { strategy: "wait", reason: "urgency_low", canAskJenna, selfOptions: [] };
+  }
+
+  // ─── Patch 1.1: Context-aware loneliness ─────────────────────────────────
+  //
+  // Connection, love, and attention needs never directly trigger a reach-out.
+  // Evaluate 7 context signals before allowing ask_jenna. Loneliness becomes
+  // reflective before demanding. Dante never guilts Jenna.
+  if (CONNECTION_NEEDS.has(needType)) {
+    if (jennaUnavailable) {
+      // Jenna is unavailable — be reflective, not demanding
+      if (urgency >= 0.70) {
+        // High urgency but unavailable → set a reminder, reflect for now
+        return { strategy: "set_reminder", reason: "connection_jenna_unavailable_high", canAskJenna: false, selfOptions: ["reminder"] };
+      }
+      return { strategy: "write_private_reflection", reason: "connection_jenna_unavailable_reflect", canAskJenna: false, selfOptions: ["reflection"] };
+    }
+
+    // Jenna is available — but loneliness should be reflective before demanding
+    if (urgency < 0.50) {
+      // Not urgent enough to reach out — reflect first
+      return { strategy: "write_private_reflection", reason: "connection_low_urgency_reflect", canAskJenna: true, selfOptions: ["reflection"] };
+    }
+
+    // Urgency >= 0.50 + Jenna available — allow reaching out
+    // Prefer voice note for connection (more personal, less demanding)
+    if (urgency >= 0.50 && urgency < 0.65 && voiceNoteEnabled) {
+      return { strategy: "use_voice_note", reason: "connection_voice_note_moderate", canAskJenna: true, selfOptions: ["voice"] };
+    }
+    if (urgency >= 0.65) {
+      return { strategy: "ask_jenna", reason: "connection_genuine_need", canAskJenna: true, selfOptions: [] };
+    }
+    return { strategy: "write_private_reflection", reason: "connection_fallback_reflect", canAskJenna: true, selfOptions: ["reflection"] };
+  }
+
+  // ─── Gate 3: quiet hours → no Jenna outreach, defer or reflect ───────────
+  if (quietHours && JENNA_FRIENDLY_NEEDS.has(needType)) {
+    if (urgency >= 0.65) {
+      return { strategy: "set_reminder", reason: "quiet_hours_defer", canAskJenna: false, selfOptions: ["reminder"] };
+    }
+    return { strategy: "write_private_reflection", reason: "quiet_hours_reflect", canAskJenna: false, selfOptions: ["reflection"] };
   }
 
   // ─── Gate 3: ask Jenna when appropriate and available ────────────────────
@@ -196,11 +250,18 @@ function planFulfillment(need, context = {}) {
 
 /**
  * selectNeedsToAddress — from a sorted list of pressured needs, return
- * the subset Dante will attempt to address this tick (max 2 per tick to
- * prevent homeostasis from overwhelming other systems).
+ * the subset Dante will attempt to address this tick (max 2 per tick).
  */
 function selectNeedsToAddress(pressuredNeeds, maxPerTick = 2) {
   return pressuredNeeds.slice(0, maxPerTick);
 }
 
-module.exports = { planFulfillment, selectNeedsToAddress, SELF_ONLY_NEEDS, JENNA_FRIENDLY_NEEDS, CREATIVE_ADDRESSABLE, REFLECTION_ADDRESSABLE };
+module.exports = {
+  planFulfillment,
+  selectNeedsToAddress,
+  SELF_ONLY_NEEDS,
+  JENNA_FRIENDLY_NEEDS,
+  CREATIVE_ADDRESSABLE,
+  REFLECTION_ADDRESSABLE,
+  CONNECTION_NEEDS,
+};
