@@ -567,12 +567,13 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           return;
         }
       } catch (error) {
-        logger.error("[storage] Failed to persist inbound Discord message", {
+        logger.error("[storage] Failed to persist inbound Discord message; skipping to avoid duplicate processing", {
           messageId: message.id,
           channelId: message.channelId,
           conversationId,
           error: error.message,
         }, error);
+        return;
       }
 
       await sendTypingIndicatorSafely({
