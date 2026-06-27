@@ -4,6 +4,7 @@ const path = require("node:path");
 
 const pipelinePath = path.resolve(__dirname, "../createChatPipeline.js");
 const callModelPath = path.resolve(__dirname, "../pipeline/callModel.js");
+const replyFallbacksPath = path.resolve(__dirname, "../../continuity/replyFallbacks.js");
 const { getAdultPrivateModeScope } = require(pipelinePath);
 
 test("adult mode enabled + blank Private Channel ID + normal channel message stays normal", () => {
@@ -47,7 +48,9 @@ test("adult mode enabled + configured private channel + different channel stays 
 });
 
 function reloadPipelineWithCallModelSpy(spy) {
+  // Clear both pipeline and replyFallbacks so the in-memory dedup store resets
   delete require.cache[pipelinePath];
+  delete require.cache[replyFallbacksPath];
   require.cache[callModelPath] = {
     id: callModelPath,
     filename: callModelPath,

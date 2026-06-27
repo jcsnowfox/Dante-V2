@@ -282,6 +282,12 @@ async function sendTypingIndicatorSafely({
   }
 }
 
+// Module-level in-process guard: prevents the same Node.js process from
+// handling the same Discord message ID twice simultaneously (e.g. Discord.js
+// event replay on reconnect). The Postgres-backed cache/recordEvent checks
+// handle cross-process dedup; this handles within-process dedup at zero cost.
+const IN_FLIGHT_MESSAGE_IDS = new Set();
+
 function createMessageCreateHandler({ config, logger, chatPipeline, companion, conversations, channelModes, generatedImages, generatedAudio, cache, reactionContext, settingsStore = null, norwegianLearning = null, conversationFollowupStore = null, timedNotesStore = null }) {
   return async (message) => {
     if (message.author.bot) {
@@ -311,6 +317,16 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
       });
       return;
     }
+
+    if (IN_FLIGHT_MESSAGE_IDS.has(message.id)) {
+      logger.info("[chat] Message already in-flight in this process; skipping duplicate event", {
+        messageId: message.id,
+        channelId: message.channelId,
+        serviceId: process.env.RAILWAY_SERVICE_ID || null,
+      });
+      return;
+    }
+    IN_FLIGHT_MESSAGE_IDS.add(message.id);
 
     // Developer mode: JC (or any DEVELOPER_USER_IDS user) in a *test* channel.
     // Must be evaluated BEFORE the allowedChannelId gate so that test channels
@@ -948,6 +964,7 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
       if (typingInterval) {
         clearInterval(typingInterval);
       }
+      IN_FLIGHT_MESSAGE_IDS.delete(message.id);
     }
   };
 }

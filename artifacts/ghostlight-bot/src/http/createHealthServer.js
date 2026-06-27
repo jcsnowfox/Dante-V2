@@ -1,6 +1,7 @@
 const fs = require("node:fs/promises");
 const http = require("http");
 const path = require("node:path");
+const { downloadBufferFromBucket } = require("../images/bucketStorage");
 const { buildGeneratedWeeklyMemoryRecord, generateWeeklyArtifacts } = require("../memory/summaryIngestion");
 const { stageDailySummaryArtifacts, stageImportedSummaryArtifacts } = require("../memory/stageSummaryArtifacts");
 const { promoteApprovedGeneratedMemories } = require("../memory/promoteGeneratedMemories");
