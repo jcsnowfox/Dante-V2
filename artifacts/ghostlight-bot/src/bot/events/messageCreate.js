@@ -348,10 +348,13 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
       try {
         const claimed = await cache.claimMessageProcessing({ messageId: message.id });
 
+        const claimServiceId = process.env.RAILWAY_SERVICE_ID || null;
+
         if (!claimed) {
           logger.info("[chat] Message already claimed by another instance; skipping", {
             messageId: message.id,
             channelId: message.channelId,
+            serviceId: claimServiceId,
           });
           return;
         }
@@ -359,11 +362,13 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
         logger.info("[chat] Message claim acquired; processing", {
           messageId: message.id,
           channelId: message.channelId,
+          serviceId: claimServiceId,
         });
       } catch (claimError) {
         logger.error("[chat] Message claim check failed; skipping to avoid duplicate processing", {
           messageId: message.id,
           error: claimError.message,
+          serviceId: process.env.RAILWAY_SERVICE_ID || null,
         });
         return;
       }
@@ -371,6 +376,7 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
       logger.warn("[chat] claimMessageProcessing unavailable; deduplication skipped", {
         messageId: message.id,
         hasCacheObject: Boolean(cache),
+        serviceId: process.env.RAILWAY_SERVICE_ID || null,
       });
     }
 

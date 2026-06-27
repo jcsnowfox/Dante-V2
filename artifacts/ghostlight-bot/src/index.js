@@ -132,12 +132,16 @@ async function startApp() {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
 
+  const databaseHost = (() => {
+    try { return new URL(config?.database?.url || process.env.DATABASE_URL || "").hostname || null; } catch { return null; }
+  })();
   logger.info("[app] Starting Ghostlight", {
     nodeEnv: config.nodeEnv,
     railwayServiceId: process.env.RAILWAY_SERVICE_ID || null,
     railwayDeploymentId: process.env.RAILWAY_DEPLOYMENT_ID || null,
     railwayReplicaId: process.env.RAILWAY_REPLICA_ID || null,
     railwayEnvironmentId: process.env.RAILWAY_ENVIRONMENT_ID || null,
+    databaseHost,
   });
 
   await runStartupStep("schemaGuard", logger, () => runSchemaGuard({ config, logger }));
