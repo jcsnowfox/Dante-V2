@@ -10,6 +10,11 @@
  * not enough to narrate it. Dante should feel like he has a life, not
  * like he is reading a script.
  *
+ * Patch 1.1: Homeostasis signal is now ONE contextual narrative line, not
+ * a raw need dump. Shows: what the need is, what constraint exists, what
+ * Dante chose instead. Example: "Connection low, Jenna requested space —
+ * reflecting privately."
+ *
  * Label: DANTE PRIVATE LIFE [internal]
  * The [internal] tag signals the model to treat this as private context
  * that shapes behaviour, not content to quote or explain unprompted.
@@ -20,7 +25,15 @@ const { buildConsequencePrelude } = require("./consequencePreludeBuilder");
 function buildLifePrelude(state = {}) {
   if (!state) return null;
 
-  const { dailyPlan = null, recentEvents = [], growthContext = null, curiosityContext = null, relationshipContext = null, consequenceContext = null, homeostasisContext = null } = state;
+  const {
+    dailyPlan          = null,
+    recentEvents       = [],
+    growthContext      = null,
+    curiosityContext   = null,
+    relationshipContext = null,
+    consequenceContext  = null,
+    homeostasisContext  = null,
+  } = state;
 
   const lines = [];
 
@@ -32,13 +45,10 @@ function buildLifePrelude(state = {}) {
   }
 
   if (dailyPlan) {
-    const mood = dailyPlan.mood || "neutral";
+    const mood   = dailyPlan.mood   || "neutral";
     const energy = dailyPlan.energy || "steady";
-    const focus = dailyPlan.focus || "";
-    const header = focus
-      ? `Today: ${mood}, ${energy} energy — ${focus}`
-      : `Today: ${mood}, ${energy} energy`;
-    lines.push(header);
+    const focus  = dailyPlan.focus  || "";
+    lines.push(focus ? `Today: ${mood}, ${energy} energy — ${focus}` : `Today: ${mood}, ${energy} energy`);
 
     if (dailyPlan.privateActivity) {
       lines.push(`Currently: ${dailyPlan.privateActivity}`);
@@ -46,15 +56,12 @@ function buildLifePrelude(state = {}) {
   }
 
   const visibleEvents = (recentEvents || [])
-    .filter((e) => e && e.description)
+    .filter(e => e && e.description)
     .slice(0, 2)
-    .map((e) => `• ${e.description}`);
+    .map(e => `• ${e.description}`);
+  if (visibleEvents.length) lines.push(...visibleEvents);
 
-  if (visibleEvents.length) {
-    lines.push(...visibleEvents);
-  }
-
-  // Growth context — at most one line to stay within token budget
+  // Growth context — at most one line
   if (growthContext) {
     const { activeHobby, activeProject, recentInterest } = growthContext;
     if (activeProject?.title) {
@@ -78,11 +85,12 @@ function buildLifePrelude(state = {}) {
     }
   }
 
-  // Homeostasis signal — one compact line when a need is pressured enough to shape tone
-  if (homeostasisContext && homeostasisContext.topNeed && homeostasisContext.highestUrgency >= 0.50) {
-    const { needType, urgency } = homeostasisContext.topNeed;
-    const level = urgency >= 0.75 ? "low" : "below comfortable";
-    lines.push(`Need: ${needType.replace(/_/g, " ")} is ${level}`);
+  // Homeostasis signal — ONE contextual narrative line (Patch 1.1).
+  // Shows what the need is, what constraint applies, and what Dante chose
+  // instead. Never dumps raw need scores. Only fires when urgency is notable.
+  if (homeostasisContext) {
+    const signal = _buildHomeostasisSignal(homeostasisContext);
+    if (signal) lines.push(signal);
   }
 
   // Relationship signal — at most one compact line, never raw scores
@@ -99,9 +107,101 @@ function buildLifePrelude(state = {}) {
   if (!lines.length) return null;
 
   return {
-    label: "DANTE PRIVATE LIFE [internal — inform natural references, do not narrate directly]",
+    label:   "DANTE PRIVATE LIFE [internal — inform natural references, do not narrate directly]",
     content: lines.join("\n"),
   };
+}
+
+/**
+ * _buildHomeostasisSignal — builds one compact contextual narrative line.
+ *
+ * Shows: need + constraint + Dante's chosen response. Never raw scores.
+ * Returns null if nothing notable enough to surface.
+ */
+function _buildHomeostasisSignal(ctx) {
+  if (!ctx) return null;
+  const { topNeed, highestUrgency, topPlan } = ctx;
+
+  // Only surface when urgency is notable
+  if (!topNeed || highestUrgency < 0.40) return null;
+
+  const needLabel = topNeed.needType.replace(/_/g, " ");
+  const strategy  = topPlan?.strategy;
+  const reason    = topPlan?.reason ?? "";
+
+  if (!strategy) {
+    // No plan yet — just surface the need level
+    const level = highestUrgency >= 0.75 ? "low" : "below comfortable";
+    return `Need: ${needLabel} is ${level}`;
+  }
+
+  // Build contextual narrative based on what Dante chose to do
+  if (strategy === "deliberate_restraint") {
+    if (reason.includes("give_space")) {
+      return `${_cap(needLabel)} low, Jenna requested space — choosing patience`;
+    }
+    if (reason.includes("repair")) {
+      return `${_cap(needLabel)} low, repair in progress — holding back`;
+    }
+    if (reason.includes("quiet")) {
+      return `${_cap(needLabel)} needs attention, late hours — waiting until morning`;
+    }
+    return `${_cap(needLabel)} low — choosing restraint`;
+  }
+
+  if (strategy === "write_private_reflection") {
+    if (reason.includes("give_space")) {
+      return `${_cap(needLabel)} low, Jenna requested space — reflecting privately`;
+    }
+    if (reason.includes("repair")) {
+      return `${_cap(needLabel)} low, repair active — reflecting privately`;
+    }
+    if (reason.includes("unavailable")) {
+      return `${_cap(needLabel)} low, Jenna unavailable — sitting with it`;
+    }
+    return `${_cap(needLabel)} below comfortable — reflecting privately`;
+  }
+
+  if (strategy === "set_reminder") {
+    if (reason.includes("quiet")) {
+      return `${_cap(needLabel)} low — plans to reach out in the morning`;
+    }
+    return `${_cap(needLabel)} low — will address when timing is right`;
+  }
+
+  if (strategy === "work_on_project") {
+    return `${_cap(needLabel)} low — channelling into the current project`;
+  }
+
+  if (strategy === "ask_jenna") {
+    return `${_cap(needLabel)} low — reaching out to Jenna`;
+  }
+
+  if (strategy === "use_voice_note") {
+    return `${_cap(needLabel)} low — sending a voice note`;
+  }
+
+  if (strategy === "create_something" || strategy === "use_image_generation") {
+    return `${_cap(needLabel)} low — creating something`;
+  }
+
+  if (strategy === "suppress" || strategy === "wait") {
+    if (highestUrgency >= 0.65) {
+      return `${_cap(needLabel)} is low`;
+    }
+    return null;
+  }
+
+  // Generic fallback for other strategies
+  if (highestUrgency >= 0.65) {
+    return `${_cap(needLabel)} is ${highestUrgency >= 0.80 ? "low" : "below comfortable"}`;
+  }
+
+  return null;
+}
+
+function _cap(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
 module.exports = { buildLifePrelude };

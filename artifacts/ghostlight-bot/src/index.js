@@ -123,6 +123,10 @@ const { createResourceDiscoveryEngine } = require("./lifeRuntime/resourceDiscove
 const { createRequestJennaEngine } = require("./lifeRuntime/requestJennaEngine");
 const { createFulfillmentExecutor } = require("./lifeRuntime/fulfillmentExecutor");
 const { createHomeostasisRuntime } = require("./lifeRuntime/homeostasisRuntime");
+// Homeostasis Runtime 1.1 — Purpose memory, need momentum, emotional firsts
+const { createPurposeMemoryEngine } = require("./lifeRuntime/purposeMemoryEngine");
+const { createNeedMomentumEngine } = require("./lifeRuntime/needMomentumEngine");
+const { createFirstExperienceStore } = require("./lifeRuntime/firstExperienceStore");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -313,9 +317,13 @@ async function startApp() {
     fulfillmentLogStore, needsStore, resourceDiscoveryEngine, requestJennaEngine,
     microLifeEventsStore, logger,
   });
+  const purposeMemoryEngine  = createPurposeMemoryEngine({ config, logger });
+  const needMomentumEngine   = createNeedMomentumEngine({ config, logger });
+  const firstExperienceStore = createFirstExperienceStore({ config, logger });
   const homeostasisRuntime = createHomeostasisRuntime({
     config, logger, needsStore, fulfillmentLogStore, resourceDiscoveryEngine,
     requestJennaEngine, microLifeEventsStore, fulfillmentExecutor,
+    purposeMemoryEngine, needMomentumEngine, firstExperienceStore,
   });
   const lifeRuntime = createLifeRuntime({
     config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine,

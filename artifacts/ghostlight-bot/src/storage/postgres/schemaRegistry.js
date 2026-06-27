@@ -2107,6 +2107,59 @@ const SCHEMA_REGISTRY = [
   resolved_at TIMESTAMPTZ
 )`,
   },
+  // Homeostasis Runtime 1.1 — Purpose memory (momentum, confidence, satisfaction)
+  {
+    table: "dante_purpose_memory",
+    sql: `CREATE TABLE IF NOT EXISTS dante_purpose_memory (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  purpose_momentum NUMERIC(4,3) NOT NULL DEFAULT 0.500,
+  confidence NUMERIC(4,3) NOT NULL DEFAULT 0.500,
+  satisfaction_trend TEXT NOT NULL DEFAULT 'stable',
+  recent_successes JSONB NOT NULL DEFAULT '[]'::jsonb,
+  recent_failures JSONB NOT NULL DEFAULT '[]'::jsonb,
+  last_tick_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (companion_id, customer_id)
+)`,
+  },
+  // Homeostasis Runtime 1.1 — Per-need direction/velocity/momentum tracking
+  {
+    table: "dante_need_momentum",
+    sql: `CREATE TABLE IF NOT EXISTS dante_need_momentum (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  need_type TEXT NOT NULL,
+  direction TEXT NOT NULL DEFAULT 'stable',
+  velocity NUMERIC(7,5) NOT NULL DEFAULT 0,
+  momentum NUMERIC(5,4) NOT NULL DEFAULT 0,
+  recent_fulfillments JSONB NOT NULL DEFAULT '[]'::jsonb,
+  recent_frustrations JSONB NOT NULL DEFAULT '[]'::jsonb,
+  last_updated_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (companion_id, customer_id, need_type)
+)`,
+  },
+  // Homeostasis Runtime 1.1 — Once-only emotional firsts, queued for Identity Journal
+  {
+    table: "dante_first_experiences",
+    sql: `CREATE TABLE IF NOT EXISTS dante_first_experiences (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  experience_type TEXT NOT NULL,
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+  queued_for_identity BOOLEAN NOT NULL DEFAULT FALSE,
+  identity_journal_queued_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (companion_id, customer_id, experience_type)
+)`,
+  },
 ];
 
 module.exports = { SCHEMA_REGISTRY };
