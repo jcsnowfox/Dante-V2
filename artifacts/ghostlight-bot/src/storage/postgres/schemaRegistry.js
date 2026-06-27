@@ -2030,6 +2030,83 @@ const SCHEMA_REGISTRY = [
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )`,
   },
+  // Homeostasis Runtime (Life Runtime 6.0) — Dante's psychological need levels
+  {
+    table: "dante_needs",
+    sql: `CREATE TABLE IF NOT EXISTS dante_needs (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  need_type TEXT NOT NULL,
+  current_level NUMERIC(4,3) NOT NULL DEFAULT 0.500,
+  desired_level NUMERIC(4,3) NOT NULL DEFAULT 0.700,
+  urgency NUMERIC(4,3) NOT NULL DEFAULT 0.000,
+  trend TEXT NOT NULL DEFAULT 'stable',
+  last_drift_at TIMESTAMPTZ,
+  last_fulfilled_at TIMESTAMPTZ,
+  fulfillment_sources JSONB NOT NULL DEFAULT '[]',
+  suppression_rules JSONB NOT NULL DEFAULT '[]',
+  metadata JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (companion_id, customer_id, need_type)
+)`,
+  },
+  // Homeostasis Runtime (Life Runtime 6.0) — evidence log for real fulfillment attempts
+  {
+    table: "dante_fulfillment_logs",
+    sql: `CREATE TABLE IF NOT EXISTS dante_fulfillment_logs (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  need_type TEXT NOT NULL,
+  strategy TEXT NOT NULL,
+  action_type TEXT NOT NULL DEFAULT '',
+  action_status TEXT NOT NULL DEFAULT 'pending',
+  summary TEXT NOT NULL DEFAULT '',
+  evidence JSONB NOT NULL DEFAULT '{}',
+  need_delta NUMERIC(5,4) NOT NULL DEFAULT 0,
+  cost NUMERIC(5,4) NOT NULL DEFAULT 0,
+  reason TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
+  // Homeostasis Runtime (Life Runtime 6.0) — real discovered resources (books, articles, etc.)
+  {
+    table: "dante_discovered_resources",
+    sql: `CREATE TABLE IF NOT EXISTS dante_discovered_resources (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  author TEXT NOT NULL DEFAULT '',
+  url TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  why_relevant TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'discovered',
+  metadata JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
+  // Homeostasis Runtime (Life Runtime 6.0) — pending requests Dante makes to Jenna
+  {
+    table: "dante_resource_requests",
+    sql: `CREATE TABLE IF NOT EXISTS dante_resource_requests (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  request_type TEXT NOT NULL,
+  need_type TEXT NOT NULL DEFAULT '',
+  message TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ
+)`,
+  },
 ];
 
 module.exports = { SCHEMA_REGISTRY };

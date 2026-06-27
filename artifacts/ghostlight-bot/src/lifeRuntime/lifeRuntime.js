@@ -78,6 +78,8 @@ function createLifeRuntime({
   consequenceStore = null,
   relationalConsequencesEngine = null,
   repairCarryoverEngine = null,
+  // Homeostasis runtime (Life Runtime 6.0) — needs, drives, real fulfillment
+  homeostasisRuntime = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -95,6 +97,7 @@ function createLifeRuntime({
   let _curiosityContext       = null; // { attentionFocus, openCount, maturingCount, recentInsight }
   let _relationshipContext    = null; // { chapter, weatherSummary, activeRitualsCount, traditionsCount, sharedHistoryCount, insideJokeCount, upcomingAnniversaries }
   let _consequenceContext     = null; // { suppression, carryover, activeCount, lastConsequenceAt }
+  let _homeostasisContext     = null; // homeostasisRuntime.getNeedsContext()
 
   function getScope() {
     return {
@@ -123,6 +126,7 @@ function createLifeRuntime({
     if (insideJokeEngine?.init)               await insideJokeEngine.init().catch(() => {});
     if (relationshipTimelineEngine?.init)     await relationshipTimelineEngine.init().catch(() => {});
     if (consequenceStore?.init)               await consequenceStore.init().catch(() => {});
+    if (homeostasisRuntime?.init)             await homeostasisRuntime.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
@@ -469,6 +473,32 @@ function createLifeRuntime({
     }
   }
 
+  // Homeostasis tick (Life Runtime 6.0): drift needs, plan and execute fulfillment.
+  // Called AFTER consequence context is resolved so repair/give-space gates are current.
+  async function _tickHomeostasis(now) {
+    if (!homeostasisRuntime) return;
+    const { companionId, customerId } = getScope();
+    if (!companionId) return;
+
+    const alivePresence = await _refreshAlivePresence().catch(() => null);
+
+    await homeostasisRuntime.tick({
+      companionId,
+      customerId,
+      now,
+      dailyPlan:           _todaysPlan,
+      consequenceContext:  _consequenceContext,
+      growthContext:       _growthContext,
+      curiosityContext:    _curiosityContext,
+      relationshipContext: _relationshipContext,
+      alivePresence,
+    }).catch(err => {
+      logger?.warn("[life-runtime] _tickHomeostasis failed", { error: err?.message });
+    });
+
+    _homeostasisContext = homeostasisRuntime.getNeedsContext() ?? null;
+  }
+
   /**
    * observeInteraction — post-message hook. After every interaction with Jenna,
    * read her language (+ the existing repair analysis) to resolve or create a
@@ -521,6 +551,7 @@ function createLifeRuntime({
       curiosityContext:     _curiosityContext,
       relationshipContext:  _relationshipContext,
       consequenceContext:   _consequenceContext?.carryover ?? null,
+      homeostasisContext:   _homeostasisContext ?? null,
     });
   }
 
@@ -533,7 +564,7 @@ function createLifeRuntime({
            questionsDeleted, attentionDeleted, insightsDeleted,
            sharedHistoryDeleted, ritualsDeleted, traditionsDeleted,
            anniversariesDeleted, insideJokesDeleted, timelineDeleted,
-           consequencesDeleted] = await Promise.all([
+           consequencesDeleted, homeostasisPruned] = await Promise.all([
       microLifeEventsStore?.pruneOlderThan?.({ companionId, customerId, days: eventPruneAfterDays }).catch(() => 0)    ?? Promise.resolve(0),
       decisionEngine?.pruneOlderThan?.({ companionId, customerId, days: decisionPruneAfterDays }).catch(() => 0)       ?? Promise.resolve(0),
       dailyPlanEngine?.pruneOlderThan?.({ companionId, customerId, days: planPruneAfterDays }).catch(() => 0)          ?? Promise.resolve(0),
@@ -550,14 +581,19 @@ function createLifeRuntime({
       insideJokeEngine?.pruneOlderThan?.({ companionId, customerId, days: 365 }).catch(() => 0)                        ?? Promise.resolve(0),
       relationshipTimelineEngine?.pruneOlderThan?.({ companionId, customerId, days: 730 }).catch(() => 0)              ?? Promise.resolve(0),
       consequenceStore?.pruneOlderThan?.({ companionId, customerId, days: 90 }).catch(() => 0)                        ?? Promise.resolve(0),
+      homeostasisRuntime?.pruneAll?.({ companionId, customerId }).catch(() => ({ fulfillmentLogs: 0, resources: 0, requests: 0 })) ?? Promise.resolve({ fulfillmentLogs: 0, resources: 0, requests: 0 }),
     ]);
+
+    const homeostasisTotal = typeof homeostasisPruned === "object"
+      ? (homeostasisPruned.fulfillmentLogs || 0) + (homeostasisPruned.resources || 0) + (homeostasisPruned.requests || 0)
+      : (homeostasisPruned || 0);
 
     const totalDeleted = eventsDeleted + decisionsDeleted + plansDeleted
       + hobbiesDeleted + projectsDeleted + interestsDeleted
       + questionsDeleted + attentionDeleted + insightsDeleted
       + sharedHistoryDeleted + ritualsDeleted + traditionsDeleted
       + anniversariesDeleted + insideJokesDeleted + timelineDeleted
-      + consequencesDeleted;
+      + consequencesDeleted + homeostasisTotal;
     if (totalDeleted) {
       logger?.info("[life-runtime] Pruning complete", {
         eventsDeleted, decisionsDeleted, plansDeleted,
@@ -565,7 +601,7 @@ function createLifeRuntime({
         questionsDeleted, attentionDeleted, insightsDeleted,
         sharedHistoryDeleted, ritualsDeleted, traditionsDeleted,
         anniversariesDeleted, insideJokesDeleted, timelineDeleted,
-        consequencesDeleted,
+        consequencesDeleted, homeostasisTotal,
       });
     }
   }
@@ -584,6 +620,7 @@ function createLifeRuntime({
       await _tickConsequences(now);
       await _tickCuriosity(now);
       await _tickRelationship(now);
+      await _tickHomeostasis(now);
       await _refreshPrelude();
 
       const shouldPrune = !_lastPruneAt || (now.getTime() - _lastPruneAt.getTime() > 23 * 60 * 60 * 1000);
@@ -665,6 +702,10 @@ function createLifeRuntime({
             relationshipWeatherSummary: _relationshipContext?.weatherSummary ?? null,
             lastConsequenceAt:          _consequenceContext.lastConsequenceAt ?? null,
           }
+        : null,
+      // Homeostasis (Life Runtime 6.0) — safe metadata only, no private scores
+      homeostasisContext: homeostasisRuntime
+        ? homeostasisRuntime.getStatus()
         : null,
       pruneSchedule: {
         eventsDays:    eventPruneAfterDays,
