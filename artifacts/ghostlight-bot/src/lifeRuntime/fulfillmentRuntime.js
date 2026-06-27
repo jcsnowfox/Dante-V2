@@ -35,6 +35,7 @@ const { projectAdapter }                          = require("./worldActionAdapte
 const { voiceNoteAdapter }                        = require("./worldActionAdapters/voiceNoteAdapter");
 const { imageGenerationAdapter }                  = require("./worldActionAdapters/imageGenerationAdapter");
 const { secondLifeAdapter }                       = require("./worldActionAdapters/secondLifeAdapter");
+const { bridgeFulfillmentToRelationship, bridgeEvidenceToBeliefs } = require("./emergenceBridges");
 
 const MAX_AGENCY_PER_TICK = 1;   // proactive actions per tick
 
@@ -46,6 +47,7 @@ function createFulfillmentRuntime({
   resourceDiscoveryRuntime = null,
   identityRuntime         = null,
   homeostasisRuntime      = null, // read-only: getNeedsContext()
+  relationalConsequencesEngine = null,
 } = {}) {
   let _fulfillmentContext = null;
   let _lastTickAt        = null;
@@ -148,6 +150,10 @@ function createFulfillmentRuntime({
 
       if (result) {
         lastResult = { need, plan, result };
+        await bridgeEvidenceToBeliefs({ companionId, customerId, identityRuntime, result, needType: need.needType, now });
+        await bridgeFulfillmentToRelationship({
+          companionId, customerId, relationalConsequencesEngine, result, needType: need.needType, plan, now,
+        });
         if (result.outcome === "SUCCESS" || result.outcome === "PARTIAL") {
           _lastActionAt = now;
         }

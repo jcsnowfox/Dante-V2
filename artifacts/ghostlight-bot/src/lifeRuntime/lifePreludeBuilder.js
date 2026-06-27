@@ -37,9 +37,14 @@ function buildLifePrelude(state = {}) {
     homeostasisContext  = null,
     identityContext     = null,
     fulfillmentContext  = null,
+    selfConsistencyContext = null,
   } = state;
 
   const lines = [];
+
+  if (selfConsistencyContext?.preludeWarning) {
+    lines.push(selfConsistencyContext.preludeWarning);
+  }
 
   // Consequence signal leads — when something between Dante and Jenna is
   // unresolved (or freshly warm), it shapes the reply more than anything else.

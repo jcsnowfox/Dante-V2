@@ -345,6 +345,7 @@ async function startApp() {
     resourceDiscoveryRuntime,
     identityRuntime,
     homeostasisRuntime,
+    relationalConsequencesEngine,
   });
   const lifeRuntime = createLifeRuntime({
     config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine,
@@ -799,6 +800,7 @@ async function startApp() {
     });
   }
   schedulerRegistry.registerPostLogin("emotionalArc.scheduler", () => emotionalArc.scheduler.start());
+  schedulerRegistry.registerPostLogin("innerLife.selfCheck", () => innerLife.startSelfCheck({ client }));
   registerLifeRuntime({ schedulerRegistry, lifeRuntime, config, logger });
   await schedulerRegistry.startPostLogin();
   appContext.schedulerRegistry = schedulerRegistry;

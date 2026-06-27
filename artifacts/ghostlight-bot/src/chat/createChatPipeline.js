@@ -971,6 +971,22 @@ function createChatPipeline({
       logger.info?.(`[reply-trace] fallbackUsed=${replyTrace.fallbackUsed} fallbackReason=${replyTrace.fallbackReason || "null"}`);
       logger.info?.(`[reply-trace] finalSource=${replyTrace.finalSource}`);
 
+      // Inner Life post-reply observation — lets Dante persist his own diagnostic
+      // carry-forward notes when he identifies a continuity/journal gap.
+      if (!inDevMode && innerLife?.observeInteraction) {
+        innerLife.observeInteraction({
+          message: input.content || "",
+          reply: reply?.content || "",
+          sourceMessageId: message.id,
+          sourceChannelId: message.channel?.id || message.channelId || null,
+        }).catch((error) => {
+          logger.warn?.("[chat] Inner life interaction journal failed; continuing", {
+            messageId: message.id,
+            error: error?.message,
+          });
+        });
+      }
+
       // Human Simulation Pack 2 post-processing — updates presence last_companion_reply_at.
       // Fire-and-forget: never delays the reply.
       if (!inDevMode && humanSimulation?.postProcessMessage) {
@@ -1000,8 +1016,15 @@ function createChatPipeline({
       if (!inDevMode && lifeRuntime?.observeInteraction) {
         lifeRuntime.observeInteraction({
           userText: input.content || "",
+          replyText: reply?.content || "",
           repairResult,
           now: new Date(),
+          recentHistory,
+          duplicate: Boolean(duplicateCheck?.duplicate || replyTrace.duplicateBlocked),
+          tone: toneDecision?.mode || selectedMode?.name || "",
+          generatedImageIds: modelOutput?.generatedImageIds || [],
+          generatedAudioIds: modelOutput?.generatedAudioIds || [],
+          memoryContext: memories,
         }).catch(() => {});
       }
 

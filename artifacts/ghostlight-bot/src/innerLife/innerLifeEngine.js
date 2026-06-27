@@ -17,6 +17,9 @@ const { captureRepeatedTell } = require("./repeatedTells");
 const { captureTasteMarker } = require("./tasteAndPreferenceDrift");
 const { applyAliveTexture } = require("./aliveTexture");
 const { createAlivenessScheduler } = require("./alivenessScheduler");
+const { recordInteractionJournal } = require("./interactionJournal");
+const { dispatchAutonomyEntry, dispatchDiagnosticEntry } = require("./innerLifeDispatch");
+const { createSelfCheckScheduler } = require("./selfCheckScheduler");
 
 function createInnerLifeEngine({ config: appConfig, logger }) {
   const rawStore = createRawStore({ config: appConfig, logger });
@@ -28,8 +31,20 @@ function createInnerLifeEngine({ config: appConfig, logger }) {
   const ilConfig = loadInnerLifeConfig(appConfig?.innerLife || {});
 
   const store = createInnerLifeStoreWrapper({ store: rawStore, companionId, ownerId, logger });
+  let discordClient = null;
 
-  const scheduler = createAlivenessScheduler({ store, config: ilConfig, logger });
+  async function dispatchAutonomy(entry) {
+    if (!entry || !discordClient) return null;
+    return dispatchAutonomyEntry({ client: discordClient, config: appConfig, logger, entry });
+  }
+
+  async function dispatchDiagnostic(entry) {
+    if (!entry || !discordClient) return null;
+    return dispatchDiagnosticEntry({ client: discordClient, config: appConfig, logger, entry });
+  }
+
+  const scheduler = createAlivenessScheduler({ store, config: ilConfig, logger, dispatchEntry: dispatchAutonomy });
+  let selfCheckScheduler = null;
 
   async function init() {
     await rawStore.init();
@@ -74,6 +89,12 @@ function createInnerLifeEngine({ config: appConfig, logger }) {
       logger.warn("[inner-life] some capture operations failed", { failCount: failures.length });
     }
 
+    for (const result of results) {
+      if (result.status === "fulfilled" && result.value?.id) {
+        dispatchAutonomy(result.value).catch(() => {});
+      }
+    }
+
     // Build prelude from active entries
     const entries = await store.listForPrelude({ maxItems: ilConfig.max_inner_life_prelude_items });
     const preludeSection = buildInnerLifePrelude({ entries, config: ilConfig, logger, companionId });
@@ -87,6 +108,33 @@ function createInnerLifeEngine({ config: appConfig, logger }) {
     return result;
   }
 
+  async function observeInteraction({ message = "", reply = "", sourceMessageId = "", sourceChannelId = "" } = {}) {
+    const entry = await recordInteractionJournal({
+      store,
+      config: ilConfig,
+      message,
+      reply,
+      sourceMessageId,
+      sourceChannelId,
+      logger,
+    });
+    if (entry) dispatchDiagnostic(entry).catch(() => {});
+    return entry;
+  }
+
+  function startSelfCheck({ client } = {}) {
+    discordClient = client || discordClient;
+    if (!selfCheckScheduler) {
+      selfCheckScheduler = createSelfCheckScheduler({
+        client: discordClient,
+        config: appConfig,
+        logger,
+        storeWrapper: store,
+      });
+    }
+    selfCheckScheduler.start();
+  }
+
   function resolveCompanionId() {
     return companionId;
   }
@@ -95,6 +143,8 @@ function createInnerLifeEngine({ config: appConfig, logger }) {
     init,
     processMessage,
     postProcessResponse,
+    observeInteraction,
+    startSelfCheck,
     resolveCompanionId,
     store: rawStore,
     storeWrapper: store,

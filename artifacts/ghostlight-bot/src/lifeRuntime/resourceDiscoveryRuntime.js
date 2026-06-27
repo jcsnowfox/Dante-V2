@@ -22,6 +22,25 @@ function createResourceDiscoveryRuntime({
   logger                  = null,
 } = {}) {
 
+
+  function rankResourcesByPreferences(resources = [], preferences = [], dislikes = []) {
+    return [...resources].sort((a, b) => scoreResource(b, preferences, dislikes) - scoreResource(a, preferences, dislikes));
+  }
+
+  function scoreResource(resource = {}, preferences = [], dislikes = []) {
+    const haystack = `${resource.title || ""} ${resource.author || ""} ${resource.note || ""} ${resource.whyRelevant || ""}`.toLowerCase();
+    let score = 0;
+    for (const pref of preferences || []) {
+      const item = String(pref.item || pref.value || "").toLowerCase();
+      if (item && haystack.includes(item)) score += Number(pref.strength || pref.weight || 1);
+    }
+    for (const dislike of dislikes || []) {
+      const item = String(dislike.item || dislike.value || "").toLowerCase();
+      if (item && haystack.includes(item)) score -= Number(dislike.strength || dislike.weight || 1);
+    }
+    return score;
+  }
+
   async function init() {
     if (resourceDiscoveryEngine?.init) await resourceDiscoveryEngine.init().catch(() => {});
     if (resourceLibraryStore?.init)    await resourceLibraryStore.init().catch(() => {});
@@ -131,7 +150,7 @@ function createResourceDiscoveryRuntime({
   return {
     init, addToLibrary, getLibrary, markWantToRead,
     tagForJenna, markConsuming, markCompleted,
-    getLibrarySummary, pruneOlderThan,
+    getLibrarySummary, pruneOlderThan, rankResourcesByPreferences, scoreResource,
   };
 }
 

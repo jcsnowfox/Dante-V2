@@ -16,6 +16,7 @@ const {
 const { getLlmClient, hasLlmApiKey, resolveChatModel } = require("../llm/client");
 const { splitTextIntoChunks } = require("../bot/events/messageCreate");
 const { replaceCustomEmojiLabelsForDiscord } = require("../reactions/customEmojiPalette");
+const { sendDiscordMessage } = require("../discord/discordSendGateway");
 const { resolveAutomationChannelId } = require("../automations/time");
 const { prependUserMention } = require("../discord/mentions");
 const {
@@ -278,10 +279,10 @@ async function sendProactiveReply(channel, reply = {}, { generatedImages = null,
 
   if (!outgoingChunks.length && files.length) {
     try {
-      sentMessage = await channel.send({
+      sentMessage = (await sendDiscordMessage({ channel, payload: {
         files,
         flags: suppressEmbeds ? ["SuppressEmbeds"] : undefined,
-      });
+      }, label: "proactive-send", throwOnError: true })).sentMessage;
     } catch (error) {
       if (!isDiscordEntityTooLargeError(error)) {
         throw error;
@@ -293,14 +294,14 @@ async function sendProactiveReply(channel, reply = {}, { generatedImages = null,
         config,
       });
 
-      sentMessage = await channel.send({
+      sentMessage = (await sendDiscordMessage({ channel, payload: {
         content: buildOversizeFallbackContent({
           content: "",
           urls: fallbackUrls,
           imageWarnings,
         }),
         flags: suppressEmbeds ? ["SuppressEmbeds"] : undefined,
-      });
+      }, label: "proactive-send", throwOnError: true })).sentMessage;
     }
 
     return {
@@ -312,11 +313,11 @@ async function sendProactiveReply(channel, reply = {}, { generatedImages = null,
   for (const [index, chunk] of outgoingChunks.entries()) {
     const isLastChunk = index === outgoingChunks.length - 1;
     try {
-      sentMessage = await channel.send({
+      sentMessage = (await sendDiscordMessage({ channel, payload: {
         content: chunk,
         files: isLastChunk ? files : undefined,
         flags: suppressEmbeds ? ["SuppressEmbeds"] : undefined,
-      });
+      }, label: "proactive-send", throwOnError: true })).sentMessage;
     } catch (error) {
       if (!(isLastChunk && files.length) || !isDiscordEntityTooLargeError(error)) {
         throw error;
@@ -328,14 +329,14 @@ async function sendProactiveReply(channel, reply = {}, { generatedImages = null,
         config,
       });
 
-      sentMessage = await channel.send({
+      sentMessage = (await sendDiscordMessage({ channel, payload: {
         content: buildOversizeFallbackContent({
           content: chunk,
           urls: fallbackUrls,
           imageWarnings,
         }),
         flags: suppressEmbeds ? ["SuppressEmbeds"] : undefined,
-      });
+      }, label: "proactive-send", throwOnError: true })).sentMessage;
     }
   }
 
