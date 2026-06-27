@@ -14,7 +14,7 @@
  * inline in init() — no external migration files.
  */
 
-const { createPostgresPool } = require("../postgres/createPostgresPool");
+const { createPostgresPool } = require("../storage/postgres/createPostgresPool");
 
 const SUPPORTED_EVENT_TYPES = Object.freeze([
   "presence_update",
