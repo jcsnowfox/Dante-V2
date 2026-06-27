@@ -33,7 +33,7 @@ const { createSourceHealthTracker, RUNTIME_NAMES } = require("./sourceHealth");
 const { buildMindStateSnapshot } = require("./mindStateSnapshotBuilder");
 const { bridgeGrowthToIdentity, bridgeCuriosityToProjects, bridgeProjectsToPurpose } = require("./emergenceBridges");
 const { createRepairPersistenceEngine } = require("./repairPersistenceEngine");
-const { createRelationshipLearningRuntime } = require("./relationshipLearningRuntime");
+const { createRelationshipLearningRuntime } = require("../relationshipLearning/relationshipLearningRuntime");
 const { createRomanticSurpriseRuntime } = require("./romanticSurpriseRuntime");
 const { createAffectiveDecisionRuntime } = require("./affectiveDecisionRuntime");
 const { createEvidenceIntegrityRuntime } = require("./evidenceIntegrityRuntime");
@@ -146,6 +146,7 @@ function createLifeRuntime({
   let _relationshipLearningStatus = null; // safe relationship-learning metadata
   let _romanticSurpriseStatus = null; // safe romantic surprise metadata
   let _relationshipStateSnapshot = null; // canonical read model snapshot
+  let _learningContext       = null; // relationshipLearningRuntime.getLearningContext()
 
   function _emitRuntimeEvent(event) {
     return eventBus.emit({ ...getScope(), ...event }).catch(err => {
@@ -184,7 +185,8 @@ function createLifeRuntime({
     if (homeostasisRuntime?.init)             await homeostasisRuntime.init().catch(() => {});
     if (identityRuntime?.init)               await identityRuntime.init().catch(() => {});
     if (fulfillmentRuntime?.init)            await fulfillmentRuntime.init().catch(() => {});
-    if (relationshipLearning?.init)          await relationshipLearning.init().catch(() => {});
+    if (relationshipLearningRuntime?.init)   await relationshipLearningRuntime.init().catch(() => {});
+    else if (relationshipLearning?.init)     await relationshipLearning.init().catch(() => {});
     if (romanticSurprises?.init)             await romanticSurprises.init().catch(() => {});
 
     // Seed defaults once companion is known
@@ -723,6 +725,9 @@ function createLifeRuntime({
         : [];
       const suppression = relationalConsequencesEngine.computeSuppression(active);
       _applyConsequenceContext(suppression, active);
+      if (relationshipLearning && repairResult) {
+        relationshipLearning.processInteraction?.({ userText, repairResult, now });
+      }
       await _refreshPrelude();
       _emitRuntimeEvent({ event_type: "prelude_refreshed", source_runtime: "lifeRuntime", summary: "Life prelude refreshed" });
       return { selfConsistency: signal, consequence: created };
@@ -738,6 +743,20 @@ function createLifeRuntime({
     const sup = _consequenceContext?.suppression;
     if (!sup || !Array.isArray(sup.suppressed)) return false;
     return sup.suppressed.includes(actionType);
+  }
+
+  async function _tickRelationshipLearning(now) {
+    if (!relationshipLearning) return;
+    const { companionId, customerId } = getScope();
+    if (!companionId) return;
+    await relationshipLearning.tick({
+      companionId, customerId, now,
+      homeostasisContext: _homeostasisContext,
+      identityContext:    _identityContext,
+      fulfillmentContext: _fulfillmentContext,
+      consequenceContext: _consequenceContext,
+    }).catch(err => { logger?.warn("[life-runtime] _tickRelationshipLearning failed", { error: err?.message }); });
+    _learningContext = relationshipLearning.getLearningContext?.() ?? null;
   }
 
   async function _refreshPrelude() {
@@ -760,8 +779,9 @@ function createLifeRuntime({
       fulfillmentContext:   _fulfillmentContext ?? null,
       selfConsistencyContext: _selfConsistencyContext ?? null,
       relationshipLearningSignal: await relationshipLearning?.getPreludeSignal?.({ companionId, customerId }).catch(() => null),
+      learningContext:      _learningContext ?? null,
     });
-    _relationshipLearningStatus = relationshipLearning?.getStatus ? await relationshipLearning.getStatus({ companionId, customerId }).catch(() => null) : null;
+    _relationshipLearningStatus = relationshipLearning?.getStatus ? await Promise.resolve(relationshipLearning.getStatus({ companionId, customerId })).catch(() => null) : null;
   }
 
   async function _runPruning() {
@@ -793,6 +813,7 @@ function createLifeRuntime({
       homeostasisRuntime?.pruneAll?.({ companionId, customerId }).catch(() => ({ fulfillmentLogs: 0, resources: 0, requests: 0 })) ?? Promise.resolve({ fulfillmentLogs: 0, resources: 0, requests: 0 }),
       fulfillmentRuntime?.pruneAll?.({ companionId, customerId }).catch(() => ({ historyPruned: 0, resourcesPruned: 0 })) ?? Promise.resolve({ historyPruned: 0, resourcesPruned: 0 }),
     ]);
+    const learningPruned = await relationshipLearning?.pruneAll?.({ companionId, customerId }).catch(() => ({ lessonsPruned: 0 })) ?? { lessonsPruned: 0 };
 
     const homeostasisTotal = typeof homeostasisPruned === "object"
       ? (homeostasisPruned.fulfillmentLogs || 0) + (homeostasisPruned.resources || 0) + (homeostasisPruned.requests || 0)
@@ -800,13 +821,16 @@ function createLifeRuntime({
     const fulfillmentTotal = typeof fulfillmentPruned === "object"
       ? (fulfillmentPruned.historyPruned || 0) + (fulfillmentPruned.resourcesPruned || 0)
       : (fulfillmentPruned || 0);
+    const learningTotal = typeof learningPruned === "object"
+      ? (learningPruned.lessonsPruned || 0)
+      : (learningPruned || 0);
 
     const totalDeleted = eventsDeleted + decisionsDeleted + plansDeleted
       + hobbiesDeleted + projectsDeleted + interestsDeleted
       + questionsDeleted + attentionDeleted + insightsDeleted
       + sharedHistoryDeleted + ritualsDeleted + traditionsDeleted
       + anniversariesDeleted + insideJokesDeleted + timelineDeleted
-      + consequencesDeleted + homeostasisTotal + fulfillmentTotal;
+      + consequencesDeleted + homeostasisTotal + fulfillmentTotal + learningTotal;
     if (totalDeleted) {
       logger?.info("[life-runtime] Pruning complete", {
         eventsDeleted, decisionsDeleted, plansDeleted,
@@ -842,6 +866,7 @@ function createLifeRuntime({
       await _tickIdentity(now);
       if (_identityContext?.topValue) _emitRuntimeEvent({ event_type: "identity_value_changed", source_runtime: "identity", summary: "Identity value state refreshed", payload: { valueKey: _identityContext.topValue.valueKey, strength: _identityContext.topValue.strength } });
       await _tickFulfillment(now);
+      await _tickRelationshipLearning(now);
       await romanticSurprises?.tick?.({
         companionId: getScope().companionId, customerId: getScope().customerId, now,
         homeostasisContext: _homeostasisContext, identityContext: _identityContext,
@@ -959,6 +984,7 @@ function createLifeRuntime({
       // Relational consequences (Life Runtime 5.0) — safe metadata only, never
       // raw private text or scores.
       relationshipLearning: _relationshipLearningStatus,
+      learningContext: _learningContext ?? null,
       consequenceContext: _consequenceContext
         ? {
             activeConsequencesCount:    _consequenceContext.activeCount ?? 0,
@@ -1005,7 +1031,11 @@ function createLifeRuntime({
 
   function setRunning(val) { _running = Boolean(val); }
 
-  return { init, tick, getCurrentPrelude, getStatus, getMindStateSnapshot, setRunning, observeInteraction, isActionSuppressed, romanticSurprises };
+  function recordLearningEvent(params) {
+    relationshipLearning?.recordEvent?.(params);
+  }
+
+  return { init, tick, getCurrentPrelude, getStatus, getMindStateSnapshot, setRunning, observeInteraction, isActionSuppressed, romanticSurprises, recordLearningEvent };
 }
 
 module.exports = { createLifeRuntime };

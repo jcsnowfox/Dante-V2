@@ -2343,6 +2343,30 @@ const SCHEMA_REGISTRY = [
   resolved_at TIMESTAMPTZ
 )`,
   },
+  {
+    table: "dante_relationship_lessons",
+    sql: `CREATE TABLE IF NOT EXISTS dante_relationship_lessons (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  lesson_type TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  evidence_ids JSONB NOT NULL DEFAULT '[]',
+  origin_event_ids JSONB NOT NULL DEFAULT '[]',
+  confidence NUMERIC(4,3) NOT NULL DEFAULT 0.300,
+  strength NUMERIC(4,3) NOT NULL DEFAULT 0.300,
+  first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_reinforced TIMESTAMPTZ,
+  last_challenged TIMESTAMPTZ,
+  times_reinforced INTEGER NOT NULL DEFAULT 0,
+  times_challenged INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'new',
+  future_guidance TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
 ];
 
 module.exports = { SCHEMA_REGISTRY };
