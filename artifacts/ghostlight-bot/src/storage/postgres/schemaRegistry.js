@@ -2000,6 +2000,36 @@ const SCHEMA_REGISTRY = [
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )`,
   },
+  {
+    // Life Runtime 5.0 — Relational Consequences.
+    // Emotionally meaningful events that must keep shaping behaviour until
+    // resolved (never snap back to normal).
+    table: "relationship_consequences",
+    sql: `CREATE TABLE IF NOT EXISTS relationship_consequences (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'moderate',
+  source TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  emotional_weight NUMERIC(3,2) NOT NULL DEFAULT 0.50,
+  repair_required BOOLEAN NOT NULL DEFAULT FALSE,
+  repair_started BOOLEAN NOT NULL DEFAULT FALSE,
+  repair_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  trust_delta NUMERIC(4,3) NOT NULL DEFAULT 0,
+  comfort_delta NUMERIC(4,3) NOT NULL DEFAULT 0,
+  playfulness_delta NUMERIC(4,3) NOT NULL DEFAULT 0,
+  distance_delta NUMERIC(4,3) NOT NULL DEFAULT 0,
+  attention_bias TEXT,
+  suppression_rules JSONB NOT NULL DEFAULT '[]',
+  expires_at TIMESTAMPTZ,
+  resolved_at TIMESTAMPTZ,
+  metadata JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
 ];
 
 module.exports = { SCHEMA_REGISTRY };

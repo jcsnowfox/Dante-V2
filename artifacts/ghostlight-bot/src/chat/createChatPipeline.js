@@ -994,6 +994,17 @@ function createChatPipeline({
         }).catch(() => {});
       }
 
+      // Relational consequences post-update (Life Runtime 5.0) — detect/resolve
+      // emotionally meaningful events so they carry into the next reply.
+      // Fire-and-forget, never delays the reply.
+      if (!inDevMode && lifeRuntime?.observeInteraction) {
+        lifeRuntime.observeInteraction({
+          userText: input.content || "",
+          repairResult,
+          now: new Date(),
+        }).catch(() => {});
+      }
+
       try {
         if (repairResult?.repairNeeded) {
           await saveRepairBeat({ emotionalBeatStore, scope: { ...beatScope, source_channel_id: message.channelId || "", source_message_id: message.id }, message: input.content, reply: reply?.content || "", repairResult });

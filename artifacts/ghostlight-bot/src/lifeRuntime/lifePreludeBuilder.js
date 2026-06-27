@@ -15,12 +15,21 @@
  * that shapes behaviour, not content to quote or explain unprompted.
  */
 
+const { buildConsequencePrelude } = require("./consequencePreludeBuilder");
+
 function buildLifePrelude(state = {}) {
   if (!state) return null;
 
-  const { dailyPlan = null, recentEvents = [], growthContext = null, curiosityContext = null, relationshipContext = null } = state;
+  const { dailyPlan = null, recentEvents = [], growthContext = null, curiosityContext = null, relationshipContext = null, consequenceContext = null } = state;
 
   const lines = [];
+
+  // Consequence signal leads — when something between Dante and Jenna is
+  // unresolved (or freshly warm), it shapes the reply more than anything else.
+  if (consequenceContext) {
+    const consequenceLine = buildConsequencePrelude(consequenceContext);
+    if (consequenceLine) lines.push(consequenceLine);
+  }
 
   if (dailyPlan) {
     const mood = dailyPlan.mood || "neutral";
