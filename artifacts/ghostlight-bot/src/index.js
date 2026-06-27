@@ -116,7 +116,7 @@ const { createConsequenceStore } = require("./lifeRuntime/consequenceStore");
 const { createRelationshipWeatherBridge } = require("./lifeRuntime/relationshipWeatherBridge");
 const { createRelationalConsequencesEngine } = require("./lifeRuntime/relationalConsequencesEngine");
 const { createRepairCarryoverEngine } = require("./lifeRuntime/repairCarryoverEngine");
-const { createRelationshipLearningRuntime } = require("./lifeRuntime/relationshipLearningRuntime");
+const { createRelationshipLearningRuntime } = require("./relationshipLearning/relationshipLearningRuntime");
 const { createRepairPersistenceEngine } = require("./lifeRuntime/repairPersistenceEngine");
 // Homeostasis Runtime (Life Runtime 6.0) — Dante's psychological needs
 const { createNeedsStore } = require("./lifeRuntime/needsStore");
@@ -344,6 +344,7 @@ async function startApp() {
   });
   const evidenceStore       = createEvidenceStore({ config, logger });
   const pendingRequestStore = createPendingRequestStore({ config, logger });
+  const relationshipLearningRuntime = createRelationshipLearningRuntime({ config, logger });
   const fulfillmentRuntime  = createFulfillmentRuntime({
     config, logger,
     fulfillmentHistoryStore,
@@ -354,8 +355,8 @@ async function startApp() {
     identityRuntime,
     homeostasisRuntime,
     relationalConsequencesEngine,
+    relationshipLearningRuntime,
   });
-  const relationshipLearningRuntime = createRelationshipLearningRuntime({ config, logger, identityRuntime, homeostasisRuntime });
   const client = createDiscordClient({ config });
   const repairPersistenceEngine = createRepairPersistenceEngine({
     consequenceStore,

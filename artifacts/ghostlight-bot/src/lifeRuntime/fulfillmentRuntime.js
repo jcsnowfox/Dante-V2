@@ -49,8 +49,9 @@ function createFulfillmentRuntime({
   evidenceStore           = null,
   pendingRequestStore     = null,
   identityRuntime         = null,
-  homeostasisRuntime      = null, // read-only: getNeedsContext()
-  relationalConsequencesEngine = null,
+  homeostasisRuntime             = null, // read-only: getNeedsContext()
+  relationalConsequencesEngine   = null,
+  relationshipLearningRuntime    = null, // read-only: getBehaviourGuidance()
 } = {}) {
   let _fulfillmentContext  = null;
   let _lastTickAt          = null;
@@ -142,7 +143,13 @@ function createFulfillmentRuntime({
     // ── 2. Plan + execute each need ─────────────────────────────────────────
     let lastResult = null;
     for (const need of toAddress) {
-      const plan = planWithIdentity(need, fulfillContext, identityContext);
+      const lessonGuidance = relationshipLearningRuntime
+        ? relationshipLearningRuntime.getBehaviourGuidance({ context: "fulfillment", maxItems: 4 })
+        : [];
+      const identityContextWithLessons = identityContext
+        ? { ...identityContext, lessonGuidance }
+        : { lessonGuidance };
+      const plan = planWithIdentity(need, fulfillContext, identityContextWithLessons);
 
       const result = await _executor.execute({
         companionId, customerId, need, plan, context: {

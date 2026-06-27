@@ -39,6 +39,7 @@ function buildLifePrelude(state = {}) {
     fulfillmentContext  = null,
     selfConsistencyContext = null,
     relationshipLearningSignal = null,
+    learningContext     = null,
   } = state;
 
   const lines = [];
@@ -49,6 +50,11 @@ function buildLifePrelude(state = {}) {
 
   if (relationshipLearningSignal) {
     lines.push(String(relationshipLearningSignal).slice(0, 180));
+  }
+
+  if (learningContext && learningContext.lessonCount > 0 && learningContext.guidance?.length > 0) {
+    const topGuidance = learningContext.guidance.slice(0, 3);
+    lines.push(`Relationship lessons:\n${topGuidance.map(l => `  • ${l}`).join("\n")}`);
   }
 
   // Consequence signal leads — when something between Dante and Jenna is
