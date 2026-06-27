@@ -116,6 +116,13 @@ const { createConsequenceStore } = require("./lifeRuntime/consequenceStore");
 const { createRelationshipWeatherBridge } = require("./lifeRuntime/relationshipWeatherBridge");
 const { createRelationalConsequencesEngine } = require("./lifeRuntime/relationalConsequencesEngine");
 const { createRepairCarryoverEngine } = require("./lifeRuntime/repairCarryoverEngine");
+// Homeostasis Runtime (Life Runtime 6.0) — Dante's psychological needs
+const { createNeedsStore } = require("./lifeRuntime/needsStore");
+const { createFulfillmentLogStore } = require("./lifeRuntime/fulfillmentLogStore");
+const { createResourceDiscoveryEngine } = require("./lifeRuntime/resourceDiscoveryEngine");
+const { createRequestJennaEngine } = require("./lifeRuntime/requestJennaEngine");
+const { createFulfillmentExecutor } = require("./lifeRuntime/fulfillmentExecutor");
+const { createHomeostasisRuntime } = require("./lifeRuntime/homeostasisRuntime");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -297,6 +304,19 @@ async function startApp() {
   const relationshipWeatherBridge = createRelationshipWeatherBridge({ relationshipWeatherEngine, logger });
   const relationalConsequencesEngine = createRelationalConsequencesEngine({ consequenceStore, relationshipWeatherBridge, logger });
   const repairCarryoverEngine = createRepairCarryoverEngine({ logger });
+  // Homeostasis Runtime (Life Runtime 6.0) — needs, drives, real fulfillment
+  const needsStore = createNeedsStore({ config, logger });
+  const fulfillmentLogStore = createFulfillmentLogStore({ config, logger });
+  const resourceDiscoveryEngine = createResourceDiscoveryEngine({ config, logger });
+  const requestJennaEngine = createRequestJennaEngine({ config, logger });
+  const fulfillmentExecutor = createFulfillmentExecutor({
+    fulfillmentLogStore, needsStore, resourceDiscoveryEngine, requestJennaEngine,
+    microLifeEventsStore, logger,
+  });
+  const homeostasisRuntime = createHomeostasisRuntime({
+    config, logger, needsStore, fulfillmentLogStore, resourceDiscoveryEngine,
+    requestJennaEngine, microLifeEventsStore, fulfillmentExecutor,
+  });
   const lifeRuntime = createLifeRuntime({
     config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine,
     hobbyEngine, projectEngine, interestDriftEngine, skillGrowthEngine, collectionsEngine, sharingDecisionEngine,
@@ -304,6 +324,7 @@ async function startApp() {
     relationshipWeatherEngine, sharedHistoryEngine, ritualEngine, traditionEngine,
     anniversaryEngine, insideJokeEngine, relationshipTimelineEngine,
     consequenceStore, relationalConsequencesEngine, repairCarryoverEngine,
+    homeostasisRuntime,
   });
   const innerLife = createInnerLifeEngine({ config, logger });
   const continuity = createContinuityEngine({ config, logger });

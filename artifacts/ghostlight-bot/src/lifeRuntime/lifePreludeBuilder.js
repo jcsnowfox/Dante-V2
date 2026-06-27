@@ -20,7 +20,7 @@ const { buildConsequencePrelude } = require("./consequencePreludeBuilder");
 function buildLifePrelude(state = {}) {
   if (!state) return null;
 
-  const { dailyPlan = null, recentEvents = [], growthContext = null, curiosityContext = null, relationshipContext = null, consequenceContext = null } = state;
+  const { dailyPlan = null, recentEvents = [], growthContext = null, curiosityContext = null, relationshipContext = null, consequenceContext = null, homeostasisContext = null } = state;
 
   const lines = [];
 
@@ -76,6 +76,13 @@ function buildLifePrelude(state = {}) {
     } else if (maturingCount > 0) {
       lines.push(`${maturingCount} private thought${maturingCount === 1 ? "" : "s"} maturing`);
     }
+  }
+
+  // Homeostasis signal — one compact line when a need is pressured enough to shape tone
+  if (homeostasisContext && homeostasisContext.topNeed && homeostasisContext.highestUrgency >= 0.50) {
+    const { needType, urgency } = homeostasisContext.topNeed;
+    const level = urgency >= 0.75 ? "low" : "below comfortable";
+    lines.push(`Need: ${needType.replace(/_/g, " ")} is ${level}`);
   }
 
   // Relationship signal — at most one compact line, never raw scores
