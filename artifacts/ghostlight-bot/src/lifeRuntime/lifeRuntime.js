@@ -80,6 +80,8 @@ function createLifeRuntime({
   repairCarryoverEngine = null,
   // Homeostasis runtime (Life Runtime 6.0) — needs, drives, real fulfillment
   homeostasisRuntime = null,
+  // Identity runtime (Life Runtime 7.0) — constitution, values, beliefs, choice
+  identityRuntime = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -98,6 +100,7 @@ function createLifeRuntime({
   let _relationshipContext    = null; // { chapter, weatherSummary, activeRitualsCount, traditionsCount, sharedHistoryCount, insideJokeCount, upcomingAnniversaries }
   let _consequenceContext     = null; // { suppression, carryover, activeCount, lastConsequenceAt }
   let _homeostasisContext     = null; // homeostasisRuntime.getNeedsContext()
+  let _identityContext        = null; // identityRuntime.getIdentityContext()
 
   function getScope() {
     return {
@@ -127,10 +130,12 @@ function createLifeRuntime({
     if (relationshipTimelineEngine?.init)     await relationshipTimelineEngine.init().catch(() => {});
     if (consequenceStore?.init)               await consequenceStore.init().catch(() => {});
     if (homeostasisRuntime?.init)             await homeostasisRuntime.init().catch(() => {});
+    if (identityRuntime?.init)               await identityRuntime.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
     if (companionId) {
+      await identityRuntime?._seedConstitution?.({ companionId, customerId }).catch(() => {});
       await hobbyEngine?.seedDefaults?.({ companionId, customerId }).catch(() => {});
       await interestDriftEngine?.seedDefaults?.({ companionId, customerId }).catch(() => {});
       await skillGrowthEngine?.seedDefaults?.({ companionId, customerId }).catch(() => {});
@@ -499,6 +504,27 @@ function createLifeRuntime({
     _homeostasisContext = homeostasisRuntime.getNeedsContext() ?? null;
   }
 
+  // Identity tick (Life Runtime 7.0): drain first experiences, detect value
+  // signals from context, refresh cached identity context.
+  async function _tickIdentity(now) {
+    if (!identityRuntime) return;
+    const { companionId, customerId } = getScope();
+    if (!companionId) return;
+
+    await identityRuntime.tick({
+      companionId,
+      customerId,
+      now,
+      homeostasisContext:  _homeostasisContext,
+      consequenceContext:  _consequenceContext,
+      firstExperienceStore: null, // passed via homeostasisRuntime; drained from the store directly
+    }).catch(err => {
+      logger?.warn("[life-runtime] _tickIdentity failed", { error: err?.message });
+    });
+
+    _identityContext = identityRuntime.getIdentityContext() ?? null;
+  }
+
   /**
    * observeInteraction — post-message hook. After every interaction with Jenna,
    * read her language (+ the existing repair analysis) to resolve or create a
@@ -552,6 +578,7 @@ function createLifeRuntime({
       relationshipContext:  _relationshipContext,
       consequenceContext:   _consequenceContext?.carryover ?? null,
       homeostasisContext:   _homeostasisContext ?? null,
+      identityContext:      _identityContext ?? null,
     });
   }
 
@@ -621,6 +648,7 @@ function createLifeRuntime({
       await _tickCuriosity(now);
       await _tickRelationship(now);
       await _tickHomeostasis(now);
+      await _tickIdentity(now);
       await _refreshPrelude();
 
       const shouldPrune = !_lastPruneAt || (now.getTime() - _lastPruneAt.getTime() > 23 * 60 * 60 * 1000);
@@ -706,6 +734,10 @@ function createLifeRuntime({
       // Homeostasis (Life Runtime 6.0) — safe metadata only, no private scores
       homeostasisContext: homeostasisRuntime
         ? homeostasisRuntime.getStatus()
+        : null,
+      // Identity (Life Runtime 7.0) — safe metadata only, no private journal
+      identityContext: identityRuntime
+        ? identityRuntime.getStatus()
         : null,
       pruneSchedule: {
         eventsDays:    eventPruneAfterDays,
