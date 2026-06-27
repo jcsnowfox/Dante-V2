@@ -129,7 +129,8 @@ function createSituationalAwarenessStore({ config, logger }) {
   }
 
   try {
-    const pool = createPostgresPool({ databaseUrl, logger });
+    const pool = createPostgresPool({ config });
+    if (!pool) return createFallbackStore();
     return createPostgresStore({ pool });
   } catch (error) {
     logger?.warn?.("[situational-awareness-store] Postgres setup failed, using in-memory fallback", {
