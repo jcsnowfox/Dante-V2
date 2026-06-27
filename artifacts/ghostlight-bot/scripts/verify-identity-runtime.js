@@ -59,7 +59,7 @@ for (const f of newFiles) {
 console.log("\n2. seedConstitution");
 const seedCode = read(src("seedConstitution.js"));
 check("exports SEED_CONSTITUTION",     seedCode.includes("SEED_CONSTITUTION"));
-check("9 seed principles",            (seedCode.match(/principleKey:/g) || []).length === 9);
+check("10 seed principles",           (seedCode.match(/principleKey:/g) || []).length === 10);
 check("truth principle",              seedCode.includes("truth"));
 check("repair principle",             seedCode.includes("repair"));
 check("consent principle",            seedCode.includes("consent"));
@@ -70,7 +70,7 @@ check("autonomy principle",           seedCode.includes("autonomy"));
 check("kindness principle",           seedCode.includes("kindness"));
 check("growth principle",             seedCode.includes("growth"));
 check("all have immutable: true",     seedCode.includes("immutable:    true") || seedCode.includes("immutable: true"));
-check("all have why field",           (seedCode.match(/why:/g) || []).length >= 9);
+check("all have why field",           (seedCode.match(/why:/g) || []).length >= 10);
 
 // ── Section 3: identityValueStore ─────────────────────────────────────────
 

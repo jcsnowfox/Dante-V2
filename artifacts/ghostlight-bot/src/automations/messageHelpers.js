@@ -8,6 +8,7 @@ const { normalizeAttachments, summarizeAttachments } = require("../utils/attachm
 const { buildMemoryQueries } = require("../chat/pipeline/retrieveMemory");
 const { cacheLatestReadableReply } = require("../audio/latestReplyCache");
 const { replaceCustomEmojiLabelsForDiscord } = require("../reactions/customEmojiPalette");
+const { sendDiscordMessage } = require("../discord/discordSendGateway");
 
 function buildAutomationInput({ automation, channelId = "", config = {} }) {
   const personaName = String(config.chat?.promptBlocks?.personaName || "").trim() || "Ghostlight";
@@ -181,10 +182,10 @@ async function sendChunks(channel, text, { files = [], suppressEmbeds = false, g
 
   if (!outgoingChunks.length && Array.isArray(files) && files.length) {
     try {
-      sentMessage = await channel.send({
+      sentMessage = (await sendDiscordMessage({ channel, payload: {
         files,
         flags: suppressEmbeds ? ["SuppressEmbeds"] : undefined,
-      });
+      }, label: "automation-send", throwOnError: true })).sentMessage;
     } catch (error) {
       if (!isDiscordEntityTooLargeError(error)) {
         throw error;
@@ -196,14 +197,14 @@ async function sendChunks(channel, text, { files = [], suppressEmbeds = false, g
         config,
       });
 
-      sentMessage = await channel.send({
+      sentMessage = (await sendDiscordMessage({ channel, payload: {
         content: buildOversizeFallbackContent({
           content: "",
           urls: fallbackUrls,
           imageWarnings,
         }),
         flags: suppressEmbeds ? ["SuppressEmbeds"] : undefined,
-      });
+      }, label: "automation-send", throwOnError: true })).sentMessage;
     }
 
     return {
@@ -216,11 +217,11 @@ async function sendChunks(channel, text, { files = [], suppressEmbeds = false, g
     const isLastChunk = index === outgoingChunks.length - 1;
 
     try {
-      sentMessage = await channel.send({
+      sentMessage = (await sendDiscordMessage({ channel, payload: {
         content: chunk,
         files: isLastChunk ? files : undefined,
         flags: suppressEmbeds ? ["SuppressEmbeds"] : undefined,
-      });
+      }, label: "automation-send", throwOnError: true })).sentMessage;
     } catch (error) {
       if (!(isLastChunk && Array.isArray(files) && files.length) || !isDiscordEntityTooLargeError(error)) {
         throw error;
@@ -232,14 +233,14 @@ async function sendChunks(channel, text, { files = [], suppressEmbeds = false, g
         config,
       });
 
-      sentMessage = await channel.send({
+      sentMessage = (await sendDiscordMessage({ channel, payload: {
         content: buildOversizeFallbackContent({
           content: chunk,
           urls: fallbackUrls,
           imageWarnings,
         }),
         flags: suppressEmbeds ? ["SuppressEmbeds"] : undefined,
-      });
+      }, label: "automation-send", throwOnError: true })).sentMessage;
     }
   }
 

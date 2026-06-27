@@ -1,7 +1,7 @@
 {
   "name": "@workspace/ghostlight-bot",
   "version": "1.3.1",
-  "description": "Ghostlight — private AI companion bot (template base)",
+  "description": "Ghostlight \u2014 private AI companion bot (template base)",
   "license": "UNLICENSED",
   "main": "src/index.js",
   "scripts": {
@@ -127,7 +127,18 @@
     "verify:situational-awareness-tools": "node scripts/verify-situational-awareness-tools.js",
     "verify:situational-awareness-proactive": "node scripts/verify-situational-awareness-proactive.js",
     "verify:situational-awareness-not-dead": "node scripts/verify-situational-awareness-not-dead.js",
-    "verify:all": "node scripts/audit-active-runtime.js && node --test && node scripts/find-dead-code.js && node scripts/verify-dashboard-not-broken.js && node scripts/verify-life-wiring.js && node scripts/verify-alive-layer-proof.js && node scripts/repository-health.js"
+    "verify:all": "node scripts/audit-active-runtime.js && node --test && node scripts/find-dead-code.js && node scripts/verify-dashboard-not-broken.js && node scripts/verify-life-wiring.js && node scripts/verify-alive-layer-proof.js && node scripts/repository-health.js",
+    "verify:self-consistency-monitor": "node scripts/verify-self-consistency-monitor.js",
+    "verify:runtime-integration": "node scripts/verify-runtime-integration.js",
+    "verify:runtime:all": "pnpm run verify:all && pnpm run verify:self-consistency-monitor && pnpm run verify:homeostasis-runtime && pnpm run verify:homeostasis-patch && pnpm run verify:identity-runtime && pnpm run verify:fulfillment-runtime && pnpm run verify:relational-consequences && pnpm run verify:life-curiosity && pnpm run verify:life-growth && pnpm run verify:life-runtime && pnpm run verify:runtime-integration",
+    "verify:homeostasis-runtime": "node scripts/verify-homeostasis-runtime.js",
+    "verify:homeostasis-patch": "node scripts/verify-homeostasis-patch.js",
+    "verify:identity-runtime": "node scripts/verify-identity-runtime.js",
+    "verify:fulfillment-runtime": "node scripts/verify-fulfillment-runtime.js",
+    "verify:relational-consequences": "node scripts/verify-relational-consequences.js",
+    "verify:life-curiosity": "node scripts/verify-life-curiosity.js",
+    "verify:life-growth": "node scripts/verify-life-growth.js",
+    "verify:life-runtime": "node scripts/verify-life-runtime.js"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

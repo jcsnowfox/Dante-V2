@@ -165,7 +165,8 @@ module.exports = {
         newState.phase = "farkle";
         events.push({ type: "farkle", message: `🎲 Rolled: **${rolled.join(", ")}** — Farkle! No scoring dice. Turn over.` });
         newState.phase = "waiting_roll";
-        newState.dice = [];
+        // Keep the visible dice from the Farkle roll so the result can be audited/rendered.
+        newState.dice = rolled;
         newState.activePlayer = newState.activePlayer === newState.companionId
           ? (newState.humanPlayerIds[0] || "user")
           : newState.companionId;

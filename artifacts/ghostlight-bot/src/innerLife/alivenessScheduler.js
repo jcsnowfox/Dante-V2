@@ -8,7 +8,7 @@ const TICK_INTERVAL_MS = 30 * 60 * 1000; // 30 min check
 const JOURNAL_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DREAM_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000;
 
-function createAlivenessScheduler({ store, config, logger, callModel = null } = {}) {
+function createAlivenessScheduler({ store, config, logger, callModel = null, dispatchEntry = null } = {}) {
   let timer = null;
   let lastJournalAt = null;
   let lastDreamAt = null;
@@ -38,6 +38,7 @@ function createAlivenessScheduler({ store, config, logger, callModel = null } = 
           if (entry) {
             lastJournalAt = now;
             logger.info("[inner-life] journal created", { id: entry.id });
+            dispatchEntry?.(entry).catch(() => {});
           }
         } catch (err) {
           logger.warn("[inner-life] journal generation failed", { error: err?.message });
@@ -53,6 +54,7 @@ function createAlivenessScheduler({ store, config, logger, callModel = null } = 
           if (entry) {
             lastDreamAt = now;
             logger.info("[inner-life] dream created", { id: entry.id });
+            dispatchEntry?.(entry).catch(() => {});
           }
         } catch (err) {
           logger.warn("[inner-life] dream generation failed", { error: err?.message });

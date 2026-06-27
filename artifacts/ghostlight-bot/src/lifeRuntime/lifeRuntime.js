@@ -25,6 +25,10 @@
  */
 
 const { buildLifePrelude } = require("./lifePreludeBuilder");
+const { createSelfConsistencyMonitor } = require("./selfConsistencyMonitor");
+const { createRelationshipStateRuntime } = require("./relationshipStateRuntime");
+const { createDiagnosticRuntime } = require("../diagnostics");
+const { bridgeGrowthToIdentity, bridgeCuriosityToProjects, bridgeProjectsToPurpose } = require("./emergenceBridges");
 
 const PRIVATE_EVENTS = [
   { type: "ritual",      desc: "made coffee",                           moodEffect: 0.05,  energyEffect: 0.05  },
@@ -87,6 +91,9 @@ function createLifeRuntime({
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
+  const selfConsistencyMonitor = createSelfConsistencyMonitor({ logger });
+  const relationshipStateRuntime = createRelationshipStateRuntime({ logger });
+  const diagnosticRuntime = createDiagnosticRuntime({ config, selfConsistencyMonitor });
 
   const eventPruneAfterDays    = Number(lifeConfig.eventPruneAfterDays    ?? process.env.LIFE_EVENTS_PRUNE_DAYS    ?? 7);
   const decisionPruneAfterDays = Number(lifeConfig.decisionPruneAfterDays ?? process.env.LIFE_DECISIONS_PRUNE_DAYS ?? 7);
@@ -104,6 +111,8 @@ function createLifeRuntime({
   let _homeostasisContext     = null; // homeostasisRuntime.getNeedsContext()
   let _identityContext        = null; // identityRuntime.getIdentityContext()
   let _fulfillmentContext     = null; // fulfillmentRuntime.getFulfillmentContext()
+  let _selfConsistencyContext = null; // last reply self-trust signal
+  let _relationshipStateSnapshot = null; // canonical read model snapshot
 
   function getScope() {
     return {
@@ -336,6 +345,7 @@ function createLifeRuntime({
 
     // 4. Build curiosity context for prelude
     _curiosityContext = await _buildCuriosityContext({ companionId, customerId });
+    await bridgeCuriosityToProjects({ companionId, customerId, curiosityContext: _curiosityContext, projectEngine, now });
   }
 
   async function _buildCuriosityContext({ companionId, customerId }) {
@@ -396,6 +406,10 @@ function createLifeRuntime({
 
     // Build & cache relationship context for prelude
     _relationshipContext = await _buildRelationshipContext({ companionId, customerId, now });
+    _relationshipStateSnapshot = relationshipStateRuntime.buildSnapshot({
+      relationshipContext: _relationshipContext,
+      consequenceContext: _consequenceContext,
+    });
   }
 
   async function _buildRelationshipContext({ companionId, customerId, now = new Date() }) {
@@ -480,6 +494,10 @@ function createLifeRuntime({
     if (_todaysPlan && carryover?.active && repairCarryoverEngine) {
       _todaysPlan = repairCarryoverEngine.applyToPlan(_todaysPlan, carryover);
     }
+    _relationshipStateSnapshot = relationshipStateRuntime.buildSnapshot({
+      relationshipContext: _relationshipContext,
+      consequenceContext: _consequenceContext,
+    });
   }
 
   // Homeostasis tick (Life Runtime 6.0): drift needs, plan and execute fulfillment.
@@ -499,7 +517,7 @@ function createLifeRuntime({
       consequenceContext:  _consequenceContext,
       growthContext:       _growthContext,
       curiosityContext:    _curiosityContext,
-      relationshipContext: _relationshipContext,
+      relationshipContext: _relationshipStateSnapshot || _relationshipContext,
       alivePresence,
     }).catch(err => {
       logger?.warn("[life-runtime] _tickHomeostasis failed", { error: err?.message });
@@ -583,11 +601,43 @@ function createLifeRuntime({
    * consequence, then refresh the cached suppression context and prelude so the
    * effect carries into the NEXT reply. Fire-and-forget from the chat pipeline.
    */
-  async function observeInteraction({ userText = "", repairResult = null, now = new Date() } = {}) {
-    if (!relationalConsequencesEngine) return null;
+  async function observeInteraction({
+    userText = "",
+    replyText = "",
+    repairResult = null,
+    now = new Date(),
+    recentHistory = [],
+    duplicate = false,
+    tone = "",
+    generatedImageIds = [],
+    generatedAudioIds = [],
+    memoryContext = [],
+  } = {}) {
     const { companionId, customerId } = getScope();
     if (!companionId) return null;
     try {
+      const repairActive = Boolean(repairResult?.repairNeeded || _consequenceContext?.suppression?.repairRequired || _consequenceContext?.suppression?.repairStarted);
+      const giveSpace = Boolean(_consequenceContext?.suppression?.giveSpace);
+      const signal = selfConsistencyMonitor.evaluate({
+        userText,
+        replyText,
+        recentHistory,
+        duplicate,
+        tone,
+        generatedImageIds,
+        generatedAudioIds,
+        repairActive,
+        giveSpace,
+        fulfillmentEvidence: _fulfillmentContext?.evidence || _fulfillmentContext?.lastOutcome?.evidence || [],
+        memoryContext,
+        relationshipState: _relationshipStateSnapshot || _consequenceContext?.suppression || null,
+      });
+      _selfConsistencyContext = { ...signal, preludeWarning: selfConsistencyMonitor.getPreludeWarning() };
+
+      if (!relationalConsequencesEngine) {
+        await _refreshPrelude();
+        return { selfConsistency: signal, consequence: null };
+      }
       // Resolution / reconciliation first, so a forgiving message doesn't also
       // get read as a fresh hurt.
       await relationalConsequencesEngine.resolveFromSignals({ companionId, customerId, userText, now }).catch(() => {});
@@ -599,7 +649,7 @@ function createLifeRuntime({
       const suppression = relationalConsequencesEngine.computeSuppression(active);
       _applyConsequenceContext(suppression, active);
       await _refreshPrelude();
-      return created;
+      return { selfConsistency: signal, consequence: created };
     } catch (error) {
       logger?.warn?.("[life-runtime] observeInteraction failed", { error: error?.message });
       return null;
@@ -632,6 +682,7 @@ function createLifeRuntime({
       homeostasisContext:   _homeostasisContext ?? null,
       identityContext:      _identityContext ?? null,
       fulfillmentContext:   _fulfillmentContext ?? null,
+      selfConsistencyContext: _selfConsistencyContext ?? null,
     });
   }
 
@@ -772,6 +823,14 @@ function createLifeRuntime({
               .map(a => ({ label: a.label, anniversaryDate: a.anniversaryDate })),
           }
         : null,
+      relationshipState: _relationshipStateSnapshot
+        ? {
+            repair: _relationshipStateSnapshot.repair,
+            giveSpace: _relationshipStateSnapshot.giveSpace,
+            timelineChapter: _relationshipStateSnapshot.timelineChapter,
+            sourceHealth: _relationshipStateSnapshot.sourceHealth,
+          }
+        : null,
       // Relational consequences (Life Runtime 5.0) — safe metadata only, never
       // raw private text or scores.
       consequenceContext: _consequenceContext
@@ -801,6 +860,8 @@ function createLifeRuntime({
       fulfillmentContext: fulfillmentRuntime
         ? fulfillmentRuntime.getStatus()
         : null,
+      selfConsistency: selfConsistencyMonitor.getStatus(),
+      diagnostics: diagnosticRuntime.getStatus(),
       pruneSchedule: {
         eventsDays:    eventPruneAfterDays,
         decisionsDays: decisionPruneAfterDays,

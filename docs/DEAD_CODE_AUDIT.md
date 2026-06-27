@@ -145,3 +145,17 @@ Used by the scripts package typecheck command. Required for TypeScript tooling i
 ### Root scripts/*.mjs (Norwegian verification scripts at repo root)
 **Classification: ACTIVE**
 These run against the live service. They reference `artifacts/ghostlight-bot/src/` paths correctly (they go through the API, not direct file imports). The root `scripts/package.json` registers them as verify commands.
+
+---
+
+## Runtime Integration Archive Policy
+
+The runtime integration pass distinguishes active runtime dead code from quarantined historical material.
+
+Pass condition:
+
+- Active runtime must report `0 DELETE` and `0 UNSURE`.
+- `ARCHIVE` is acceptable only under `archive/` or other explicitly quarantined documentation/reference locations.
+- Active code must not import from archive/quarantine.
+
+This keeps historical planning/reference material available without treating it as live runtime ownership. `RUNTIME_INTEGRATION_PASS` therefore means no active dead code and no active archive imports, not that every archived note has been deleted.
