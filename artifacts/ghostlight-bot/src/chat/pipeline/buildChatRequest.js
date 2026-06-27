@@ -82,6 +82,35 @@ function shouldForceConversationRetrieval({ inputText = "", recentHistory = [], 
   return asksRecentSelfReference && (hasCrossConversationCue || recentHistory.length === 0);
 }
 
+const FORCE_AUDIO_PATTERN = /\b(?:send|make|record|do|give)(?:\s+me)?\s+(?:a\s+)?(?:voice\s+(?:note|message|clip)|audio\s+(?:note|message|clip)|spoken\s+message|voice\s+memo)\b/i;
+const FORCE_IMAGE_NOUN_PATTERN = /\b(?:photo|photos|pic|pics|picture|pictures|image|images|portrait|portraits|selfie|selfies|snapshot|drawing|render|artwork|art)\b/i;
+const FORCE_IMAGE_VERB_PATTERN = /\b(?:send|show|make|create|generate|draw|paint|render|give|get|try|do)\b/i;
+const FORCE_IMAGE_RETRY_PATTERN = /\b(?:try|make|do|send)\b[\s\S]{0,40}\banother\b/i;
+
+function shouldForceMediaToolCall({ availableToolNames = [], inputText = "", imageConversationActive = false } = {}) {
+  const text = String(inputText || "").trim();
+
+  if (!text) {
+    return null;
+  }
+
+  if (availableToolNames.includes("generate_audio") && FORCE_AUDIO_PATTERN.test(text)) {
+    return "generate_audio";
+  }
+
+  if (availableToolNames.includes("generate_image")) {
+    if (FORCE_IMAGE_VERB_PATTERN.test(text) && FORCE_IMAGE_NOUN_PATTERN.test(text)) {
+      return "generate_image";
+    }
+
+    if (imageConversationActive && FORCE_IMAGE_RETRY_PATTERN.test(text)) {
+      return "generate_image";
+    }
+  }
+
+  return null;
+}
+
 function buildTimeContextSection({ input, includeTimeContext, timeZone = "UTC" } = {}) {
   if (!includeTimeContext || !input?.messageTimestamp) {
     return null;
@@ -179,13 +208,23 @@ function buildChatRequest({
 
   if (toolDefinitions.length) {
     request.tools = toolDefinitions;
-    request.tool_choice = shouldForceConversationRetrieval({
+    const forceConversationRetrieval = shouldForceConversationRetrieval({
       inputText: toolContext.currentUserText || input.content,
       recentHistory,
       availableToolNames,
-    })
+    });
+    const forcedMediaTool = !forceConversationRetrieval
+      ? shouldForceMediaToolCall({
+        availableToolNames,
+        inputText: toolContext.currentUserText || input.content,
+        imageConversationActive: Boolean(toolContext.imageConversationActive),
+      })
+      : null;
+    request.tool_choice = forceConversationRetrieval
       ? { type: "function", name: "search_recent_conversations" }
-      : "auto";
+      : forcedMediaTool
+        ? { type: "function", name: forcedMediaTool }
+        : "auto";
   }
 
   if (useWebSearch) {
@@ -210,4 +249,5 @@ module.exports = {
   buildChatRequest,
   buildChatRequestShapeSummary,
   shouldForceConversationRetrieval,
+  shouldForceMediaToolCall,
 };
