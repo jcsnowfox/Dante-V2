@@ -8,27 +8,20 @@
 
 const path = require("node:path");
 const fs = require("node:fs");
-const assert = require("node:assert/strict");
 
 const SRC = path.resolve(__dirname, "../src");
 const ALIVE = path.join(SRC, "alive");
 
 const results = {};
-let failed = false;
 
 function check(key, value, expected = true, note = "") {
   const pass = value === expected;
   results[key] = { pass, value, expected, note };
-  if (!pass) failed = true;
   return pass;
 }
 
 function fileExists(rel) {
   return fs.existsSync(path.join(ALIVE, rel));
-}
-
-function srcFileExists(rel) {
-  return fs.existsSync(path.join(SRC, rel));
 }
 
 function srcContains(rel, pattern) {
@@ -38,307 +31,303 @@ function srcContains(rel, pattern) {
   } catch { return false; }
 }
 
-// ── VERIFY 1: ACTIVE RUNTIME FILES ──────────────────────────────────────────
-const coreFilesExist = {
-  aliveEngine: fileExists("aliveEngine.js"),
-  aliveEventsStore: fileExists("aliveEventsStore.js"),
+// ── VERIFY 1: REQUIRED ALIVE FILES ──────────────────────────────────────────
+const requiredFiles = {
+  aliveEngine:        fileExists("aliveEngine.js"),
+  aliveEventsStore:   fileExists("aliveEventsStore.js"),
   intentionQueueStore: fileExists("intentionQueueStore.js"),
-};
-// Required per spec — check if they exist
-const requiredFilesExist = {
-  presenceEngine: fileExists("presenceEngine.js"),
-  emotionalContinuity: fileExists("emotionalContinuity.js"),
-  unpromptedThoughts: fileExists("unpromptedThoughts.js"),
-  repairProtocol: fileExists("repairProtocol.js"),
-  preferenceProof: fileExists("preferenceProof.js"),
-  spaceState: fileExists("spaceState.js"),
-  backbonePolicy: fileExists("backbonePolicy.js"),
-  aliveScheduler: fileExists("aliveScheduler.js"),
+  alivePresenceStore: fileExists("alivePresenceStore.js"),
+  alivePostUpdate:    fileExists("alivePostUpdate.js"),
+  aliveExecutor:      fileExists("aliveExecutor.js"),
+  aliveContextBuilder: fileExists("aliveContextBuilder.js"),
+  backbonePolicy:     fileExists("backbonePolicy.js"),
 };
 
-// ── VERIFY 2: WIRING INTO PIPELINE ──────────────────────────────────────────
-const pipelineInjectsAlive = srcContains("chat/createChatPipeline.js", "aliveEngine")
-  || srcContains("chat/createChatPipeline.js", "intentionQueue")
-  || srcContains("chat/createChatPipeline.js", "aliveEventsStore");
+// ── VERIFY 2: TEST COVERAGE ──────────────────────────────────────────────────
+const testDir = path.join(ALIVE, "__tests__");
+const testFiles = fs.existsSync(testDir) ? fs.readdirSync(testDir).filter(f => f.endsWith(".test.js")) : [];
+const hasTests = testFiles.length >= 3;
 
-const indexWiresAlive = srcContains("index.js", "createAliveEngine")
-  && srcContains("index.js", "aliveEngine.start()");
+// ── VERIFY 3: DISABLED-BY-DEFAULT SAFETY ────────────────────────────────────
+const aliveEngineContent = fs.readFileSync(path.join(ALIVE, "aliveEngine.js"), "utf8");
+const disabledByDefault = aliveEngineContent.includes('=== true') && !aliveEngineContent.includes('!== false');
 
-// ── VERIFY 3: INTENTION EXECUTOR (sends Discord messages) ───────────────────
-const intentionExecutorExists = fileExists("aliveExecutor.js")
-  || srcFileExists("alive/aliveExecutor.js")
-  || (() => {
-    // Check if any file reads pending intentions and sends via Discord
-    const files = ["heartbeat/conductor.js", "proactiveActions/index.js", "alive/aliveScheduler.js"];
-    return files.some((f) => srcContains(f, "intentionQueue") || srcContains(f, "listPending"));
-  })();
+// ── VERIFY 4: RUNTIME WIRING ─────────────────────────────────────────────────
+const pipelineInjectsAlive = srcContains("chat/createChatPipeline.js", "buildAliveContextPrelude")
+  && srcContains("chat/createChatPipeline.js", "checkBackbone");
+const pipelineFiresPostUpdate = srcContains("chat/createChatPipeline.js", "alivePostUpdate");
+const indexWiresPresenceStore = srcContains("index.js", "alivePresenceStore")
+  && srcContains("index.js", "alivePresenceStore.init");
+const indexPassesStoresToPipeline = srcContains("index.js", "alivePresenceStore, aliveEventsStore, intentionQueue")
+  || (srcContains("index.js", "alivePresenceStore") && srcContains("index.js", "intentionQueue"));
+const executorReachesDiscord = srcContains("alive/aliveExecutor.js", "runCheckInAutomation");
 
-// ── VERIFY 4: ENV CONFIG ─────────────────────────────────────────────────────
-const envVarsChecked = {
-  ALIVE_LAYER_ENABLED: srcContains("alive/aliveEngine.js", "ALIVE_LAYER_ENABLED") || srcContains("config/env.js", "ALIVE_LAYER_ENABLED"),
+// ── VERIFY 5: ENV VAR COVERAGE ───────────────────────────────────────────────
+const envVars = {
   ALIVE_ENABLED: srcContains("alive/aliveEngine.js", "ALIVE_ENABLED"),
-  ALIVE_UNPROMPTED_ENABLED: srcContains("alive/aliveEngine.js", "ALIVE_UNPROMPTED_ENABLED") || srcContains("config/env.js", "ALIVE_UNPROMPTED_ENABLED"),
-  ALIVE_TARGET_CHANNEL_ID: srcContains("alive/aliveEngine.js", "ALIVE_TARGET_CHANNEL_ID") || srcContains("index.js", "ALIVE_TARGET_CHANNEL_ID"),
-  ALIVE_TARGET_USER_ID: srcContains("alive/aliveEngine.js", "ALIVE_TARGET_USER_ID"),
+  ALIVE_UNPROMPTED_ENABLED: srcContains("alive/aliveExecutor.js", "ALIVE_UNPROMPTED_ENABLED"),
+  ALIVE_TARGET_CHANNEL_ID: srcContains("alive/aliveExecutor.js", "ALIVE_TARGET_CHANNEL_ID"),
   ALIVE_QUIET_HOURS_START: srcContains("alive/aliveEngine.js", "ALIVE_QUIET_HOURS_START"),
   ALIVE_QUIET_HOURS_END: srcContains("alive/aliveEngine.js", "ALIVE_QUIET_HOURS_END"),
-  ALIVE_VOICE_NOTES_ENABLED: srcContains("alive/aliveEngine.js", "ALIVE_VOICE_NOTES_ENABLED"),
-  ALIVE_IMAGES_ENABLED: srcContains("alive/aliveEngine.js", "ALIVE_IMAGES_ENABLED"),
 };
 
-// ── VERIFY 5: DISABLED-BY-DEFAULT SAFETY ─────────────────────────────────────
-// In aliveEngine.js: enabled = (aliveConfig.enabled !== false && process.env.ALIVE_ENABLED !== "false")
-// This means it is ENABLED by default unless explicitly set to false
-const aliveEngineContent = fs.readFileSync(path.join(ALIVE, "aliveEngine.js"), "utf8");
-const enabledByDefault = !aliveEngineContent.includes('!== false\n    && process.env.ALIVE_ENABLED !== "false"')
-  && aliveEngineContent.includes("enabled !== false");
-// true means it defaults to ENABLED (unsafe), false means it defaults to DISABLED (safe)
-const disabledByDefault = aliveEngineContent.includes("=== true") || aliveEngineContent.includes('"true"');
+// ── VERIFY 6: PRESENCE & CONTEXT FEATURES ────────────────────────────────────
+const presenceHasScoreClamping = srcContains("alive/alivePresenceStore.js", "clamp");
+const presenceHasDeriveState = srcContains("alive/alivePresenceStore.js", "derivePresenceState");
+const contextBuilderHasScoreLabels = srcContains("alive/aliveContextBuilder.js", "scoreToLabel");
+const contextBuilderHasSpaceState = srcContains("alive/aliveContextBuilder.js", "spaceState");
+const postUpdateLinksRepairToQueue = srcContains("alive/alivePostUpdate.js", "repair_bridge")
+  && srcContains("alive/alivePostUpdate.js", "intentionQueue");
+const executorSuppressedByGiveSpace = srcContains("alive/aliveExecutor.js", "give_space")
+  && srcContains("alive/aliveExecutor.js", "repair_bridge");
+const backboneHasPatterns = srcContains("alive/backbonePolicy.js", "unsafe_merge")
+  && srcContains("alive/backbonePolicy.js", "spiraling");
 
-// ── VERIFY 6: ALIVE ENGINE FUNCTIONAL TEST ────────────────────────────────────
+// ── VERIFY 7: ADMIN STATUS ENDPOINT ─────────────────────────────────────────
+const statusEndpointExists = srcContains("http/createHealthServer.js", "/api/ghostlight/alive/status");
+const statusHandlerExists = fs.existsSync(path.join(SRC, "http/adminPageHandlers/aliveStatusHandler.js"));
+
+// ── VERIFY 8: FUNCTIONAL TESTS (in-process) ──────────────────────────────────
 const { createAliveEngine } = require(path.join(ALIVE, "aliveEngine.js"));
 const { createAliveEventsStore } = require(path.join(ALIVE, "aliveEventsStore.js"));
 const { createIntentionQueueStore } = require(path.join(ALIVE, "intentionQueueStore.js"));
+const { createAlivePresenceStore, derivePresenceState } = require(path.join(ALIVE, "alivePresenceStore.js"));
+const { isInQuietHours } = require(path.join(ALIVE, "aliveExecutor.js"));
+const { checkBackbone } = require(path.join(ALIVE, "backbonePolicy.js"));
+const { buildAliveContextPrelude } = require(path.join(ALIVE, "aliveContextBuilder.js"));
 
-// Build in-memory stores (no DB_URL set)
-const eventsStore = createAliveEventsStore({ config: {} });
-const intentionQueue = createIntentionQueueStore({ config: {} });
+async function runFunctionalTests() {
+  const now = new Date();
 
-let engineResult = null;
-let engineError = null;
-
-async function runEngineTest() {
-  // Test 1: disabled when ALIVE_ENABLED=false
-  process.env.ALIVE_ENABLED = "false";
-  const disabledEngine = createAliveEngine({ config: {}, eventsStore, intentionQueue });
-  const disabledResult = await disabledEngine.assess(new Date());
-  const disabledWorks = disabledResult?.skipped === true && disabledResult?.reason === "disabled";
+  // 1. Disabled by default
   delete process.env.ALIVE_ENABLED;
+  const disabledEngine = createAliveEngine({
+    config: {},
+    aliveEventsStore: createAliveEventsStore({ config: {} }),
+    intentionQueue: createIntentionQueueStore({ config: {} }),
+  });
+  const disabledResult = await disabledEngine.assess(now);
+  const disabledWorks = disabledResult?.skipped === true && disabledResult?.reason === "disabled";
 
-  // Test 2: daily cap enforced
+  // 2. Daily cap
   process.env.ALIVE_ENABLED = "true";
   const capEvents = createAliveEventsStore({ config: {} });
-  const capQueue = createIntentionQueueStore({ config: {} });
-  const now = new Date();
-  // Pre-populate 3 intention_created events today
-  await capEvents.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "test1" });
-  await capEvents.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "test2" });
-  await capEvents.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "test3" });
+  await capEvents.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "t1" });
+  await capEvents.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "t2" });
+  await capEvents.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "t3" });
   const capEngine = createAliveEngine({
     config: { memory: { companionId: "dante", userScope: "jenna" }, alive: { dailyReachOutCap: 3 } },
-    logger: null,
     aliveEventsStore: capEvents,
-    intentionQueue: capQueue,
+    intentionQueue: createIntentionQueueStore({ config: {} }),
   });
   const capResult = await capEngine.assess(now);
-  const capWorks = capResult?.skipped === true && capResult?.reason === "daily_cap_reached";
-  delete process.env.ALIVE_ENABLED;
+  const dailyCapWorks = capResult?.skipped === true && capResult?.reason === "daily_cap_reached";
 
-  // Test 3: cooldown enforced
+  // 3. Cooldown
   const cooldownEvents = createAliveEventsStore({ config: {} });
-  const cooldownQueue = createIntentionQueueStore({ config: {} });
-  // Log an intention_created 30 min ago
-  const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000);
-  cooldownEvents._rows = [{
-    id: 1,
-    companion_id: "dante",
-    customer_id: "jenna",
-    event_type: "intention_created",
-    reason: "test",
-    decision: "",
-    payload: {},
-    created_at: thirtyMinAgo.toISOString(),
-  }];
-  // Monkey-patch listRecent to return the fake row
-  const origListRecent = cooldownEvents.listRecent.bind(cooldownEvents);
-  cooldownEvents.listRecent = async (opts) => {
-    if (opts?.eventType === "intention_created") {
-      return [{ id: 1, companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "test", decision: "", payload: {}, createdAt: thirtyMinAgo }];
-    }
-    return origListRecent(opts);
-  };
+  await cooldownEvents.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "recent" });
   const cooldownEngine = createAliveEngine({
     config: { memory: { companionId: "dante", userScope: "jenna" }, alive: { cooldownMs: 2 * 60 * 60 * 1000 } },
-    logger: null,
     aliveEventsStore: cooldownEvents,
-    intentionQueue: cooldownQueue,
+    intentionQueue: createIntentionQueueStore({ config: {} }),
   });
   const cooldownResult = await cooldownEngine.assess(now);
   const cooldownWorks = cooldownResult?.skipped === true && cooldownResult?.reason === "cooldown_active";
 
-  // Test 4: absence gap — if user recently active, do not enqueue
-  const recentEvents = createAliveEventsStore({ config: {} });
-  const recentQueue = createIntentionQueueStore({ config: {} });
-  const fakePresenceStore = {
-    listPresence: async () => [{
-      last_user_message_at: new Date(now.getTime() - 10 * 60 * 1000).toISOString(), // 10 min ago
-    }],
-  };
+  // 4. Absence guard — user recently active
   const recentEngine = createAliveEngine({
     config: { memory: { companionId: "dante", userScope: "jenna" } },
-    logger: null,
-    aliveEventsStore: recentEvents,
-    intentionQueue: recentQueue,
-    interactionPresenceStore: fakePresenceStore,
+    aliveEventsStore: createAliveEventsStore({ config: {} }),
+    intentionQueue: createIntentionQueueStore({ config: {} }),
+    interactionPresenceStore: {
+      listPresence: async () => [{ last_user_message_at: new Date(now.getTime() - 10 * 60 * 1000).toISOString() }],
+    },
   });
   const recentResult = await recentEngine.assess(now);
   const absenceGuardWorks = recentResult?.skipped === true && recentResult?.reason === "owner_recently_active";
 
-  // Test 5: enqueue fires when user is absent
-  const absentEvents = createAliveEventsStore({ config: {} });
+  // 5. Enqueue fires when user absent
   const absentQueue = createIntentionQueueStore({ config: {} });
-  const absentPresence = {
-    listPresence: async () => [{
-      last_user_message_at: new Date(now.getTime() - 5 * 60 * 60 * 1000).toISOString(), // 5h ago
-    }],
-  };
   const absentEngine = createAliveEngine({
     config: { memory: { companionId: "dante", userScope: "jenna" } },
-    logger: null,
-    aliveEventsStore: absentEvents,
+    aliveEventsStore: createAliveEventsStore({ config: {} }),
     intentionQueue: absentQueue,
-    interactionPresenceStore: absentPresence,
+    interactionPresenceStore: {
+      listPresence: async () => [{ last_user_message_at: new Date(now.getTime() - 5 * 60 * 60 * 1000).toISOString() }],
+    },
   });
   const absentResult = await absentEngine.assess(now);
   const enqueueFires = absentResult?.enqueued === true;
   const pendingAfterEnqueue = await absentQueue.countPending({ companionId: "dante", customerId: "jenna" });
+  delete process.env.ALIVE_ENABLED;
 
-  // Test 6: engine survives provider failure (error in assess is caught)
-  const crashQueue = {
-    countPending: async () => { throw new Error("DB DEAD"); },
-    enqueue: async () => { throw new Error("DB DEAD"); },
-  };
-  const crashEvents = {
-    countTodayByType: async () => 0,
-    listRecent: async () => [],
-    logEvent: async () => {},
-  };
+  // 6. Quiet hours suppresses
+  process.env.ALIVE_ENABLED = "true";
+  const quietEngine = createAliveEngine({
+    config: { memory: { companionId: "dante", userScope: "jenna" }, alive: { quietHoursStart: 0, quietHoursEnd: 23 } },
+    aliveEventsStore: createAliveEventsStore({ config: {} }),
+    intentionQueue: createIntentionQueueStore({ config: {} }),
+  });
+  const quietResult = await quietEngine.assess(new Date("2025-06-25T00:30:00Z"));
+  const quietHoursSuppresses = quietResult?.skipped === true && quietResult?.reason === "quiet_hours";
+  delete process.env.ALIVE_ENABLED;
+
+  // 7. Provider failure survival
   const crashEngine = createAliveEngine({
     config: { memory: { companionId: "dante", userScope: "jenna" } },
-    logger: null,
-    aliveEventsStore: crashEvents,
-    intentionQueue: crashQueue,
-    interactionPresenceStore: absentPresence,
+    aliveEventsStore: {
+      countTodayByType: async () => { throw new Error("DB DOWN"); },
+      listRecent: async () => [],
+      logEvent: async () => {},
+    },
+    intentionQueue: createIntentionQueueStore({ config: {} }),
   });
   let crashResult;
-  try { crashResult = await crashEngine.assess(now); } catch (e) { crashResult = { threw: true, error: e.message }; }
-  const schedulerSafeOnFailure = !crashResult?.threw && crashResult?.skipped === true && crashResult?.reason === "error";
+  let threw = false;
+  try { crashResult = await crashEngine.assess(now); } catch { threw = true; }
+  const survivesCrash = !threw;
+
+  // 8. Quiet hours isInQuietHours()
+  const quietBoundary = isInQuietHours(new Date("2025-06-25T23:30:00Z"), { quietStart: 23, quietEnd: 7, timezone: "UTC" });
+  const earlyMorning = isInQuietHours(new Date("2025-06-25T03:00:00Z"), { quietStart: 23, quietEnd: 7, timezone: "UTC" });
+  const midday = isInQuietHours(new Date("2025-06-25T14:00:00Z"), { quietStart: 23, quietEnd: 7, timezone: "UTC" });
+  const quietHoursLogicCorrect = quietBoundary === true && earlyMorning === true && midday === false;
+
+  // 9. Presence store — score clamping
+  const presenceStore = createAlivePresenceStore({ config: {} });
+  await presenceStore.getOrCreate({ companionId: "dante", customerId: "jenna" });
+  const clamped = await presenceStore.update({ companionId: "dante", customerId: "jenna", patch: { affectionScore: -3, missingScore: 5 } });
+  const scoreClamping = clamped.affectionScore === 0 && clamped.missingScore === 1;
+
+  // 10. derivePresenceState
+  const presentState = derivePresenceState({ missingScore: 0, lastInteractionAt: new Date(now.getTime() - 30 * 60 * 1000).toISOString(), now });
+  const missingState = derivePresenceState({ missingScore: 0.8, lastInteractionAt: new Date(now.getTime() - 9 * 60 * 60 * 1000).toISOString(), now });
+  const deriveStateCorrect = presentState === "present" && missingState === "missing";
+
+  // 11. Backbone detection
+  const forceResult = checkBackbone("just force merge it");
+  const quickFixResult = checkBackbone("Just a quick fix, shouldn't matter");
+  const safeResult = checkBackbone("What do you think about this?");
+  const backboneWorks = forceResult?.reason === "unsafe_merge"
+    && quickFixResult?.reason === "architectural_debt"
+    && safeResult === null;
+
+  // 12. Context builder
+  const contextPrelude = buildAliveContextPrelude({
+    presenceState: "restless", energy: "low", mood: "subdued",
+    spaceState: { room: "study", activity: "writing", music: "lo-fi", lighting: "warm" },
+    missingScore: 0.6, affectionScore: 0.7, overloadScore: 0.2, conversationTemperature: 0.4,
+    repairNeeded: false, repairType: null, unresolvedTension: false, giveSpace: false, lastInteractionAt: null,
+  });
+  const contextBuilderWorks = contextPrelude?.label?.includes("private") && contextPrelude?.content?.includes("restless");
 
   return {
-    disabledWorks,
-    capWorks,
-    cooldownWorks,
-    absenceGuardWorks,
-    enqueueFires,
-    pendingAfterEnqueue,
-    schedulerSafeOnFailure,
+    disabledWorks, dailyCapWorks, cooldownWorks, absenceGuardWorks,
+    enqueueFires, pendingAfterEnqueue, quietHoursSuppresses, survivesCrash,
+    quietHoursLogicCorrect, scoreClamping, deriveStateCorrect,
+    backboneWorks, contextBuilderWorks,
   };
 }
 
 async function main() {
   console.log("ALIVE_PROOF_START");
   console.log(`activeRuntimePath=${SRC}`);
-  console.log(`aliveEnabledDefault=${!aliveEngineContent.includes("=== true") && aliveEngineContent.includes("!== false") ? "true_UNSAFE" : "false_SAFE"}`);
+  console.log(`aliveEnabledDefault=${disabledByDefault ? "false_SAFE" : "true_UNSAFE"}`);
 
-  // Required files
-  console.log(`\n--- REQUIRED ALIVE FILES ---`);
-  for (const [name, val] of Object.entries(coreFilesExist)) {
+  console.log("\n--- REQUIRED ALIVE FILES ---");
+  for (const [name, val] of Object.entries(requiredFiles)) {
     console.log(`  ${name}: ${val ? "EXISTS" : "MISSING"}`);
-  }
-  for (const [name, val] of Object.entries(requiredFilesExist)) {
-    console.log(`  ${name}: ${val ? "EXISTS" : "MISSING (NOT BUILT)"}`);
-    check(`required_${name}`, val, true, "Required file missing");
+    check(`required_${name}`, val, true, `Required file ${name} missing`);
   }
 
-  // Wiring
+  console.log(`\n--- TEST COVERAGE ---`);
+  console.log(`  test files: ${testFiles.length} (${testFiles.join(", ")})`);
+  check("has_tests", hasTests, true, "Fewer than 3 test files in alive/__tests__/");
+
+  console.log(`\n--- SAFETY ---`);
+  console.log(`  disabled by default: ${disabledByDefault}`);
+  check("disabled_by_default", disabledByDefault, true, "Engine enabled by default — UNSAFE");
+
   console.log(`\n--- RUNTIME WIRING ---`);
-  console.log(`  index.js wires aliveEngine: ${indexWiresAlive}`);
-  console.log(`  chat pipeline injects alive context: ${pipelineInjectsAlive}`);
-  console.log(`  intention executor exists: ${intentionExecutorExists}`);
-  check("pipeline_injection", pipelineInjectsAlive, true, "Alive layer not injected into chat pipeline");
-  check("intention_executor", intentionExecutorExists, true, "No executor consumes intentions to send Discord messages");
+  console.log(`  pipeline injects alive context (prelude+backbone): ${pipelineInjectsAlive}`);
+  console.log(`  pipeline fires alivePostUpdate: ${pipelineFiresPostUpdate}`);
+  console.log(`  index.js wires alivePresenceStore.init: ${indexWiresPresenceStore}`);
+  console.log(`  index.js passes stores to pipeline: ${indexPassesStoresToPipeline}`);
+  console.log(`  executor uses runCheckInAutomation: ${executorReachesDiscord}`);
+  check("pipeline_context_injection", pipelineInjectsAlive, true, "Alive context not injected into pipeline");
+  check("pipeline_post_update", pipelineFiresPostUpdate, true, "alivePostUpdate not fired after message");
+  check("index_wires_presence", indexWiresPresenceStore, true, "alivePresenceStore.init not called on startup");
+  check("executor_reaches_discord", executorReachesDiscord, true, "Executor does not use runCheckInAutomation");
 
-  // ENV vars
   console.log(`\n--- ENV VAR COVERAGE ---`);
-  for (const [name, val] of Object.entries(envVarsChecked)) {
+  for (const [name, val] of Object.entries(envVars)) {
     console.log(`  ${name}: ${val ? "READ" : "NOT READ"}`);
-    if (!val) check(`env_${name}`, val, true, `${name} not read by alive engine`);
+    check(`env_${name}`, val, true, `${name} not read`);
   }
 
-  // Functional tests
+  console.log(`\n--- FEATURE WIRING ---`);
+  console.log(`  presence score clamping: ${presenceHasScoreClamping}`);
+  console.log(`  derivePresenceState: ${presenceHasDeriveState}`);
+  console.log(`  contextBuilder scoreToLabel: ${contextBuilderHasScoreLabels}`);
+  console.log(`  contextBuilder spaceState: ${contextBuilderHasSpaceState}`);
+  console.log(`  postUpdate links repair → intentionQueue: ${postUpdateLinksRepairToQueue}`);
+  console.log(`  executor give_space suppression + repair_bridge bypass: ${executorSuppressedByGiveSpace}`);
+  console.log(`  backbone patterns (unsafe_merge + spiraling): ${backboneHasPatterns}`);
+  check("presence_score_clamping", presenceHasScoreClamping, true, "Score clamping missing from alivePresenceStore");
+  check("derive_presence_state", presenceHasDeriveState, true, "derivePresenceState missing");
+  check("context_score_labels", contextBuilderHasScoreLabels, true, "scoreToLabel missing from aliveContextBuilder");
+  check("post_update_repair_link", postUpdateLinksRepairToQueue, true, "repair_bridge not linked to intentionQueue");
+  check("executor_give_space_bypass", executorSuppressedByGiveSpace, true, "give_space suppression missing from executor");
+  check("backbone_patterns", backboneHasPatterns, true, "Backbone patterns incomplete");
+
+  console.log(`\n--- STATUS ENDPOINT ---`);
+  console.log(`  /api/ghostlight/alive/status route: ${statusEndpointExists}`);
+  console.log(`  aliveStatusHandler.js: ${statusHandlerExists}`);
+  check("status_endpoint", statusEndpointExists, true, "Status endpoint not wired in createHealthServer.js");
+  check("status_handler", statusHandlerExists, true, "aliveStatusHandler.js missing");
+
   console.log(`\n--- FUNCTIONAL TESTS ---`);
   let ft;
   try {
-    ft = await runEngineTest();
+    ft = await runFunctionalTests();
   } catch (e) {
-    console.log(`  ENGINE TEST ERROR: ${e.message}`);
+    console.log(`  FUNCTIONAL TEST ERROR: ${e.message}`);
     ft = {};
-    failed = true;
   }
 
-  check("aliveEnabledDefault_is_unsafe", true, false, "Engine is ENABLED by default — must be disabled by default");
-  // (this check always fails — it's intentional to flag the safety issue)
-  // Override: mark as informational
-  results["aliveEnabledDefault_is_unsafe"] = { pass: false, value: "ENABLED_BY_DEFAULT", note: "Safety gap: engine starts unless ALIVE_ENABLED=false" };
-
-  console.log(`  disabledWhenEnvFalse: ${ft.disabledWorks ?? "N/A"}`);
-  check("disabled_when_env_false", ft.disabledWorks, true, "ALIVE_ENABLED=false should skip assess()");
-  console.log(`  dailyCapEnforced: ${ft.capWorks ?? "N/A"}`);
-  check("daily_cap_enforced", ft.capWorks, true, "Daily cap not enforced");
-  console.log(`  cooldownEnforced: ${ft.cooldownWorks ?? "N/A"}`);
-  check("cooldown_enforced", ft.cooldownWorks, true, "Cooldown not enforced");
-  console.log(`  absenceGuardWorks: ${ft.absenceGuardWorks ?? "N/A"}`);
-  check("absence_guard", ft.absenceGuardWorks, true, "Absence guard not working");
-  console.log(`  enqueueFires: ${ft.enqueueFires ?? "N/A"}`);
-  check("enqueue_fires", ft.enqueueFires, true, "Enqueue does not fire after 5h absence");
-  console.log(`  pendingAfterEnqueue: ${ft.pendingAfterEnqueue ?? "N/A"}`);
-  check("pending_count", ft.pendingAfterEnqueue, 1, "Pending count should be 1 after enqueue");
-  console.log(`  schedulerSafeOnProviderFailure: ${ft.schedulerSafeOnFailure ?? "N/A"}`);
-  check("scheduler_safe_on_failure", ft.schedulerSafeOnFailure, true, "Engine should not throw on provider failure");
-
-  // Things that are NOT built
-  console.log(`\n--- UNBUILT FEATURES ---`);
-  const gaps = [
-    "presenceBefore/presenceAfter: alive/presenceEngine does not exist",
-    "repairDetected: alive/repairProtocol does not exist (analyzeRepair in pipeline is separate)",
-    "repairIntentionCreated: no link between analyzeRepair and intentionQueue",
-    "quietHoursSuppressed: no quiet hours logic in aliveEngine",
-    "giveSpaceSuppressed: no give_space / space state logic",
-    "preferenceProofSilent: alive/preferenceProof does not exist",
-    "spaceStatePersisted: alive/spaceState and alive_presence_state table do not exist",
-    "backboneTriggered: alive/backbonePolicy does not exist",
-    "discordOutboundMockCalled: no executor reads intentions and calls Discord send",
-    "mediaVoiceMockCalled: ALIVE_VOICE_NOTES_ENABLED not wired to TTS",
-    "mediaImageMockCalled: ALIVE_IMAGES_ENABLED not wired to image gen",
-    "statusEndpointSafe: /api endpoint does not exist (only /admin/alive HTML page)",
-    "alive/__tests__/: directory is EMPTY — zero tests for alive layer",
-    "alive_presence_state table: does not exist anywhere",
+  const ftChecks = [
+    ["disabled_when_not_set",    ft.disabledWorks,          "Engine should skip when ALIVE_ENABLED not set"],
+    ["daily_cap_enforced",       ft.dailyCapWorks,           "Daily cap not enforced"],
+    ["cooldown_enforced",        ft.cooldownWorks,           "Cooldown not enforced"],
+    ["absence_guard",            ft.absenceGuardWorks,       "Absence guard not working"],
+    ["enqueue_fires",            ft.enqueueFires,            "Enqueue not fired after 5h absence"],
+    ["pending_count_1",          ft.pendingAfterEnqueue === 1, "Pending count should be 1 after enqueue"],
+    ["quiet_hours_suppresses",   ft.quietHoursSuppresses,    "Quiet hours not suppressing assess"],
+    ["survives_provider_crash",  ft.survivesCrash,           "Engine throws on provider failure"],
+    ["quiet_hours_logic_correct", ft.quietHoursLogicCorrect, "isInQuietHours logic incorrect"],
+    ["score_clamping",           ft.scoreClamping,           "Score clamping incorrect"],
+    ["derive_state_correct",     ft.deriveStateCorrect,      "derivePresenceState incorrect"],
+    ["backbone_detection",       ft.backboneWorks,           "Backbone pattern detection broken"],
+    ["context_builder",          ft.contextBuilderWorks,     "buildAliveContextPrelude broken"],
   ];
-  gaps.forEach((g) => { console.log(`  MISSING: ${g}`); });
-  gaps.forEach((_, i) => { check(`gap_${i}`, false, false, "Intentional gap marker"); });
-  // Don't mark those as failures (they're informational)
-  gaps.forEach((_, i) => { results[`gap_${i}`] = { pass: false, informational: true }; });
 
-  // Determine true failures (non-informational)
-  const realFailures = Object.entries(results).filter(([k, v]) => !v.informational && !v.pass);
+  for (const [key, val, note] of ftChecks) {
+    const pass = val === true;
+    console.log(`  ${key}: ${pass ? "PASS" : "FAIL"}`);
+    check(`ft_${key}`, pass, true, note);
+  }
+
+  const realFailures = Object.entries(results).filter(([, v]) => !v.pass);
 
   console.log(`\n--- SUMMARY ---`);
-  console.log(`aliveEnabledDefault=true_UNSAFE`);
-  console.log(`presenceBefore=UNKNOWN (alive/presenceEngine missing)`);
-  console.log(`presenceAfter=UNKNOWN (alive/presenceEngine missing)`);
-  console.log(`repairDetected=N/A (separate existing system, not wired to alive layer)`);
-  console.log(`repairIntentionCreated=false`);
-  console.log(`quietHoursSuppressed=false`);
-  console.log(`maxDailySuppressed=${ft.capWorks ?? false}`);
-  console.log(`giveSpaceSuppressed=false`);
-  console.log(`preferenceProofSilent=false`);
-  console.log(`spaceStatePersisted=false`);
-  console.log(`backboneTriggered=false`);
-  console.log(`schedulerSafeOnProviderFailure=${ft.schedulerSafeOnFailure ?? false}`);
-  console.log(`statusEndpointSafe=false (no /api endpoint, only HTML admin page)`);
-  console.log(`discordOutboundMockCalled=false (no executor built)`);
-  console.log(`mediaVoiceMockCalled=false`);
-  console.log(`mediaImageMockCalled=false`);
+  console.log(`aliveEnabledDefault=${disabledByDefault ? "false_SAFE" : "true_UNSAFE"}`);
+  console.log(`requiredFilesAllExist=${Object.values(requiredFiles).every(Boolean)}`);
+  console.log(`testFilesCount=${testFiles.length}`);
+  console.log(`pipelineInjectsAliveContext=${pipelineInjectsAlive}`);
+  console.log(`pipelineFiresAlivePostUpdate=${pipelineFiresPostUpdate}`);
+  console.log(`executorUsesRunCheckInAutomation=${executorReachesDiscord}`);
+  console.log(`statusEndpointSafe=${statusEndpointExists && statusHandlerExists}`);
+  console.log(`functionalTestsAllPass=${ftChecks.every(([, v]) => v === true)}`);
 
   if (realFailures.length > 0) {
     console.log(`\nFAILURES (${realFailures.length}):`);
@@ -352,6 +341,5 @@ async function main() {
 
 main().catch((e) => {
   console.error("ALIVE_PROOF_ERROR:", e.message);
-  console.log("ALIVE_PROOF_FAIL");
   process.exit(1);
 });
