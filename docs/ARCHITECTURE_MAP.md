@@ -500,6 +500,223 @@ createXxxStore({ pool, config }) → { init(), getXxx(), setXxx(), ... }
 
 ---
 
+## Flow Diagrams
+
+### Flow 1: Discord → Reply
+
+```
+User message
+  │
+  ▼
+Discord API (messageCreate event)
+  │
+  ▼
+bot/events/messageCreate.js
+  ├─ Validate: is bot mention? thread reply? not self?
+  ├─ Rate-limit check
+  └─ Route to chatPipeline.run({ message, mode })
+       │
+       ▼
+  chat/createChatPipeline.js  ◄── single context assembly point
+       │
+       ├─ preprocessMessage        (strip mentions, validate)
+       ├─ enrichInput              (URLs, attachments, image context)
+       ├─ loadScopedRecentHistory  (conversation history from DB)
+       ├─ retrieveMemory           (Qdrant vector search)
+       │
+       ├─ BUILD contextSections[] ──────────────────────────────────
+       │    1. buildSystemPrompt()
+       │    2. buildAliveContextPrelude()   ← alive layer
+       │    3. checkBackbone()              ← pushback guidance
+       │    4. classifyEmotionalBeat()
+       │    5. promise/continuity ledger
+       │    6. resolveToneMode()
+       │    7. buildMainUserPresenceContextSection()
+       │    8. image conversation state
+       │    9. cross-channel awareness, URLs
+       │   10. human simulation context
+       │   11. situational awareness
+       │   12. inner life texture
+       │
+       ├─ callModel.js  (LLM + tool loop)
+       │    └─ tool calls: save_memory / search_memories /
+       │                   generate_image / generate_audio /
+       │                   web_search / music tools
+       │
+       ├─ buildReply (format, split chunks)
+       │
+       ▼
+  channel.send()  (each chunk ≤2000 chars, ≤5 chunks)
+       │
+       ▼
+  alivePostUpdate()  [fire-and-forget — updates presence scores]
+```
+
+---
+
+### Flow 2: Scheduler Startup
+
+```
+src/index.js boots
+  │
+  ├─ Phase 0: load config, create logger
+  ├─ Phase 1: runSchemaGuard()  (86 Postgres tables)
+  ├─ Phase 2: init 32+ stores
+  ├─ Phase 3: create services (Discord client, pipeline, memory)
+  ├─ Phase 4: create engines (alive, innerLife, continuity, ...)
+  │
+  ├─ BACKGROUND PHASE ──────────────────────────────────────────────
+  │    schedulerRegistry.registerBackground("aliveEngine", () => aliveEngine.start())
+  │    schedulerRegistry.startBackground()
+  │         └─ aliveEngine.start()  [checks absence every N minutes]
+  │              ├─ requires: ALIVE_ENABLED === "true"
+  │              └─ on absence: enqueues intention → intentionQueueStore
+  │
+  ├─ client.login(DISCORD_TOKEN)  ── Discord connects ──────────────
+  │
+  └─ POST-LOGIN PHASE ──────────────────────────────────────────────
+       schedulerRegistry.registerPostLogin("automationRunner", ...)
+       schedulerRegistry.registerPostLogin("heartbeat", ...)
+       schedulerRegistry.registerPostLogin("secondLifeLifeEngine", ...)  [conditional]
+       schedulerRegistry.registerPostLogin("emotionalArc.scheduler", ...)
+       schedulerRegistry.startPostLogin()
+            ├─ automationRunner.start()   [daily summary, curation, memory sync]
+            ├─ heartbeat.start()          [scheduled heartbeat actions]
+            ├─ setInterval(runLifeTick)   [Second Life tick — if enabled]
+            └─ emotionalArc.scheduler.start()
+
+       automationRunner.runNow()  [immediate first automation pass]
+```
+
+---
+
+### Flow 3: Image Generation
+
+```
+User: "draw me a picture of..."
+  │
+  ▼
+chatPipeline → callModel.js (LLM decides to call generate_image tool)
+  │
+  ▼
+tools/mediaTools.js  →  generate_image handler
+  │
+  ├─ images/generateImage.js
+  │    ├─ buildPrompt()        (user intent + style presets)
+  │    ├─ OpenAI DALL-E 3 API  (1024×1024 or HD)
+  │    ├─ sharp (resize/optimize)
+  │    └─ bucketStorage.js → AWS S3 upload
+  │
+  ├─ returns: { url, localPath, prompt }
+  │
+  ▼
+LLM tool result injected into conversation
+  │
+  ▼
+channel.send() with image attachment
+  │
+  ▼
+generated_images table  (Postgres — persisted for gallery)
+  │
+  ▼
+/admin/gallery/images  (dashboard — read-only view)
+```
+
+---
+
+### Flow 4: Voice / Audio Generation
+
+```
+User: "/voice" command OR auto-voice mode active
+  │
+  ▼
+bot/events/messageCreate.js detects voice trigger
+  │
+  ▼
+LLM generates text reply (normal chat pipeline)
+  │
+  ▼
+audio/generateAudio.js
+  ├─ Fish Audio API (TTS)  ← FISH_AUDIO_API_KEY
+  ├─ latestReplyCache.js   (de-duplicate concurrent requests)
+  ├─ galleryPolicy.js      (decide whether to persist)
+  └─ AWS S3 upload         (if gallery policy allows)
+  │
+  ▼
+channel.send() with audio file attachment (.mp3)
+  │
+  ▼
+generated_audio table  (Postgres — if persisted)
+```
+
+---
+
+### Flow 5: Dashboard Request
+
+```
+Browser → GET /admin/alive
+  │
+  ▼
+http/createHealthServer.js  (Express router)
+  │
+  ▼
+http/adminPageHandlers/alivePageHandler.js
+  ├─ receives appContext (pre-built, passed at server creation)
+  ├─ reads: alivePresenceStore.getPresence()
+  ├─ reads: aliveEventsStore.getRecentEvents()
+  ├─ reads: schedulerRegistry.status()   [read-only]
+  └─ renders HTML template (no .start() / .stop() calls)
+  │
+  ▼
+200 OK  (HTML page)
+
+Browser → GET /api/ghostlight/alive/status
+  │
+  ▼
+http/adminPageHandlers/aliveStatusHandler.js
+  ├─ buildAliveStatusPayload()
+  └─ res.json({ enabled, presenceState, recentEvents, schedulers })
+  │
+  ▼
+200 OK  (JSON — no secrets, no mutation)
+```
+
+---
+
+### Flow 6: Second Life Integration
+
+```
+Second Life viewer (LSL script) → HTTP POST → Railway
+  │
+  ▼
+http/createHealthServer.js  (/api/secondlife/*)
+  │
+  ▼
+channels/secondLifeAdapter.js
+  ├─ Verify SECOND_LIFE_BRIDGE_TOKEN
+  ├─ Parse SL event (avatar, location, object, chat)
+  └─ Dispatch to companion systems:
+       ├─ slIdentityResolver   (who is this avatar?)
+       ├─ slSocialEngine       (relationship tracking)
+       ├─ slCommandRegistry    (handle SL commands)
+       └─ lifeEngine tick      (update world awareness)
+  │
+  ▼
+lifeEngine/  (autonomous goals, schedule, discovery)
+  ├─ autonomyEngine      (pick next action)
+  ├─ dailyScheduleEngine (time-of-day behavior)
+  ├─ goalEngine          (long-term SL goals)
+  ├─ socialIntelligenceEngine
+  └─ worldAwarenessEngine
+  │
+  ▼
+Response → Second Life viewer (LSL http_response)
+  AND
+Discord channel.send()  (via runCheckInAutomation if outreach triggered)
+```
+
+---
+
 ## Key Architectural Invariants
 
 1. **One Discord send path:** All outbound messages go through `runCheckInAutomation` in `automations/runners.js`. No other `channel.send()` calls in alive/proactive code.

@@ -126,7 +126,8 @@
     "verify:situational-awareness-privacy": "node scripts/verify-situational-awareness-privacy.js",
     "verify:situational-awareness-tools": "node scripts/verify-situational-awareness-tools.js",
     "verify:situational-awareness-proactive": "node scripts/verify-situational-awareness-proactive.js",
-    "verify:situational-awareness-not-dead": "node scripts/verify-situational-awareness-not-dead.js"
+    "verify:situational-awareness-not-dead": "node scripts/verify-situational-awareness-not-dead.js",
+    "verify:all": "node scripts/audit-active-runtime.js && node --test && node scripts/find-dead-code.js && node scripts/verify-dashboard-not-broken.js && node scripts/verify-life-wiring.js && node scripts/verify-alive-layer-proof.js && node scripts/repository-health.js"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

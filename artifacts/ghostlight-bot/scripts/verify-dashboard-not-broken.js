@@ -2,6 +2,7 @@
 /**
  * verify-dashboard-not-broken.js
  * Proves dashboard routes and handlers are intact without starting the server.
+ * Also proves dashboard is fully isolated from runtime behavior.
  * Read-only — no side effects.
  */
 
@@ -21,7 +22,7 @@ function handlerExists(name) { return exists(path.join(HANDLERS, name)); }
 
 const serverContent = read(HEALTH_SERVER);
 
-// ── 1. Core route presence ─────────────────────────────────────────────────
+// ── 1. Core route presence ─────────────────────────────────────────────────────
 const routeChecks = [
   ["/admin/ (home page route)", serverContains("homePageHandler") || serverContains("/admin/")],
   ["/admin/memory route", serverContains("memoryPageHandler") || serverContains("/admin/memory")],
@@ -33,7 +34,7 @@ const routeChecks = [
   ["/admin/second-life route", serverContains("/admin/second-life")],
 ];
 
-// ── 2. Handler files exist ─────────────────────────────────────────────────
+// ── 2. Handler files exist ─────────────────────────────────────────────────────
 const handlerChecks = [
   ["homePageHandler.js", handlerExists("homePageHandler.js")],
   ["memoryPageHandler.js", handlerExists("memoryPageHandler.js")],
@@ -53,7 +54,7 @@ const handlerChecks = [
   ["shared.js", handlerExists("shared.js")],
 ];
 
-// ── 3. Handler imports resolve (no deleted-file references) ──────────────
+// ── 3. Handler imports resolve (no deleted-file references) ────────────────────
 const handlerImportChecks = [];
 const handlerFiles = fs.readdirSync(HANDLERS).filter(f => f.endsWith(".js"));
 for (const file of handlerFiles) {
@@ -74,18 +75,13 @@ if (handlerImportChecks.length === 0) {
   handlerImportChecks.push(["all handler imports resolve", true]);
 }
 
-// ── 4. Dashboard does not own scheduler/runtime behavior ──────────────────
+// ── 4. Dashboard does not own scheduler/runtime behavior ───────────────────────
 const safeguardChecks = [
-  ["createHealthServer.js does not call start()", !serverContains(".start()") || serverContains("router") /* expected false — no scheduler starts */],
+  ["createHealthServer.js does not call aliveEngine.start()", !serverContains("aliveEngine.start()")],
   ["aliveStatusHandler reads state only (no start/stop)", !read(path.join(HANDLERS, "aliveStatusHandler.js")).includes(".start()")],
 ];
 
-// Override: createHealthServer.js doesn't need to NOT call .start() —
-// it's a server, it calls server.listen. The important thing is it doesn't
-// own the alive/heartbeat/scheduler lifecycle.
-safeguardChecks[0] = ["createHealthServer.js does not call aliveEngine.start()", !serverContains("aliveEngine.start()")];
-
-// ── 5. aliveStatusHandler returns safe JSON (no secrets) ─────────────────
+// ── 5. aliveStatusHandler returns safe JSON (no secrets) ──────────────────────
 const statusHandlerContent = read(path.join(HANDLERS, "aliveStatusHandler.js"));
 const secretChecks = [
   ["aliveStatusHandler does not expose OPENAI_API_KEY", !statusHandlerContent.includes("OPENAI_API_KEY")],
@@ -94,7 +90,56 @@ const secretChecks = [
   ["aliveStatusHandler returns JSON payload", statusHandlerContent.includes("buildAliveStatusPayload") || statusHandlerContent.includes("JSON")],
 ];
 
-// ── Run all checks ─────────────────────────────────────────────────────────
+// ── 6. Runtime isolation — no handler imports runtime/scheduler/sender ─────────
+// adminPageHandlers should receive pre-built state objects as arguments, not import
+// runtime engines (alive engine, scheduler registry, runners) directly.
+const BANNED_RUNTIME_IMPORTS = [
+  "aliveEngine",
+  "schedulerRegistry",
+  "automations/runners",
+  "aliveExecutor",
+  "createSchedulerRegistry",
+];
+
+const runtimeIsolationChecks = [];
+for (const file of handlerFiles) {
+  const content = read(path.join(HANDLERS, file));
+  const requires = [...content.matchAll(/require\(["']([^"']+)["']\)/g)].map(m => m[1]);
+  for (const req of requires) {
+    for (const banned of BANNED_RUNTIME_IMPORTS) {
+      if (req.includes(banned)) {
+        runtimeIsolationChecks.push([
+          `${file} does not import runtime module "${banned}"`,
+          false,
+        ]);
+      }
+    }
+  }
+}
+if (runtimeIsolationChecks.length === 0) {
+  runtimeIsolationChecks.push(["no handler imports runtime engines or scheduler", true]);
+}
+
+// ── 7. No mutation calls in any handler ────────────────────────────────────────
+const mutationChecks = [];
+const MUTATION_PATTERNS = [".start()", ".stop()", "setInterval(", "setTimeout("];
+
+for (const file of handlerFiles) {
+  const content = read(path.join(HANDLERS, file));
+  for (const pattern of MUTATION_PATTERNS) {
+    if (content.includes(pattern)) {
+      mutationChecks.push([
+        `${file} does not call ${pattern}`,
+        false,
+      ]);
+    }
+  }
+}
+if (mutationChecks.length === 0) {
+  mutationChecks.push(["no handler calls .start(), .stop(), setInterval, or setTimeout", true]);
+}
+
+// ── Run all checks ─────────────────────────────────────────────────────────────
 let failures = 0;
 console.log("VERIFY_DASHBOARD_START\n");
 
@@ -113,6 +158,8 @@ runChecks("Handler files exist", handlerChecks);
 runChecks("Handler imports resolve", handlerImportChecks);
 runChecks("Dashboard safety (no runtime ownership)", safeguardChecks);
 runChecks("Status endpoint security (no secrets)", secretChecks);
+runChecks("Runtime isolation (no engine imports in handlers)", runtimeIsolationChecks);
+runChecks("Handler mutation guard (.start/.stop/timers)", mutationChecks);
 
 console.log(failures === 0 ? "DASHBOARD_PROOF_PASS" : `DASHBOARD_PROOF_FAIL (${failures} failures)`);
 process.exit(failures === 0 ? 0 : 1);
