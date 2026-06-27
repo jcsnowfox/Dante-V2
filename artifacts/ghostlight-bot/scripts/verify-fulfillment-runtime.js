@@ -81,6 +81,9 @@ check("need_delta field",                         histCode.includes("need_delta"
 check("identity_impact field",                    histCode.includes("identity_impact") || histCode.includes("identityImpact"));
 check("postgres try/catch pattern",               histCode.includes("createPostgresPool") && histCode.includes("catch"));
 check("separate from dante_fulfillment_logs",     !histCode.includes("CREATE TABLE IF NOT EXISTS dante_fulfillment_logs") && !histCode.includes("INSERT INTO dante_fulfillment_logs"));
+check("exports EVIDENCE_PRINCIPLE",               histCode.includes("EVIDENCE_PRINCIPLE"));
+check("EVIDENCE_PRINCIPLE applies_to SUCCESS+PARTIAL", histCode.includes("applies_to") && histCode.includes("SUCCESS") && histCode.includes("PARTIAL"));
+check("EVIDENCE_PRINCIPLE enforced at write time — empty evidence → UNAVAILABLE", histCode.includes("evidence_principle") && histCode.includes("UNAVAILABLE"));
 
 // ── Section 3: resourceLibraryStore ───────────────────────────────────────
 
@@ -338,6 +341,7 @@ check("agencyExecutor does not replace fulfillmentExecutor",      !executorCode.
 check("resourceDiscoveryRuntime does not replace resourceDiscoveryEngine", !discCode.includes("createResourceDiscoveryEngine"));
 check("no SUCCESS without real evidence (coerce guard in historyStore)", histCode.includes("OUTCOMES.includes(outcome)") || histCode.includes("!OUTCOMES.includes") || histCode.includes("outcome = \"UNAVAILABLE\""));
 check("fabricated SUCCESS impossible — store coerces invalid outcomes", histCode.includes("\"UNAVAILABLE\"") && histCode.includes("outcome ="));
+check("evidence principle enforced — SUCCESS+PARTIAL without evidence → UNAVAILABLE", histCode.includes("EVIDENCE_PRINCIPLE") && histCode.includes("applies_to") && histCode.includes("UNAVAILABLE"));
 check("lifeRuntime still has ONE tick orchestrator",  (lifeRtCode.match(/async function tick\s*\(/g) || []).length === 1);
 check("dashboard shape unchanged (pressuredNeedsCount)", lifeRtCode.includes("pressuredNeedsCount") || read(src("homeostasisRuntime.js")).includes("pressuredNeedsCount"));
 check("identityRuntime not replaced",                lifeRtCode.includes("identityRuntime") && !lifeRtCode.includes("identityRuntime = null //"));
