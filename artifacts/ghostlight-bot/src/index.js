@@ -88,6 +88,7 @@ const { createIntentionQueueStore } = require("./alive/intentionQueueStore");
 const { createAliveEngine } = require("./alive/aliveEngine");
 const { createAlivePresenceStore } = require("./alive/alivePresenceStore");
 const { executeNextIntention } = require("./alive/aliveExecutor");
+const { createSchedulerRegistry } = require("./runtime/schedulerRegistry");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -603,7 +604,9 @@ async function startApp() {
     client.appContext.gameSettings = loaded;
   });
   await runStartupStep("heartbeat.init", logger, () => heartbeat.init());
-  await runStartupStep("aliveEngine.start", logger, () => { aliveEngine.start(); });
+  const schedulerRegistry = createSchedulerRegistry({ logger });
+  schedulerRegistry.registerBackground("aliveEngine", () => aliveEngine.start());
+  await schedulerRegistry.startBackground();
   await runStartupStep("musicLibrary.background.start", logger, () => musicLibrary.startBackgroundProcessing?.({
     userScope: config.memory?.userScope || "user",
   }));
@@ -656,8 +659,8 @@ async function startApp() {
 
     throw error;
   }
-  automationRunner.start();
-  heartbeat.start();
+  schedulerRegistry.registerPostLogin("automationRunner", () => automationRunner.start());
+  schedulerRegistry.registerPostLogin("heartbeat", () => heartbeat.start());
   if (secondLifeLifeEngine.isEnabled()) {
     const lifeTickMs = secondLifeLifeEngine.getTickIntervalMs();
     const runLifeTick = async () => {
@@ -674,11 +677,16 @@ async function startApp() {
         logger.warn("[life-engine] tick failed.", { error: error.message });
       }
     };
-    const lifeTimer = setInterval(runLifeTick, lifeTickMs);
-    if (typeof lifeTimer.unref === "function") lifeTimer.unref();
-    logger.info("[life-engine] Companion Life Engine enabled.", { tickIntervalMs: lifeTickMs });
+    schedulerRegistry.registerPostLogin("secondLifeLifeEngine", () => {
+      const lifeTimer = setInterval(runLifeTick, lifeTickMs);
+      if (typeof lifeTimer.unref === "function") lifeTimer.unref();
+      logger.info("[life-engine] Companion Life Engine enabled.", { tickIntervalMs: lifeTickMs });
+    });
   }
-  emotionalArc.scheduler.start();
+  schedulerRegistry.registerPostLogin("emotionalArc.scheduler", () => emotionalArc.scheduler.start());
+  await schedulerRegistry.startPostLogin();
+  appContext.schedulerRegistry = schedulerRegistry;
+  client.appContext.schedulerRegistry = schedulerRegistry;
   await automationRunner.runNow();
 }
 
