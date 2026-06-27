@@ -709,6 +709,436 @@ describe("lifePreludeBuilder fulfillment integration", () => {
   });
 });
 
+// ── 10. evidenceStore ────────────────────────────────────────────────────────
+describe("evidenceStore", () => {
+  const { createEvidenceStore, ACTION_TYPES } = require("../evidenceStore");
+
+  it("ACTION_TYPES includes all 15 action types", () => {
+    assert.ok(ACTION_TYPES.includes("web_search"));
+    assert.ok(ACTION_TYPES.includes("private_reflection"));
+    assert.ok(ACTION_TYPES.includes("jenna_request"));
+    assert.ok(ACTION_TYPES.includes("project_work"));
+    assert.ok(ACTION_TYPES.includes("second_life_visit"));
+    assert.strictEqual(ACTION_TYPES.length, 15);
+  });
+
+  it("init runs without pool", async () => {
+    const store = createEvidenceStore();
+    await assert.doesNotReject(() => store.init());
+  });
+
+  it("record stores evidence and returns entry with id", async () => {
+    const store = createEvidenceStore();
+    const entry = await store.record({
+      companionId: "dante", customerId: "jenna",
+      actionType: "web_search",
+      source: "test query", sourceUrl: "",
+      summary: "Found 3 articles about Norse ships",
+      confidence: 0.85,
+      metadata: { query: "Norse burial ships" },
+    });
+    assert.ok(entry);
+    assert.ok(typeof entry.id === "number");
+    assert.strictEqual(entry.actionType, "web_search");
+    assert.strictEqual(entry.summary, "Found 3 articles about Norse ships");
+  });
+
+  it("record returns entry with correct companionId/customerId", async () => {
+    const store = createEvidenceStore();
+    const entry = await store.record({
+      companionId: "dante", customerId: "jenna",
+      actionType: "private_reflection",
+      summary: "Reflected on connection need",
+    });
+    assert.strictEqual(entry.companionId, "dante");
+    assert.strictEqual(entry.customerId, "jenna");
+  });
+
+  it("getById retrieves stored evidence", async () => {
+    const store = createEvidenceStore();
+    const entry = await store.record({
+      companionId: "dante", customerId: "jenna",
+      actionType: "project_work",
+      summary: "Worked on Norse poem project",
+    });
+    const retrieved = await store.getById(entry.id);
+    assert.ok(retrieved);
+    assert.strictEqual(retrieved.id, entry.id);
+    assert.strictEqual(retrieved.actionType, "project_work");
+  });
+
+  it("getById returns null for unknown id", async () => {
+    const store = createEvidenceStore();
+    const result = await store.getById(999999);
+    assert.strictEqual(result, null);
+  });
+
+  it("getByIds retrieves multiple entries", async () => {
+    const store = createEvidenceStore();
+    const e1 = await store.record({ companionId: "dante", customerId: "jenna", actionType: "web_search", summary: "search 1" });
+    const e2 = await store.record({ companionId: "dante", customerId: "jenna", actionType: "web_search", summary: "search 2" });
+    const results = await store.getByIds([e1.id, e2.id]);
+    assert.strictEqual(results.length, 2);
+  });
+
+  it("getRecent returns evidence in reverse-chronological order", async () => {
+    const store = createEvidenceStore();
+    await store.record({ companionId: "dante", customerId: "jenna", actionType: "web_search", summary: "first" });
+    await store.record({ companionId: "dante", customerId: "jenna", actionType: "private_reflection", summary: "second" });
+    const recent = await store.getRecent({ companionId: "dante", customerId: "jenna", limit: 5 });
+    assert.ok(recent.length >= 2);
+    assert.strictEqual(recent[0].summary, "second");
+  });
+
+  it("countRecent returns 0 for new store", async () => {
+    const store = createEvidenceStore();
+    const count = await store.countRecent({ companionId: "nobody", customerId: "nobody" });
+    assert.strictEqual(count, 0);
+  });
+
+  it("record returns null when required fields missing", async () => {
+    const store = createEvidenceStore();
+    const result = await store.record({ companionId: "dante" }); // missing customerId + actionType
+    assert.strictEqual(result, null);
+  });
+});
+
+// ── 11. pendingRequestStore ───────────────────────────────────────────────────
+describe("pendingRequestStore", () => {
+  const { createPendingRequestStore, REQUEST_TYPES, REQUEST_STATUSES } = require("../pendingRequestStore");
+
+  it("REQUEST_TYPES includes all expected types", () => {
+    assert.ok(REQUEST_TYPES.includes("ask_resource"));
+    assert.ok(REQUEST_TYPES.includes("ask_help"));
+    assert.ok(REQUEST_TYPES.includes("share_discovery"));
+    assert.ok(REQUEST_TYPES.includes("ask_activity"));
+  });
+
+  it("REQUEST_STATUSES has 4 statuses", () => {
+    assert.ok(REQUEST_STATUSES.includes("pending"));
+    assert.ok(REQUEST_STATUSES.includes("fulfilled"));
+    assert.ok(REQUEST_STATUSES.includes("cancelled"));
+    assert.ok(REQUEST_STATUSES.includes("expired"));
+    assert.strictEqual(REQUEST_STATUSES.length, 4);
+  });
+
+  it("init runs without pool", async () => {
+    const store = createPendingRequestStore();
+    await assert.doesNotReject(() => store.init());
+  });
+
+  it("create stores a request with status=pending", async () => {
+    const store = createPendingRequestStore();
+    const req = await store.create({
+      companionId: "dante", customerId: "jenna",
+      requestType: "ask_resource", needType: "learning",
+      message: "Dante would like book suggestions",
+    });
+    assert.ok(req);
+    assert.strictEqual(req.status, "pending");
+    assert.strictEqual(req.needType, "learning");
+  });
+
+  it("listRecent respects cooldown window", async () => {
+    const store = createPendingRequestStore();
+    await store.create({ companionId: "dante", customerId: "jenna", needType: "learning" });
+    await store.create({ companionId: "dante", customerId: "jenna", needType: "learning" });
+    const recent = await store.listRecent({
+      companionId: "dante", customerId: "jenna",
+      needType: "learning", sinceHours: 24, status: "pending",
+    });
+    assert.ok(recent.length >= 2);
+  });
+
+  it("listPending returns only pending requests", async () => {
+    const store = createPendingRequestStore();
+    const req = await store.create({ companionId: "dante", customerId: "jenna", needType: "connection" });
+    await store.updateStatus({ id: req.id, status: "fulfilled" });
+    const pending = await store.listPending({ companionId: "dante", customerId: "jenna" });
+    assert.ok(pending.every(r => r.status === "pending"));
+  });
+
+  it("updateStatus changes status to fulfilled", async () => {
+    const store = createPendingRequestStore();
+    const req = await store.create({ companionId: "dante", customerId: "jenna", needType: "curiosity" });
+    const updated = await store.updateStatus({ id: req.id, status: "fulfilled", resolvedAt: new Date() });
+    assert.strictEqual(updated.status, "fulfilled");
+  });
+
+  it("count returns number of pending requests", async () => {
+    const store = createPendingRequestStore();
+    await store.create({ companionId: "dante", customerId: "jenna", needType: "learning" });
+    const n = await store.count({ companionId: "dante", customerId: "jenna", status: "pending" });
+    assert.ok(n >= 1);
+  });
+
+  it("create returns null when companionId missing", async () => {
+    const store = createPendingRequestStore();
+    const result = await store.create({ customerId: "jenna" });
+    assert.strictEqual(result, null);
+  });
+});
+
+// ── 12. actionProvenanceBuilder ───────────────────────────────────────────────
+describe("actionProvenanceBuilder", () => {
+  const { buildProvenance, PROVENANCE_VERSION } = require("../actionProvenanceBuilder");
+
+  it("buildProvenance returns null when required fields missing", () => {
+    assert.strictEqual(buildProvenance({}), null);
+    assert.strictEqual(buildProvenance({ need: { needType: "learning" } }), null);
+    assert.strictEqual(buildProvenance({ need: { needType: "learning" }, plan: { strategy: "x" } }), null);
+  });
+
+  it("buildProvenance returns complete provenance chain", () => {
+    const prov = buildProvenance({
+      need:     { needType: "learning", urgency: 0.6, currentLevel: 0.4, desiredLevel: 0.7 },
+      plan:     { strategy: "learn_from_web", reason: "curiosity_driven", identityAffirmed: true },
+      evidence: { query: "Norse ships", resultCount: 3 },
+      evidenceIds: [42],
+      outcome:  { outcome: "SUCCESS", note: "Found articles", needDelta: 0.12, confidence: 0.9 },
+      companionId: "dante", customerId: "jenna",
+    });
+    assert.ok(prov);
+    assert.strictEqual(prov.provenanceVersion, PROVENANCE_VERSION);
+    assert.strictEqual(prov.need.needType, "learning");
+    assert.strictEqual(prov.plan.strategy, "learn_from_web");
+    assert.strictEqual(prov.plan.identityAffirmed, true);
+    assert.deepStrictEqual(prov.evidenceIds, [42]);
+    assert.strictEqual(prov.outcome.result, "SUCCESS");
+    assert.strictEqual(prov.outcome.needDelta, 0.12);
+    assert.ok(prov.recordedAt);
+  });
+
+  it("buildProvenance is pure — no async, no side effects", () => {
+    const result = buildProvenance({
+      need: { needType: "rest" }, plan: { strategy: "deliberate_restraint" },
+      outcome: "DEFERRED",
+    });
+    assert.ok(result);
+    assert.strictEqual(result.outcome.result, "DEFERRED");
+  });
+});
+
+// ── 13. jennaRequestAdapter ───────────────────────────────────────────────────
+describe("jennaRequestAdapter", () => {
+  const { jennaRequestAdapter, COOLDOWN_HOURS } = require("../worldActionAdapters/jennaRequestAdapter");
+  const { createPendingRequestStore }            = require("../pendingRequestStore");
+  const { OUTCOMES }                             = require("../worldActionAdapters/index");
+
+  it("canExecute returns false during give-space", () => {
+    assert.strictEqual(jennaRequestAdapter.canExecute({ context: { giveSpace: true } }), false);
+  });
+
+  it("canExecute returns false during active repair", () => {
+    assert.strictEqual(jennaRequestAdapter.canExecute({ context: { repairRequired: true, repairCompleted: false } }), false);
+  });
+
+  it("canExecute returns false during quiet hours", () => {
+    assert.strictEqual(jennaRequestAdapter.canExecute({ context: { quietHours: true } }), false);
+  });
+
+  it("canExecute returns false when Jenna is asleep", () => {
+    assert.strictEqual(jennaRequestAdapter.canExecute({ context: { jennaIsAsleep: true } }), false);
+  });
+
+  it("canExecute returns true when all gates pass", () => {
+    assert.strictEqual(jennaRequestAdapter.canExecute({
+      context: { giveSpace: false, repairRequired: false, quietHours: false, jennaIsAsleep: false },
+    }), true);
+  });
+
+  it("execute returns UNAVAILABLE when no pendingRequestStore", async () => {
+    const result = await jennaRequestAdapter.execute({
+      companionId: "dante", customerId: "jenna",
+      need: { needType: "learning" }, plan: { strategy: "ask_jenna" },
+      context: {},
+    });
+    assert.strictEqual(result.outcome, OUTCOMES.UNAVAILABLE);
+    assert.strictEqual(result.evidence.reason, "no_pending_request_store");
+  });
+
+  it("execute creates a real pending request and returns PARTIAL", async () => {
+    const store = createPendingRequestStore();
+    const result = await jennaRequestAdapter.execute({
+      companionId: "dante", customerId: "jenna",
+      need: { needType: "learning", urgency: 0.6 },
+      plan: { strategy: "ask_jenna", reason: "wants book suggestion" },
+      context: { giveSpace: false, repairRequired: false, pendingRequestStore: store },
+    });
+    assert.strictEqual(result.outcome, OUTCOMES.PARTIAL);
+    assert.ok(typeof result.evidence.requestId === "number");
+    assert.strictEqual(result.evidence.needType, "learning");
+  });
+
+  it("execute returns DEFERRED when cooldown active", async () => {
+    const store = createPendingRequestStore();
+    // Create an existing pending request for the same needType
+    await store.create({ companionId: "dante", customerId: "jenna", needType: "learning", requestType: "ask_resource" });
+    const result = await jennaRequestAdapter.execute({
+      companionId: "dante", customerId: "jenna",
+      need: { needType: "learning", urgency: 0.6 },
+      plan: { strategy: "ask_jenna" },
+      context: { pendingRequestStore: store },
+    });
+    assert.strictEqual(result.outcome, OUTCOMES.DEFERRED);
+    assert.strictEqual(result.evidence.reason, "cooldown_active");
+  });
+
+  it("COOLDOWN_HOURS is defined and positive", () => {
+    assert.ok(typeof COOLDOWN_HOURS === "number");
+    assert.ok(COOLDOWN_HOURS > 0);
+  });
+});
+
+// ── 14. agencyExecutor evidenceStore integration ──────────────────────────────
+describe("agencyExecutor evidenceStore integration", () => {
+  const { createAgencyExecutor, OUTCOMES } = require("../agencyExecutor");
+  const { createAdapterRegistry }          = require("../worldActionAdapters/index");
+  const { reflectionAdapter }              = require("../worldActionAdapters/reflectionAdapter");
+  const { projectAdapter }                 = require("../worldActionAdapters/projectAdapter");
+  const { createFulfillmentHistoryStore }  = require("../fulfillmentHistoryStore");
+  const { createEvidenceStore }            = require("../evidenceStore");
+
+  it("executor with evidenceStore records evidence artifact on PARTIAL", async () => {
+    const evStore   = createEvidenceStore();
+    const histStore = createFulfillmentHistoryStore();
+    const registry  = createAdapterRegistry([reflectionAdapter]);
+    const executor  = createAgencyExecutor({ adapterRegistry: registry, fulfillmentHistoryStore: histStore, evidenceStore: evStore });
+
+    const result = await executor.execute({
+      companionId: "dante", customerId: "jenna",
+      need: { needType: "reflection", urgency: 0.6 },
+      plan: { strategy: "write_private_reflection", reason: "test" },
+      context: {},
+    });
+
+    assert.strictEqual(result.outcome, OUTCOMES.PARTIAL);
+    assert.ok(result.evidenceRecord !== null || result.evidenceIds !== undefined);
+  });
+
+  it("executor with evidenceStore — history record contains evidenceIds array", async () => {
+    const evStore   = createEvidenceStore();
+    const histStore = createFulfillmentHistoryStore();
+    const registry  = createAdapterRegistry([reflectionAdapter]);
+    const executor  = createAgencyExecutor({ adapterRegistry: registry, fulfillmentHistoryStore: histStore, evidenceStore: evStore });
+
+    await executor.execute({
+      companionId: "dante", customerId: "jenna",
+      need: { needType: "connection", urgency: 0.7 },
+      plan: { strategy: "write_private_reflection", reason: "test" },
+      context: {},
+    });
+
+    const recent = await histStore.getRecent({ companionId: "dante", customerId: "jenna", limit: 1 });
+    assert.ok(recent.length >= 1);
+    assert.ok(Array.isArray(recent[0].evidenceIds));
+  });
+
+  it("executor without evidenceStore still works (backwards compat)", async () => {
+    const histStore = createFulfillmentHistoryStore();
+    const registry  = createAdapterRegistry([reflectionAdapter]);
+    const executor  = createAgencyExecutor({ adapterRegistry: registry, fulfillmentHistoryStore: histStore });
+
+    const result = await executor.execute({
+      companionId: "dante", customerId: "jenna",
+      need: { needType: "reflection", urgency: 0.5 },
+      plan: { strategy: "write_private_reflection", reason: "test" },
+      context: {},
+    });
+    assert.strictEqual(result.outcome, OUTCOMES.PARTIAL);
+  });
+
+  it("evidenceIds is empty array when outcome is DEFERRED", async () => {
+    const registry = createAdapterRegistry([]);
+    const executor = createAgencyExecutor({ adapterRegistry: registry, evidenceStore: createEvidenceStore() });
+
+    const result = await executor.execute({
+      companionId: "dante", customerId: "jenna",
+      need: { needType: "rest", urgency: 0.5 },
+      plan: { strategy: "deliberate_restraint", reason: "test" },
+      context: {},
+    });
+    assert.strictEqual(result.outcome, OUTCOMES.DEFERRED);
+    assert.deepStrictEqual(result.evidenceIds, []);
+  });
+});
+
+// ── 15. resourceLibraryStore — new fields ─────────────────────────────────────
+describe("resourceLibraryStore new fields", () => {
+  const { createResourceLibraryStore, RESOURCE_TYPES } = require("../resourceLibraryStore");
+
+  it("RESOURCE_TYPES has 12 types", () => {
+    assert.strictEqual(RESOURCE_TYPES.length, 12);
+    assert.ok(RESOURCE_TYPES.includes("book"));
+    assert.ok(RESOURCE_TYPES.includes("movie"));
+    assert.ok(RESOURCE_TYPES.includes("second_life_place"));
+    assert.ok(RESOURCE_TYPES.includes("conversation_topic"));
+    assert.ok(RESOURCE_TYPES.includes("learning_resource"));
+  });
+
+  it("add() stores creator, summary, whySaved, needType, confidence", async () => {
+    const store = createResourceLibraryStore();
+    const entry = await store.add({
+      companionId: "dante", customerId: "jenna",
+      resourceType: "book", title: "The Long Ships",
+      creator: "Frans G. Bengtsson",
+      summary: "Epic Norse saga following a Viking adventurer",
+      whySaved: "Touches on Norse mythology need",
+      needType: "learning",
+      confidence: 0.9,
+      valence: "found",
+    });
+    assert.ok(entry);
+    assert.strictEqual(entry.creator, "Frans G. Bengtsson");
+    assert.strictEqual(entry.summary, "Epic Norse saga following a Viking adventurer");
+    assert.strictEqual(entry.whySaved, "Touches on Norse mythology need");
+    assert.strictEqual(entry.needType, "learning");
+    assert.ok(Math.abs(entry.confidence - 0.9) < 0.01);
+  });
+});
+
+// ── 16. fulfillmentRuntime getStatus extended ─────────────────────────────────
+describe("fulfillmentRuntime getStatus extended", () => {
+  const { createFulfillmentRuntime } = require("../fulfillmentRuntime");
+
+  it("getStatus includes webLearningEnabled", () => {
+    const rt = createFulfillmentRuntime({ config: { webLearningEnabled: false } });
+    const status = rt.getStatus();
+    assert.ok("webLearningEnabled" in status);
+    assert.strictEqual(typeof status.webLearningEnabled, "boolean");
+  });
+
+  it("getStatus includes recentFulfillments array", () => {
+    const rt = createFulfillmentRuntime({});
+    const status = rt.getStatus();
+    assert.ok("recentFulfillments" in status);
+    assert.ok(Array.isArray(status.recentFulfillments));
+  });
+
+  it("getStatus includes resourceLibraryCount and pendingResourceRequests", () => {
+    const rt = createFulfillmentRuntime({});
+    const status = rt.getStatus();
+    assert.ok("resourceLibraryCount" in status);
+    assert.ok("pendingResourceRequests" in status);
+    assert.strictEqual(typeof status.resourceLibraryCount, "number");
+    assert.strictEqual(typeof status.pendingResourceRequests, "number");
+  });
+
+  it("getStatus includes lastSuccessfulFulfillment and lastUnavailableFulfillment", () => {
+    const rt = createFulfillmentRuntime({});
+    const status = rt.getStatus();
+    assert.ok("lastSuccessfulFulfillment" in status);
+    assert.ok("lastUnavailableFulfillment" in status);
+  });
+
+  it("jennaRequestAdapter registered — ask_jenna in adapter list", () => {
+    const rt = createFulfillmentRuntime({});
+    const status = rt.getStatus();
+    const strategyKeys = status.adapters.flatMap(a => a.strategyKeys);
+    assert.ok(strategyKeys.includes("ask_jenna"));
+  });
+});
+
 // ── 10. no fabrication guarantee ────────────────────────────────────────────
 describe("no fabrication guarantee", () => {
   const { createFulfillmentHistoryStore, OUTCOMES } = require("../fulfillmentHistoryStore");

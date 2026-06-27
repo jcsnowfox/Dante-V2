@@ -45,13 +45,20 @@ function createFulfillmentRuntime({
   fulfillmentHistoryStore = null,
   resourceLibraryStore    = null,
   resourceDiscoveryRuntime = null,
+  evidenceStore           = null,
+  pendingRequestStore     = null,
   identityRuntime         = null,
   homeostasisRuntime      = null, // read-only: getNeedsContext()
   relationalConsequencesEngine = null,
 } = {}) {
-  let _fulfillmentContext = null;
-  let _lastTickAt        = null;
-  let _lastActionAt      = null;
+  let _fulfillmentContext  = null;
+  let _lastTickAt          = null;
+  let _lastActionAt        = null;
+  let _lastSuccessfulAt    = null;
+  let _lastUnavailableAt   = null;
+  let _recentFulfillments  = [];
+  let _resourceLibraryCount = 0;
+  let _pendingRequestCount  = 0;
 
   // Build adapter registry from all registered adapters
   const _adapterRegistry = createAdapterRegistry([
@@ -61,12 +68,14 @@ function createFulfillmentRuntime({
     voiceNoteAdapter,
     imageGenerationAdapter,
     secondLifeAdapter,
+    jennaRequestAdapter,
   ]);
 
-  // Build the executor
+  // Build the executor (evidenceStore wired in)
   const _executor = createAgencyExecutor({
     adapterRegistry: _adapterRegistry,
     fulfillmentHistoryStore,
+    evidenceStore,
     identityRuntime,
     logger,
   });
@@ -75,6 +84,8 @@ function createFulfillmentRuntime({
     if (fulfillmentHistoryStore?.init)    await fulfillmentHistoryStore.init().catch(() => {});
     if (resourceLibraryStore?.init)       await resourceLibraryStore.init().catch(() => {});
     if (resourceDiscoveryRuntime?.init)   await resourceDiscoveryRuntime.init().catch(() => {});
+    if (evidenceStore?.init)              await evidenceStore.init().catch(() => {});
+    if (pendingRequestStore?.init)        await pendingRequestStore.init().catch(() => {});
   }
 
   /**
@@ -135,10 +146,11 @@ function createFulfillmentRuntime({
       const result = await _executor.execute({
         companionId, customerId, need, plan, context: {
           ...fulfillContext,
-          activeProject: fulfillContext?.activeProject ?? null,
+          activeProject:    fulfillContext?.activeProject ?? null,
           hasActiveProject: Boolean(fulfillContext?.activeProject),
-          attentionFocus: fulfillContext?.attentionFocus ?? null,
-          recentInterest: fulfillContext?.recentInterest ?? null,
+          attentionFocus:   fulfillContext?.attentionFocus ?? null,
+          recentInterest:   fulfillContext?.recentInterest ?? null,
+          pendingRequestStore,
         },
         now,
       }).catch(err => {
@@ -155,9 +167,26 @@ function createFulfillmentRuntime({
           companionId, customerId, relationalConsequencesEngine, result, needType: need.needType, plan, now,
         });
         if (result.outcome === "SUCCESS" || result.outcome === "PARTIAL") {
-          _lastActionAt = now;
+          _lastActionAt     = now;
+          _lastSuccessfulAt = now;
         }
+        if (result.outcome === "UNAVAILABLE") {
+          _lastUnavailableAt = now;
+        }
+        // Track recent fulfillments (last 5)
+        _recentFulfillments = [
+          { outcome: result.outcome, needType: need.needType, strategy: plan.strategy, at: now.toISOString() },
+          ..._recentFulfillments,
+        ].slice(0, 5);
       }
+    }
+
+    // Update library + pending counts asynchronously
+    if (resourceLibraryStore) {
+      resourceLibraryStore.count({ companionId, customerId }).then(n => { _resourceLibraryCount = n; }).catch(() => {});
+    }
+    if (pendingRequestStore) {
+      pendingRequestStore.count({ companionId, customerId, status: "pending" }).then(n => { _pendingRequestCount = n; }).catch(() => {});
     }
 
     // ── 3. Update fulfillment context for prelude ───────────────────────────
@@ -193,13 +222,19 @@ function createFulfillmentRuntime({
 
   function getStatus() {
     return {
-      lastTickAt:         _lastTickAt?.toISOString()   ?? null,
-      lastActionAt:       _lastActionAt?.toISOString() ?? null,
+      lastTickAt:               _lastTickAt?.toISOString()          ?? null,
+      lastActionAt:             _lastActionAt?.toISOString()        ?? null,
+      lastSuccessfulFulfillment: _lastSuccessfulAt?.toISOString()   ?? null,
+      lastUnavailableFulfillment: _lastUnavailableAt?.toISOString() ?? null,
+      webLearningEnabled:       Boolean(config?.webLearningEnabled),
+      recentFulfillments:       _recentFulfillments,
+      resourceLibraryCount:     _resourceLibraryCount,
+      pendingResourceRequests:  _pendingRequestCount,
       fulfillmentContext: _fulfillmentContext
         ? {
-            outcome:         _fulfillmentContext.outcome,
-            needType:        _fulfillmentContext.needType,
-            strategy:        _fulfillmentContext.strategy,
+            outcome:          _fulfillmentContext.outcome,
+            needType:         _fulfillmentContext.needType,
+            strategy:         _fulfillmentContext.strategy,
             identityAffirmed: _fulfillmentContext.identityAffirmed ?? false,
           }
         : null,
