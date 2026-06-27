@@ -29,12 +29,16 @@ const DEFAULT_DAILY_REACH_OUT_CAP = 3;
 const DEFAULT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const INTENTION_EXPIRES_MS = 3 * 60 * 60 * 1000;
 
+// Note: isInQuietHours imported lazily to avoid circular deps with aliveExecutor
+const { isInQuietHours } = require("./aliveExecutor");
+
 function createAliveEngine({
   config = {},
   logger = null,
   aliveEventsStore = null,
   intentionQueue = null,
   interactionPresenceStore = null,
+  executor = null,
 } = {}) {
   const aliveConfig = config?.alive || {};
   const tickIntervalMs = Number(
@@ -58,9 +62,12 @@ function createAliveEngine({
     || DEFAULT_COOLDOWN_MS,
   );
   const enabled = (
-    aliveConfig.enabled !== false
-    && process.env.ALIVE_ENABLED !== "false"
+    aliveConfig.enabled === true
+    || process.env.ALIVE_ENABLED === "true"
   );
+  const quietStart = Number(aliveConfig.quietHoursStart ?? process.env.ALIVE_QUIET_HOURS_START ?? 23);
+  const quietEnd = Number(aliveConfig.quietHoursEnd ?? process.env.ALIVE_QUIET_HOURS_END ?? 7);
+  const timezone = aliveConfig.timezone || process.env.ALIVE_TIMEZONE || config.chat?.timezone || "UTC";
 
   let _timer = null;
   let _lastAssessAt = null;
@@ -101,6 +108,12 @@ function createAliveEngine({
     _lastAssessAt = now;
 
     try {
+      // 0. Quiet hours (casual reachouts only — repair skips this)
+      if (isInQuietHours(now, { quietStart, quietEnd, timezone })) {
+        _lastResult = { skipped: true, reason: "quiet_hours" };
+        return _lastResult;
+      }
+
       // 1. Daily cap
       const todayCount = aliveEventsStore
         ? await aliveEventsStore.countTodayByType({ companionId, customerId, eventType: "intention_created", now }).catch(() => 0)
@@ -176,6 +189,12 @@ function createAliveEngine({
 
       logger?.info?.("[alive-engine] Intention enqueued", { companionId, customerId, reason, absenceLabel });
       _lastResult = { enqueued: true, intention, reason };
+
+      // Immediately attempt execution if executor is wired
+      if (executor) {
+        executor().catch((err) => logger?.warn?.("[alive-engine] executor failed", { error: err?.message }));
+      }
+
       return _lastResult;
 
     } catch (error) {
@@ -195,6 +214,7 @@ function createAliveEngine({
       absenceThresholdMs,
       dailyCap,
       cooldownMs,
+      quietHours: { start: quietStart, end: quietEnd, timezone },
     };
   }
 
