@@ -356,6 +356,22 @@ function createHealthServer({
         })(req, res, context);
       }
 
+      if (req.method === "GET" && url.pathname === "/api/ghostlight/life/status") {
+        return withAdmin(async (_req, innerRes, innerContext) => {
+          try {
+            const lr = innerContext.lifeRuntime;
+            const payload = lr
+              ? lr.getStatus()
+              : { enabled: false, running: false, lastTickAt: null, todaysPlan: null, preludeActive: false };
+            innerRes.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+            innerRes.end(JSON.stringify(payload));
+          } catch (err) {
+            innerRes.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            innerRes.end(JSON.stringify({ error: "life status unavailable" }));
+          }
+        })(req, res, context);
+      }
+
       if (req.method === "GET" && (url.pathname === "/admin/inner-life" || url.pathname.startsWith("/admin/inner-life/"))) {
         const redirectPath = url.pathname.replace(/^\/admin\/inner-life/, "/admin/continuity");
         res.writeHead(302, { Location: redirectPath + (url.search || "") });
