@@ -38,12 +38,17 @@ function buildLifePrelude(state = {}) {
     identityContext     = null,
     fulfillmentContext  = null,
     selfConsistencyContext = null,
+    relationshipLearningSignal = null,
   } = state;
 
   const lines = [];
 
   if (selfConsistencyContext?.preludeWarning) {
     lines.push(selfConsistencyContext.preludeWarning);
+  }
+
+  if (relationshipLearningSignal) {
+    lines.push(String(relationshipLearningSignal).slice(0, 180));
   }
 
   // Consequence signal leads — when something between Dante and Jenna is

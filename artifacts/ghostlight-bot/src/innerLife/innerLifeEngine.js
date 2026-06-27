@@ -122,7 +122,7 @@ function createInnerLifeEngine({ config: appConfig, logger }) {
     return entry;
   }
 
-  function startSelfCheck({ client } = {}) {
+  function startSelfCheck({ client, lifeRuntime = null, diagnosticRuntime = null, consequenceStore = null, repairPersistenceEngine = null, relationshipLearningRuntime = null, evidenceIntegrityRuntime = null } = {}) {
     discordClient = client || discordClient;
     if (!selfCheckScheduler) {
       selfCheckScheduler = createSelfCheckScheduler({
@@ -130,6 +130,12 @@ function createInnerLifeEngine({ config: appConfig, logger }) {
         config: appConfig,
         logger,
         storeWrapper: store,
+        lifeRuntime,
+        diagnosticRuntime,
+        consequenceStore,
+        repairPersistenceEngine,
+        relationshipLearningRuntime,
+        evidenceIntegrityRuntime,
       });
     }
     selfCheckScheduler.start();
