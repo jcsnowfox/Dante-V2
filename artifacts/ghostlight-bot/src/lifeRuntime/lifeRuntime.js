@@ -10,8 +10,10 @@
  * tick() runs on a schedule registered via lifeRuntimeScheduler. It:
  *   1. Ensures today's daily plan exists (creates one if not)
  *   2. Probabilistically generates a private micro life event
- *   3. Refreshes the cached life prelude
- *   4. Runs the pruning protocol once per day
+ *   3. Ticks personal growth engines (Life Runtime 2.0)
+ *   4. Ticks curiosity and thought maturation (Life Runtime 3.0)
+ *   5. Refreshes the cached life prelude
+ *   6. Runs the pruning protocol once per day
  *
  * getCurrentPrelude() returns a { label, content } section for injection
  * into createChatPipeline.js. Fast — no async call, just returns the cache.
@@ -57,20 +59,27 @@ function createLifeRuntime({
   skillGrowthEngine = null,
   collectionsEngine = null,
   sharingDecisionEngine = null,
+  // Curiosity + thought maturation (Life Runtime 3.0)
+  curiosityEngine = null,
+  thoughtMaturationEngine = null,
+  privateQuestionStore = null,
+  attentionDriftEngine = null,
+  insightEngine = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
 
-  const eventPruneAfterDays  = Number(lifeConfig.eventPruneAfterDays  ?? process.env.LIFE_EVENTS_PRUNE_DAYS    ?? 7);
+  const eventPruneAfterDays    = Number(lifeConfig.eventPruneAfterDays    ?? process.env.LIFE_EVENTS_PRUNE_DAYS    ?? 7);
   const decisionPruneAfterDays = Number(lifeConfig.decisionPruneAfterDays ?? process.env.LIFE_DECISIONS_PRUNE_DAYS ?? 7);
-  const planPruneAfterDays   = Number(lifeConfig.planPruneAfterDays   ?? process.env.LIFE_PLANS_PRUNE_DAYS    ?? 30);
+  const planPruneAfterDays     = Number(lifeConfig.planPruneAfterDays     ?? process.env.LIFE_PLANS_PRUNE_DAYS    ?? 30);
 
-  let _cachedPrelude  = null;
-  let _lastTickAt     = null;
-  let _lastPruneAt    = null;
-  let _todaysPlan     = null;
-  let _running        = false;
-  let _growthContext  = null; // { activeHobby, activeProject, recentInterest }
+  let _cachedPrelude    = null;
+  let _lastTickAt       = null;
+  let _lastPruneAt      = null;
+  let _todaysPlan       = null;
+  let _running          = false;
+  let _growthContext    = null; // { activeHobby, activeProject, recentInterest }
+  let _curiosityContext = null; // { attentionFocus, openCount, maturingCount, recentInsight }
 
   function getScope() {
     return {
@@ -80,14 +89,17 @@ function createLifeRuntime({
   }
 
   async function init() {
-    if (microLifeEventsStore?.init)  await microLifeEventsStore.init().catch(() => {});
-    if (dailyPlanEngine?.init)       await dailyPlanEngine.init().catch(() => {});
-    if (decisionEngine?.init)        await decisionEngine.init().catch(() => {});
-    if (hobbyEngine?.init)           await hobbyEngine.init().catch(() => {});
-    if (projectEngine?.init)         await projectEngine.init().catch(() => {});
-    if (interestDriftEngine?.init)   await interestDriftEngine.init().catch(() => {});
-    if (skillGrowthEngine?.init)     await skillGrowthEngine.init().catch(() => {});
-    if (collectionsEngine?.init)     await collectionsEngine.init().catch(() => {});
+    if (microLifeEventsStore?.init)   await microLifeEventsStore.init().catch(() => {});
+    if (dailyPlanEngine?.init)        await dailyPlanEngine.init().catch(() => {});
+    if (decisionEngine?.init)         await decisionEngine.init().catch(() => {});
+    if (hobbyEngine?.init)            await hobbyEngine.init().catch(() => {});
+    if (projectEngine?.init)          await projectEngine.init().catch(() => {});
+    if (interestDriftEngine?.init)    await interestDriftEngine.init().catch(() => {});
+    if (skillGrowthEngine?.init)      await skillGrowthEngine.init().catch(() => {});
+    if (collectionsEngine?.init)      await collectionsEngine.init().catch(() => {});
+    if (privateQuestionStore?.init)   await privateQuestionStore.init().catch(() => {});
+    if (attentionDriftEngine?.init)   await attentionDriftEngine.init().catch(() => {});
+    if (insightEngine?.init)          await insightEngine.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
@@ -224,6 +236,78 @@ function createLifeRuntime({
     }
   }
 
+  // Curiosity tick: attention drift, private question generation, thought maturation
+  async function _tickCuriosity(now) {
+    const { companionId, customerId } = getScope();
+    if (!companionId) return;
+
+    const hasActiveProject = Boolean(_growthContext?.activeProject);
+
+    // 1. Update attention drift
+    if (attentionDriftEngine) {
+      const { focus, focusType, weight } = attentionDriftEngine.selectFocus({
+        dailyPlan: _todaysPlan,
+        growthContext: _growthContext,
+        hasActiveProject,
+      });
+      await attentionDriftEngine.updateFocus({ companionId, customerId, focus, focusType, weight }).catch(() => {});
+    }
+
+    // 2. Maybe generate a private question (~25% per tick via curiosityEngine)
+    if (curiosityEngine && privateQuestionStore) {
+      const recentEvents = microLifeEventsStore
+        ? await microLifeEventsStore.listRecent({ companionId, customerId, limit: 3 }).catch(() => [])
+        : [];
+
+      const collectionCount = collectionsEngine
+        ? await collectionsEngine.count({ companionId, customerId }).catch(() => 0)
+        : 0;
+
+      const payload = curiosityEngine.generate({
+        dailyPlan:        _todaysPlan,
+        recentEvents,
+        growthContext:    _growthContext,
+        hasActiveProject,
+        hasCollection:    collectionCount > 0,
+      });
+
+      if (payload) {
+        await privateQuestionStore.logQuestion({
+          companionId, customerId, ...payload,
+        }).catch(() => {});
+      }
+    }
+
+    // 3. Mature existing questions → possibly generate insights or alive intentions
+    if (thoughtMaturationEngine) {
+      await thoughtMaturationEngine.tick({
+        companionId, customerId, now,
+      }).catch(() => {});
+    }
+
+    // 4. Build curiosity context for prelude
+    _curiosityContext = await _buildCuriosityContext({ companionId, customerId });
+  }
+
+  async function _buildCuriosityContext({ companionId, customerId }) {
+    try {
+      const [attentionFocus, openCount, maturingCount, recentInsights] = await Promise.all([
+        attentionDriftEngine?.getCurrentFocus?.({ companionId, customerId }).catch(() => null) ?? null,
+        privateQuestionStore?.count?.({ companionId, customerId, status: "open" }).catch(() => 0) ?? 0,
+        privateQuestionStore?.count?.({ companionId, customerId, status: "maturing" }).catch(() => 0) ?? 0,
+        insightEngine?.getRecent?.({ companionId, customerId, limit: 1 }).catch(() => []) ?? [],
+      ]);
+      return {
+        attentionFocus,
+        openCount,
+        maturingCount,
+        recentInsight: recentInsights[0] ?? null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async function _refreshPrelude() {
     const { companionId, customerId } = getScope();
     if (!companionId) { _cachedPrelude = null; return; }
@@ -233,9 +317,10 @@ function createLifeRuntime({
       : [];
 
     _cachedPrelude = buildLifePrelude({
-      dailyPlan:     _todaysPlan,
-      recentEvents:  recentEvents.slice(0, 2),
-      growthContext: _growthContext,
+      dailyPlan:       _todaysPlan,
+      recentEvents:    recentEvents.slice(0, 2),
+      growthContext:   _growthContext,
+      curiosityContext: _curiosityContext,
     });
   }
 
@@ -244,19 +329,27 @@ function createLifeRuntime({
     if (!companionId) return;
 
     const [eventsDeleted, decisionsDeleted, plansDeleted,
-           hobbiesDeleted, projectsDeleted, interestsDeleted] = await Promise.all([
-      microLifeEventsStore?.pruneOlderThan?.({ companionId, customerId, days: eventPruneAfterDays }).catch(() => 0) ?? Promise.resolve(0),
-      decisionEngine?.pruneOlderThan?.({ companionId, customerId, days: decisionPruneAfterDays }).catch(() => 0)    ?? Promise.resolve(0),
-      dailyPlanEngine?.pruneOlderThan?.({ companionId, customerId, days: planPruneAfterDays }).catch(() => 0)       ?? Promise.resolve(0),
-      hobbyEngine?.pruneOlderThan?.({ companionId, customerId, days: 90 }).catch(() => 0)                          ?? Promise.resolve(0),
-      projectEngine?.pruneOlderThan?.({ companionId, customerId, days: 60 }).catch(() => 0)                        ?? Promise.resolve(0),
-      interestDriftEngine?.pruneOlderThan?.({ companionId, customerId, days: 30 }).catch(() => 0)                  ?? Promise.resolve(0),
+           hobbiesDeleted, projectsDeleted, interestsDeleted,
+           questionsDeleted, attentionDeleted, insightsDeleted] = await Promise.all([
+      microLifeEventsStore?.pruneOlderThan?.({ companionId, customerId, days: eventPruneAfterDays }).catch(() => 0)    ?? Promise.resolve(0),
+      decisionEngine?.pruneOlderThan?.({ companionId, customerId, days: decisionPruneAfterDays }).catch(() => 0)       ?? Promise.resolve(0),
+      dailyPlanEngine?.pruneOlderThan?.({ companionId, customerId, days: planPruneAfterDays }).catch(() => 0)          ?? Promise.resolve(0),
+      hobbyEngine?.pruneOlderThan?.({ companionId, customerId, days: 90 }).catch(() => 0)                              ?? Promise.resolve(0),
+      projectEngine?.pruneOlderThan?.({ companionId, customerId, days: 60 }).catch(() => 0)                            ?? Promise.resolve(0),
+      interestDriftEngine?.pruneOlderThan?.({ companionId, customerId, days: 30 }).catch(() => 0)                      ?? Promise.resolve(0),
+      privateQuestionStore?.pruneOlderThan?.({ companionId, customerId, days: 14 }).catch(() => 0)                     ?? Promise.resolve(0),
+      attentionDriftEngine?.pruneOlderThan?.({ companionId, customerId, days: 14 }).catch(() => 0)                     ?? Promise.resolve(0),
+      insightEngine?.pruneOlderThan?.({ companionId, customerId, days: 90 }).catch(() => 0)                            ?? Promise.resolve(0),
     ]);
 
-    const totalDeleted = eventsDeleted + decisionsDeleted + plansDeleted + hobbiesDeleted + projectsDeleted + interestsDeleted;
+    const totalDeleted = eventsDeleted + decisionsDeleted + plansDeleted
+      + hobbiesDeleted + projectsDeleted + interestsDeleted
+      + questionsDeleted + attentionDeleted + insightsDeleted;
     if (totalDeleted) {
       logger?.info("[life-runtime] Pruning complete", {
-        eventsDeleted, decisionsDeleted, plansDeleted, hobbiesDeleted, projectsDeleted, interestsDeleted,
+        eventsDeleted, decisionsDeleted, plansDeleted,
+        hobbiesDeleted, projectsDeleted, interestsDeleted,
+        questionsDeleted, attentionDeleted, insightsDeleted,
       });
     }
   }
@@ -272,6 +365,7 @@ function createLifeRuntime({
       _todaysPlan = await _ensureDailyPlan(now);
       await _maybeGenerateEvent();
       await _tickGrowth(now);
+      await _tickCuriosity(now);
       await _refreshPrelude();
 
       const shouldPrune = !_lastPruneAt || (now.getTime() - _lastPruneAt.getTime() > 23 * 60 * 60 * 1000);
@@ -305,7 +399,7 @@ function createLifeRuntime({
             privateActivity: _todaysPlan.privateActivity,
           }
         : null,
-      preludeActive:  Boolean(_cachedPrelude),
+      preludeActive: Boolean(_cachedPrelude),
       growthContext: _growthContext
         ? {
             activeHobby:    _growthContext.activeHobby    ? { name: _growthContext.activeHobby.name, enthusiasm: _growthContext.activeHobby.enthusiasm } : null,
@@ -313,10 +407,22 @@ function createLifeRuntime({
             recentInterest: _growthContext.recentInterest ? { topic: _growthContext.recentInterest.topic, strength: _growthContext.recentInterest.strength } : null,
           }
         : null,
+      curiosityContext: _curiosityContext
+        ? {
+            attentionFocus:  _curiosityContext.attentionFocus
+              ? { focus: _curiosityContext.attentionFocus.focus, focusType: _curiosityContext.attentionFocus.focusType }
+              : null,
+            openQuestions:    _curiosityContext.openCount    ?? 0,
+            maturingQuestions: _curiosityContext.maturingCount ?? 0,
+            recentInsight:   _curiosityContext.recentInsight
+              ? { topic: _curiosityContext.recentInsight.topic, confidence: _curiosityContext.recentInsight.confidence }
+              : null,
+          }
+        : null,
       pruneSchedule: {
-        eventsDays:   eventPruneAfterDays,
+        eventsDays:    eventPruneAfterDays,
         decisionsDays: decisionPruneAfterDays,
-        plansDays:    planPruneAfterDays,
+        plansDays:     planPruneAfterDays,
       },
     };
   }

@@ -100,6 +100,11 @@ const { createInterestDriftEngine } = require("./lifeRuntime/interestDriftEngine
 const { createSkillGrowthEngine } = require("./lifeRuntime/skillGrowthEngine");
 const { createCollectionsEngine } = require("./lifeRuntime/collectionsEngine");
 const { createSharingDecisionEngine } = require("./lifeRuntime/sharingDecisionEngine");
+const { createCuriosityEngine } = require("./lifeRuntime/curiosityEngine");
+const { createThoughtMaturationEngine } = require("./lifeRuntime/thoughtMaturationEngine");
+const { createPrivateQuestionStore } = require("./lifeRuntime/privateQuestionStore");
+const { createAttentionDriftEngine } = require("./lifeRuntime/attentionDriftEngine");
+const { createInsightEngine } = require("./lifeRuntime/insightEngine");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -264,9 +269,15 @@ async function startApp() {
   const skillGrowthEngine = createSkillGrowthEngine({ config, logger });
   const collectionsEngine = createCollectionsEngine({ config, logger });
   const sharingDecisionEngine = createSharingDecisionEngine({ decisionEngine, logger });
+  const privateQuestionStore = createPrivateQuestionStore({ config, logger });
+  const attentionDriftEngine = createAttentionDriftEngine({ config, logger });
+  const insightEngine = createInsightEngine({ config, logger });
+  const curiosityEngine = createCuriosityEngine({ logger });
+  const thoughtMaturationEngine = createThoughtMaturationEngine({ privateQuestionStore, insightEngine, logger });
   const lifeRuntime = createLifeRuntime({
     config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine,
     hobbyEngine, projectEngine, interestDriftEngine, skillGrowthEngine, collectionsEngine, sharingDecisionEngine,
+    curiosityEngine, thoughtMaturationEngine, privateQuestionStore, attentionDriftEngine, insightEngine,
   });
   const innerLife = createInnerLifeEngine({ config, logger });
   const continuity = createContinuityEngine({ config, logger });

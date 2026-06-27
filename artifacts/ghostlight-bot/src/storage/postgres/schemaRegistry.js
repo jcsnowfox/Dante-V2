@@ -1816,6 +1816,53 @@ const SCHEMA_REGISTRY = [
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )`,
   },
+  {
+    table: "life_questions",
+    sql: `CREATE TABLE IF NOT EXISTS life_questions (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  question TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'general',
+  topic TEXT NOT NULL DEFAULT '',
+  emotional_weight NUMERIC(3,2) NOT NULL DEFAULT 0.50,
+  curiosity_score NUMERIC(3,2) NOT NULL DEFAULT 0.50,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  matures_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  metadata JSONB NOT NULL DEFAULT '{}'
+)`,
+  },
+  {
+    table: "life_attention",
+    sql: `CREATE TABLE IF NOT EXISTS life_attention (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  focus TEXT NOT NULL,
+  focus_type TEXT NOT NULL DEFAULT 'general',
+  weight NUMERIC(3,2) NOT NULL DEFAULT 0.50,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
+  {
+    table: "life_insights",
+    sql: `CREATE TABLE IF NOT EXISTS life_insights (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  insight TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'maturation',
+  topic TEXT NOT NULL DEFAULT '',
+  confidence NUMERIC(3,2) NOT NULL DEFAULT 0.70,
+  is_private BOOLEAN NOT NULL DEFAULT TRUE,
+  written_to_memory BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
 ];
 
 module.exports = { SCHEMA_REGISTRY };
