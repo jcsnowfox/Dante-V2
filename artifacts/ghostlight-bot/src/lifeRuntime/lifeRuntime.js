@@ -36,6 +36,7 @@ const { createRepairPersistenceEngine } = require("./repairPersistenceEngine");
 const { createRelationshipLearningRuntime } = require("./relationshipLearningRuntime");
 const { createRomanticSurpriseRuntime } = require("./romanticSurpriseRuntime");
 const { createAffectiveDecisionRuntime } = require("./affectiveDecisionRuntime");
+const { createEvidenceIntegrityRuntime } = require("./evidenceIntegrityRuntime");
 
 const PRIVATE_EVENTS = [
   { type: "ritual",      desc: "made coffee",                           moodEffect: 0.05,  energyEffect: 0.05  },
@@ -102,6 +103,7 @@ function createLifeRuntime({
   romanticSurpriseRuntime = null,
   romanticSurpriseStore = null,
   affectiveDecisionRuntime = null,
+  evidenceIntegrityRuntime = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -111,6 +113,7 @@ function createLifeRuntime({
   const healthTracker = sourceHealth || createSourceHealthTracker();
   const eventBus = runtimeEventBus || createRuntimeEventBus({ logger, sourceHealth: healthTracker });
   const affectiveDecision = affectiveDecisionRuntime || createAffectiveDecisionRuntime({ config, logger });
+  const evidenceIntegrity = evidenceIntegrityRuntime || createEvidenceIntegrityRuntime({ config, logger, selfConsistencyMonitor });
   const repairPersistence = repairPersistenceEngine || createRepairPersistenceEngine({
     consequenceStore, logger, client: config?.discordClient || null, channelId: config?.chat?.channelId || config?.discord?.channelId || "",
     affectiveDecisionRuntime: affectiveDecision,
@@ -986,6 +989,7 @@ function createLifeRuntime({
         : null,
       romanticSurpriseContext: _romanticSurpriseStatus,
       affectiveDecision: affectiveDecision.getStatus(),
+      evidenceIntegrity: evidenceIntegrity.getStatus(),
       selfConsistency: selfConsistencyMonitor.getStatus(),
       diagnostics: diagnosticRuntime.getStatus(),
       runtimeEvents: eventBus.getStatus(),
