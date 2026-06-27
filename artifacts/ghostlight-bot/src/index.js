@@ -136,6 +136,8 @@ const { createResourceLibraryStore }     = require("./lifeRuntime/resourceLibrar
 const { createResourceDiscoveryRuntime } = require("./lifeRuntime/resourceDiscoveryRuntime");
 const { createEvidenceStore }            = require("./lifeRuntime/evidenceStore");
 const { createPendingRequestStore }      = require("./lifeRuntime/pendingRequestStore");
+// Relationship Learning Runtime 1.0 — permanent lessons from Jenna interactions
+const { createRelationshipLearningRuntime } = require("./relationshipLearning/relationshipLearningRuntime");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -342,6 +344,7 @@ async function startApp() {
   });
   const evidenceStore       = createEvidenceStore({ config, logger });
   const pendingRequestStore = createPendingRequestStore({ config, logger });
+  const relationshipLearningRuntime = createRelationshipLearningRuntime({ config, logger });
   const fulfillmentRuntime  = createFulfillmentRuntime({
     config, logger,
     fulfillmentHistoryStore,
@@ -351,6 +354,7 @@ async function startApp() {
     pendingRequestStore,
     identityRuntime,
     homeostasisRuntime,
+    relationshipLearningRuntime,
   });
   const lifeRuntime = createLifeRuntime({
     config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine,
@@ -360,6 +364,7 @@ async function startApp() {
     anniversaryEngine, insideJokeEngine, relationshipTimelineEngine,
     consequenceStore, relationalConsequencesEngine, repairCarryoverEngine,
     homeostasisRuntime, identityRuntime, fulfillmentRuntime,
+    relationshipLearningRuntime,
   });
   const innerLife = createInnerLifeEngine({ config, logger });
   const continuity = createContinuityEngine({ config, logger });

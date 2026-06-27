@@ -42,10 +42,13 @@ function planWithIdentity(need, context = {}, identityCtx = null) {
   const base = planFulfillment(need, context);
 
   if (!identityCtx) {
-    return { ...base, identityNotes: "", identityAffirmed: false };
+    return { ...base, identityNotes: "", identityAffirmed: false, lessonGuidance: [] };
   }
 
   const { topValue, activeConstraint, values = [], principles = [] } = identityCtx;
+
+  // Lesson guidance from relationship learning runtime (passed via identityCtx.lessonGuidance)
+  const lessonGuidance = Array.isArray(identityCtx.lessonGuidance) ? identityCtx.lessonGuidance : [];
   const notes = [];
   let identityAffirmed = false;
 
@@ -63,6 +66,7 @@ function planWithIdentity(need, context = {}, identityCtx = null) {
         selfOptions: [],
         identityNotes: notes.join("; "),
         identityAffirmed: true,
+        lessonGuidance,
       };
     }
   }
@@ -93,6 +97,7 @@ function planWithIdentity(need, context = {}, identityCtx = null) {
           selfOptions: ["reflection"],
           identityNotes: notes.join("; "),
           identityAffirmed: true,
+          lessonGuidance,
         };
       }
     }
@@ -112,6 +117,7 @@ function planWithIdentity(need, context = {}, identityCtx = null) {
       selfOptions: [],
       identityNotes: notes.join("; "),
       identityAffirmed: true,
+      lessonGuidance,
     };
   }
 
@@ -119,6 +125,7 @@ function planWithIdentity(need, context = {}, identityCtx = null) {
     ...base,
     identityNotes: notes.join("; "),
     identityAffirmed,
+    lessonGuidance,
   };
 }
 

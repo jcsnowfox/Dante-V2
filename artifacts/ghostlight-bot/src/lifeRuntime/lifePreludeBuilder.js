@@ -37,6 +37,7 @@ function buildLifePrelude(state = {}) {
     homeostasisContext  = null,
     identityContext     = null,
     fulfillmentContext  = null,
+    learningContext     = null,
   } = state;
 
   const lines = [];
@@ -107,6 +108,12 @@ function buildLifePrelude(state = {}) {
   if (fulfillmentContext) {
     const fulfillmentLine = buildFulfillmentSignal(fulfillmentContext);
     if (fulfillmentLine) lines.push(fulfillmentLine);
+  }
+
+  // Relationship learning signal — top 3 active guidance lines when lessons exist
+  if (learningContext && learningContext.lessonCount > 0 && learningContext.guidance?.length > 0) {
+    const topGuidance = learningContext.guidance.slice(0, 3);
+    lines.push(`Relationship lessons:\n${topGuidance.map(l => `  • ${l}`).join("\n")}`);
   }
 
   // Relationship signal — at most one compact line, never raw scores
