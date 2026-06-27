@@ -1,3 +1,5 @@
+const { describe, it } = require("node:test");
+const assert = require("node:assert/strict");
 const {
   buildWorldContext,
   formatWorldContextForPrompt,
@@ -8,7 +10,7 @@ const {
 
 describe("WorldContext", () => {
   describe("buildWorldContext", () => {
-    test("builds complete context for a specific date/time", () => {
+    it("builds complete context for a specific date/time", () => {
       const testDate = new Date("2025-06-25T14:30:45Z");
       const context = buildWorldContext({
         now: testDate,
@@ -18,18 +20,18 @@ describe("WorldContext", () => {
         config: {},
       });
 
-      expect(context).toHaveProperty("timestamp");
-      expect(context).toHaveProperty("timezone");
-      expect(context).toHaveProperty("time");
-      expect(context).toHaveProperty("date");
-      expect(context).toHaveProperty("seasonal");
+      assert.ok("timestamp" in context);
+      assert.ok("timezone" in context);
+      assert.ok("time" in context);
+      assert.ok("date" in context);
+      assert.ok("seasonal" in context);
 
-      expect(context.timezone.iana).toBe("America/Chicago");
-      expect(context.timezone.source).toBe("customer_setting");
-      expect(context.timestamp.iso).toBe(testDate.toISOString());
+      assert.strictEqual(context.timezone.iana, "America/Chicago");
+      assert.strictEqual(context.timezone.source, "customer_setting");
+      assert.strictEqual(context.timestamp.iso, testDate.toISOString());
     });
 
-    test("falls back to companion timezone if customer timezone missing", () => {
+    it("falls back to companion timezone if customer timezone missing", () => {
       const testDate = new Date("2025-06-25T14:30:45Z");
       const context = buildWorldContext({
         now: testDate,
@@ -38,11 +40,12 @@ describe("WorldContext", () => {
         config: {},
       });
 
-      expect(context.timezone.iana).toBe("Europe/London");
-      expect(context.timezone.source).toBe("companion_setting");
+      assert.strictEqual(context.timezone.iana, "Europe/London");
+      assert.strictEqual(context.timezone.source, "companion_setting");
     });
 
-    test("falls back to DEFAULT_TIMEZONE env var", () => {
+    it("falls back to DEFAULT_TIMEZONE env var", () => {
+      const hadEnv = "DEFAULT_TIMEZONE" in process.env;
       const originalEnv = process.env.DEFAULT_TIMEZONE;
       process.env.DEFAULT_TIMEZONE = "Asia/Tokyo";
 
@@ -55,14 +58,18 @@ describe("WorldContext", () => {
           config: {},
         });
 
-        expect(context.timezone.iana).toBe("Asia/Tokyo");
-        expect(context.timezone.source).toBe("env_default_timezone");
+        assert.strictEqual(context.timezone.iana, "Asia/Tokyo");
+        assert.strictEqual(context.timezone.source, "env_default_timezone");
       } finally {
-        process.env.DEFAULT_TIMEZONE = originalEnv;
+        if (hadEnv) {
+          process.env.DEFAULT_TIMEZONE = originalEnv;
+        } else {
+          delete process.env.DEFAULT_TIMEZONE;
+        }
       }
     });
 
-    test("defaults to UTC if no timezone configured", () => {
+    it("defaults to UTC if no timezone configured", () => {
       const testDate = new Date("2025-06-25T14:30:45Z");
       const context = buildWorldContext({
         now: testDate,
@@ -71,11 +78,11 @@ describe("WorldContext", () => {
         config: {},
       });
 
-      expect(context.timezone.iana).toBe("UTC");
-      expect(context.timezone.source).toBe("fallback_utc");
+      assert.strictEqual(context.timezone.iana, "UTC");
+      assert.strictEqual(context.timezone.source, "fallback_utc");
     });
 
-    test("includes cycle of day", () => {
+    it("includes cycle of day", () => {
       const morningDate = new Date("2025-06-25T09:30:00Z");
       const eveningDate = new Date("2025-06-25T19:30:00Z");
 
@@ -93,11 +100,11 @@ describe("WorldContext", () => {
         customerConfig: { timezone: "UTC" },
       });
 
-      expect(morningContext.time.cycleOfDay).toBe("morning");
-      expect(eveningContext.time.cycleOfDay).toBe("evening");
+      assert.strictEqual(morningContext.time.cycleOfDay, "morning");
+      assert.strictEqual(eveningContext.time.cycleOfDay, "evening");
     });
 
-    test("includes season and quarter", () => {
+    it("includes season and quarter", () => {
       const springDate = new Date("2025-04-15T12:00:00Z");
       const winterDate = new Date("2025-01-15T12:00:00Z");
 
@@ -113,15 +120,15 @@ describe("WorldContext", () => {
         customerConfig: { timezone: "UTC" },
       });
 
-      expect(springContext.seasonal.season).toBe("spring");
-      expect(springContext.seasonal.quarter).toBe("Q2");
-      expect(winterContext.seasonal.season).toBe("winter");
-      expect(winterContext.seasonal.quarter).toBe("Q1");
+      assert.strictEqual(springContext.seasonal.season, "spring");
+      assert.strictEqual(springContext.seasonal.quarter, "Q2");
+      assert.strictEqual(winterContext.seasonal.season, "winter");
+      assert.strictEqual(winterContext.seasonal.quarter, "Q1");
     });
   });
 
   describe("formatWorldContextForPrompt", () => {
-    test("formats context as readable text section", () => {
+    it("formats context as readable text section", () => {
       const context = buildWorldContext({
         now: new Date("2025-06-25T14:30:45Z"),
         companionConfig: {},
@@ -130,47 +137,47 @@ describe("WorldContext", () => {
 
       const formatted = formatWorldContextForPrompt(context);
 
-      expect(formatted).toContain("## WORLD CONTEXT");
-      expect(formatted).toContain("Current Time");
-      expect(formatted).toContain("Date");
-      expect(formatted).toContain("UTC");
-      expect(formatted).toContain("Wednesday");
-      expect(formatted).toContain("June");
+      assert.ok(formatted.includes("## WORLD CONTEXT"));
+      assert.ok(formatted.includes("Current Time"));
+      assert.ok(formatted.includes("Date"));
+      assert.ok(formatted.includes("UTC"));
+      assert.ok(formatted.includes("Wednesday"));
+      assert.ok(formatted.includes("June"));
     });
 
-    test("returns null-safe string for missing context", () => {
+    it("returns null-safe string for missing context", () => {
       const formatted = formatWorldContextForPrompt(null);
-      expect(typeof formatted).toBe("string");
-      expect(formatted).toContain("not available");
+      assert.strictEqual(typeof formatted, "string");
+      assert.ok(formatted.includes("not available"));
     });
   });
 
   describe("Season calculation", () => {
-    test("getSeason returns correct seasons", () => {
-      expect(getSeason(1)).toBe("winter");
-      expect(getSeason(3)).toBe("spring");
-      expect(getSeason(6)).toBe("summer");
-      expect(getSeason(9)).toBe("autumn");
-      expect(getSeason(12)).toBe("winter");
+    it("getSeason returns correct seasons", () => {
+      assert.strictEqual(getSeason(1), "winter");
+      assert.strictEqual(getSeason(3), "spring");
+      assert.strictEqual(getSeason(6), "summer");
+      assert.strictEqual(getSeason(9), "autumn");
+      assert.strictEqual(getSeason(12), "winter");
     });
 
-    test("getQuarter returns correct quarters", () => {
-      expect(getQuarter(1)).toBe("Q1");
-      expect(getQuarter(4)).toBe("Q2");
-      expect(getQuarter(7)).toBe("Q3");
-      expect(getQuarter(10)).toBe("Q4");
+    it("getQuarter returns correct quarters", () => {
+      assert.strictEqual(getQuarter(1), "Q1");
+      assert.strictEqual(getQuarter(4), "Q2");
+      assert.strictEqual(getQuarter(7), "Q3");
+      assert.strictEqual(getQuarter(10), "Q4");
     });
   });
 
   describe("Cycle of day calculation", () => {
-    test("getCycleOfDay returns correct cycles", () => {
-      expect(getCycleOfDay(2)).toBe("late night");
-      expect(getCycleOfDay(7)).toBe("early morning");
-      expect(getCycleOfDay(10)).toBe("morning");
-      expect(getCycleOfDay(13)).toBe("midday");
-      expect(getCycleOfDay(16)).toBe("afternoon");
-      expect(getCycleOfDay(19)).toBe("evening");
-      expect(getCycleOfDay(23)).toBe("late night");
+    it("getCycleOfDay returns correct cycles", () => {
+      assert.strictEqual(getCycleOfDay(2), "late night");
+      assert.strictEqual(getCycleOfDay(7), "early morning");
+      assert.strictEqual(getCycleOfDay(10), "morning");
+      assert.strictEqual(getCycleOfDay(13), "midday");
+      assert.strictEqual(getCycleOfDay(16), "afternoon");
+      assert.strictEqual(getCycleOfDay(19), "evening");
+      assert.strictEqual(getCycleOfDay(23), "late night");
     });
   });
 });

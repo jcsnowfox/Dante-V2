@@ -1516,6 +1516,7 @@ function createMusicLibraryService({
           if (!spotifyTrackId) continue;
           if (seenSpotifyTrackIds.has(spotifyTrackId)) {
             duplicatesSkipped += 1;
+            logger?.info?.("[spotify] playlist import duplicate skipped", { spotifyTrackId, playlistId: normalizedPlaylistId });
             continue;
           }
           seenSpotifyTrackIds.add(spotifyTrackId);
@@ -1533,7 +1534,9 @@ function createMusicLibraryService({
           importedTracks.push(await store.upsertTrack(spotifyTrack, { userScope, source: "spotify_playlist" }));
         }
         const newTrackCount = importedTracks.filter((track) => !existingIds.has(track.spotifyTrackId)).length;
-        const updatedTrackCount = importedTracks.length - newTrackCount;
+        // updatedTrackCount includes unique tracks that were updates plus duplicate occurrences
+        // of already-existing tracks that were deduplicated before upsert
+        const updatedTrackCount = (importedTracks.length - newTrackCount) + duplicatesSkipped;
 
         let storedPlaylist = null;
         let storedTracks = [];
