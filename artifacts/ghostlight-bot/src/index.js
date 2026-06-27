@@ -94,6 +94,12 @@ const { createDailyPlanEngine } = require("./lifeRuntime/dailyPlanEngine");
 const { createDecisionEngine } = require("./lifeRuntime/decisionEngine");
 const { createLifeRuntime } = require("./lifeRuntime/lifeRuntime");
 const { registerLifeRuntime } = require("./lifeRuntime/lifeRuntimeScheduler");
+const { createHobbyEngine } = require("./lifeRuntime/hobbyEngine");
+const { createProjectEngine } = require("./lifeRuntime/projectEngine");
+const { createInterestDriftEngine } = require("./lifeRuntime/interestDriftEngine");
+const { createSkillGrowthEngine } = require("./lifeRuntime/skillGrowthEngine");
+const { createCollectionsEngine } = require("./lifeRuntime/collectionsEngine");
+const { createSharingDecisionEngine } = require("./lifeRuntime/sharingDecisionEngine");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -252,7 +258,16 @@ async function startApp() {
   const microLifeEventsStore = createMicroLifeEventsStore({ config, logger });
   const dailyPlanEngine = createDailyPlanEngine({ config, logger });
   const decisionEngine = createDecisionEngine({ config, logger });
-  const lifeRuntime = createLifeRuntime({ config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine });
+  const hobbyEngine = createHobbyEngine({ config, logger });
+  const projectEngine = createProjectEngine({ config, logger });
+  const interestDriftEngine = createInterestDriftEngine({ config, logger });
+  const skillGrowthEngine = createSkillGrowthEngine({ config, logger });
+  const collectionsEngine = createCollectionsEngine({ config, logger });
+  const sharingDecisionEngine = createSharingDecisionEngine({ decisionEngine, logger });
+  const lifeRuntime = createLifeRuntime({
+    config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine,
+    hobbyEngine, projectEngine, interestDriftEngine, skillGrowthEngine, collectionsEngine, sharingDecisionEngine,
+  });
   const innerLife = createInnerLifeEngine({ config, logger });
   const continuity = createContinuityEngine({ config, logger });
   const secondLife = createSecondLifeStore({ config, logger });

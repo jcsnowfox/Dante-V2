@@ -1717,6 +1717,105 @@ const SCHEMA_REGISTRY = [
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )`,
   },
+  {
+    table: "life_hobbies",
+    sql: `CREATE TABLE IF NOT EXISTS life_hobbies (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'general',
+  interest NUMERIC(4,3) NOT NULL DEFAULT 0.500,
+  experience NUMERIC(4,3) NOT NULL DEFAULT 0.100,
+  enthusiasm NUMERIC(4,3) NOT NULL DEFAULT 0.500,
+  last_activity TIMESTAMPTZ,
+  confidence NUMERIC(4,3) NOT NULL DEFAULT 0.300,
+  mood_influence NUMERIC(4,3) NOT NULL DEFAULT 0.100,
+  notes TEXT NOT NULL DEFAULT '',
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (companion_id, customer_id, name)
+)`,
+  },
+  {
+    table: "life_projects",
+    sql: `CREATE TABLE IF NOT EXISTS life_projects (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  purpose TEXT NOT NULL DEFAULT '',
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_progress TIMESTAMPTZ,
+  progress NUMERIC(4,3) NOT NULL DEFAULT 0.000,
+  status TEXT NOT NULL DEFAULT 'active',
+  linked_hobby TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
+  {
+    table: "life_project_moments",
+    sql: `CREATE TABLE IF NOT EXISTS life_project_moments (
+  id BIGSERIAL PRIMARY KEY,
+  project_id BIGINT NOT NULL,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  progress_delta NUMERIC(4,3) NOT NULL DEFAULT 0.050,
+  shareable BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
+  {
+    table: "life_interests",
+    sql: `CREATE TABLE IF NOT EXISTS life_interests (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'general',
+  strength NUMERIC(4,3) NOT NULL DEFAULT 0.500,
+  last_reinforced TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  influence_sources JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (companion_id, customer_id, topic)
+)`,
+  },
+  {
+    table: "life_skills",
+    sql: `CREATE TABLE IF NOT EXISTS life_skills (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  skill_name TEXT NOT NULL,
+  domain TEXT NOT NULL DEFAULT 'general',
+  level TEXT NOT NULL DEFAULT 'novice',
+  last_practiced TIMESTAMPTZ,
+  practice_count INT NOT NULL DEFAULT 0,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (companion_id, customer_id, skill_name)
+)`,
+  },
+  {
+    table: "life_collections",
+    sql: `CREATE TABLE IF NOT EXISTS life_collections (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  collection_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  creator TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  acquired_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  private BOOLEAN NOT NULL DEFAULT TRUE,
+  tags JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
 ];
 
 module.exports = { SCHEMA_REGISTRY };
