@@ -349,8 +349,14 @@ async function startApp() {
     homeostasisRuntime,
     relationalConsequencesEngine,
   });
-  const repairPersistenceEngine = createRepairPersistenceEngine({ consequenceStore, logger, client, channelId: config?.chat?.channelId || config?.discord?.channelId || "" });
   const relationshipLearningRuntime = createRelationshipLearningRuntime({ config, logger, identityRuntime, homeostasisRuntime });
+  const client = createDiscordClient({ config });
+  const repairPersistenceEngine = createRepairPersistenceEngine({
+    consequenceStore,
+    logger,
+    client,
+    channelId: config?.chat?.channelId || config?.discord?.channelId || "",
+  });
 
   const lifeRuntime = createLifeRuntime({
     config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine,
@@ -424,7 +430,6 @@ async function startApp() {
   });
   const gameSystem = createGameSystem({ config, logger });
   const norwegianLearning = createNorwegianLearningStore({ config, logger });
-  const client = createDiscordClient({ config });
   const heartbeat = createHeartbeatService({
     client,
     config,
