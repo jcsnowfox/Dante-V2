@@ -18,7 +18,7 @@
 function buildLifePrelude(state = {}) {
   if (!state) return null;
 
-  const { dailyPlan = null, recentEvents = [], growthContext = null } = state;
+  const { dailyPlan = null, recentEvents = [], growthContext = null, curiosityContext = null } = state;
 
   const lines = [];
 
@@ -54,6 +54,18 @@ function buildLifePrelude(state = {}) {
       lines.push(`Into: ${activeHobby.name} lately`);
     } else if (recentInterest?.topic) {
       lines.push(`Thinking about: ${recentInterest.topic}`);
+    }
+  }
+
+  // Curiosity/attention signal — at most one compact line
+  if (curiosityContext) {
+    const { attentionFocus, maturingCount } = curiosityContext;
+    if (attentionFocus?.focus && maturingCount > 0) {
+      lines.push(`Quietly circling: ${attentionFocus.focus}; ${maturingCount} private thought${maturingCount === 1 ? "" : "s"} maturing`);
+    } else if (attentionFocus?.focus) {
+      lines.push(`Quietly circling: ${attentionFocus.focus}`);
+    } else if (maturingCount > 0) {
+      lines.push(`${maturingCount} private thought${maturingCount === 1 ? "" : "s"} maturing`);
     }
   }
 
