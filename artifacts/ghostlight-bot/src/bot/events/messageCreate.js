@@ -361,10 +361,11 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           channelId: message.channelId,
         });
       } catch (claimError) {
-        logger.warn("[chat] Message claim check failed; proceeding anyway", {
+        logger.error("[chat] Message claim check failed; skipping to avoid duplicate processing", {
           messageId: message.id,
           error: claimError.message,
         });
+        return;
       }
     } else {
       logger.warn("[chat] claimMessageProcessing unavailable; deduplication skipped", {

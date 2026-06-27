@@ -134,6 +134,10 @@ async function startApp() {
 
   logger.info("[app] Starting Ghostlight", {
     nodeEnv: config.nodeEnv,
+    railwayServiceId: process.env.RAILWAY_SERVICE_ID || null,
+    railwayDeploymentId: process.env.RAILWAY_DEPLOYMENT_ID || null,
+    railwayReplicaId: process.env.RAILWAY_REPLICA_ID || null,
+    railwayEnvironmentId: process.env.RAILWAY_ENVIRONMENT_ID || null,
   });
 
   await runStartupStep("schemaGuard", logger, () => runSchemaGuard({ config, logger }));
