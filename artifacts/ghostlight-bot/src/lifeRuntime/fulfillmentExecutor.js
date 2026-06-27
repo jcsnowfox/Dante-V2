@@ -44,6 +44,7 @@ function createFulfillmentExecutor({
   requestJennaEngine     = null,
   microLifeEventsStore   = null,
   logger                 = null,
+  affectiveDecisionRuntime = null,
 } = {}) {
 
   async function execute({ companionId, customerId, need, plan, context = {} }) {
@@ -82,6 +83,17 @@ function createFulfillmentExecutor({
           if (!gate.allowed) {
             result = { ...result, actionStatus: "blocked", summary: `ask_jenna blocked: ${gate.reason}`, evidence: { reason: gate.reason } };
             break;
+          }
+          if (affectiveDecisionRuntime) {
+            const adr = await affectiveDecisionRuntime.consult({
+              decisionType: "ask_jenna",
+              context: { quietHours: context.quietHours ?? false, giveSpace: context.giveSpace ?? false, userAvailability: context.jennaIsBusy ? { available: false } : null, consequenceContext: context.repairRequired ? { repairRequired: true } : null },
+              companionId, customerId, now,
+            }).catch(err => { logger?.warn("[fulfillment-executor] affective decision unavailable", { error: err?.message }); return null; });
+            if (adr && (adr.outcome === "delay" || adr.outcome === "blocked" || adr.outcome === "suppress" || adr.outcome === "wait_for_context")) {
+              result = { ...result, actionStatus: "blocked", summary: `ask_jenna deferred by affective decision: ${adr.outcome}`, evidence: { adrOutcome: adr.outcome } };
+              break;
+            }
           }
           const req = await requestJennaEngine.createRequest({
             companionId, customerId, requestType, needType,
