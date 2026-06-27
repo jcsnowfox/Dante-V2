@@ -24,8 +24,10 @@ const MODEL_RESOLUTION_SUPPORT = Object.freeze({
 // Models that do not support reference images via getimg.ai.
 // When reference images are present and the primary model is in this list,
 // the generation switches to config.imageGeneration.referenceModel if set.
+// NOTE: gemini-3-1-flash-image was removed from this list — it does accept
+// reference images. If the API rejects them the shouldRetryWithoutReferenceImages
+// retry path handles it gracefully.
 const MODELS_WITHOUT_REFERENCE_SUPPORT = Object.freeze(new Set([
-  "gemini-3-1-flash-image",
   "z-image-turbo",
 ]));
 
