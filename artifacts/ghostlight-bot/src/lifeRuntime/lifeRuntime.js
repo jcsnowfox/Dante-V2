@@ -32,6 +32,7 @@ const { createRuntimeEventBus } = require("./runtimeEventBus");
 const { createSourceHealthTracker, RUNTIME_NAMES } = require("./sourceHealth");
 const { buildMindStateSnapshot } = require("./mindStateSnapshotBuilder");
 const { bridgeGrowthToIdentity, bridgeCuriosityToProjects, bridgeProjectsToPurpose } = require("./emergenceBridges");
+const { createRepairPersistenceEngine } = require("./repairPersistenceEngine");
 
 const PRIVATE_EVENTS = [
   { type: "ritual",      desc: "made coffee",                           moodEffect: 0.05,  energyEffect: 0.05  },
@@ -85,6 +86,7 @@ function createLifeRuntime({
   consequenceStore = null,
   relationalConsequencesEngine = null,
   repairCarryoverEngine = null,
+  repairPersistenceEngine = null,
   // Homeostasis runtime (Life Runtime 6.0) — needs, drives, real fulfillment
   homeostasisRuntime = null,
   // Identity runtime (Life Runtime 7.0) — constitution, values, beliefs, choice
@@ -101,6 +103,9 @@ function createLifeRuntime({
   const diagnosticRuntime = createDiagnosticRuntime({ config, selfConsistencyMonitor });
   const healthTracker = sourceHealth || createSourceHealthTracker();
   const eventBus = runtimeEventBus || createRuntimeEventBus({ logger, sourceHealth: healthTracker });
+  const repairPersistence = repairPersistenceEngine || createRepairPersistenceEngine({
+    consequenceStore, logger, client: config?.discordClient || null, channelId: config?.chat?.channelId || config?.discord?.channelId || "",
+  });
 
   const eventPruneAfterDays    = Number(lifeConfig.eventPruneAfterDays    ?? process.env.LIFE_EVENTS_PRUNE_DAYS    ?? 7);
   const decisionPruneAfterDays = Number(lifeConfig.decisionPruneAfterDays ?? process.env.LIFE_DECISIONS_PRUNE_DAYS ?? 7);
@@ -481,7 +486,17 @@ function createLifeRuntime({
       }
     }
 
-    _applyConsequenceContext(review.suppression, review.activeConsequences);
+    await repairPersistence?.tick?.({
+      companionId, customerId, now,
+      giveSpace: Boolean(review.suppression?.giveSpace),
+      quietHoursActive: (now.getHours() >= 22 || now.getHours() < 7),
+    }).catch(err => logger?.warn?.("[life-runtime] repair persistence tick failed", { error: err?.message }));
+
+    const postRepairActive = consequenceStore?.getActive
+      ? await consequenceStore.getActive({ companionId, customerId }).catch(() => review.activeConsequences)
+      : review.activeConsequences;
+    const postRepairSuppression = relationalConsequencesEngine.computeSuppression(postRepairActive);
+    _applyConsequenceContext(postRepairSuppression, postRepairActive);
   }
 
   // Build & cache the consequence context from a suppression state + active set,
@@ -502,6 +517,7 @@ function createLifeRuntime({
       suppression,
       carryover,
       activeCount: activeConsequences.length,
+      activeConsequences,
       lastConsequenceAt: lastConsequenceAt ? new Date(lastConsequenceAt).toISOString() : null,
     };
 
@@ -656,7 +672,9 @@ function createLifeRuntime({
       // Resolution / reconciliation first, so a forgiving message doesn't also
       // get read as a fresh hurt.
       await relationalConsequencesEngine.resolveFromSignals({ companionId, customerId, userText, now }).catch(() => {});
+      await repairPersistence?.handleUserText?.({ companionId, customerId, userText, now }).catch(() => {});
       const created = await relationalConsequencesEngine.detect({ companionId, customerId, userText, repairResult, source: "chat", now }).catch(() => null);
+      if (created) await repairPersistence?.evaluateConsequence?.({ companionId, customerId, consequence: created, now }).catch(() => {});
 
       const active = consequenceStore?.getActive
         ? await consequenceStore.getActive({ companionId, customerId }).catch(() => [])
@@ -897,6 +915,7 @@ function createLifeRuntime({
             affectionMode:              _consequenceContext.suppression?.affectionMode ?? "normal",
             relationshipWeatherSummary: _relationshipContext?.weatherSummary ?? null,
             lastConsequenceAt:          _consequenceContext.lastConsequenceAt ?? null,
+            ...(repairPersistence?.getStatus ? repairPersistence.getStatus(_consequenceContext.activeConsequences || []) : {}),
           }
         : null,
       // Homeostasis (Life Runtime 6.0) — safe metadata only, no private scores

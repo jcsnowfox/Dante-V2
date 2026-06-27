@@ -94,7 +94,7 @@ const HOUR = 3600 * 1000;
   const { createRelationshipWeatherEngine } = require("../src/lifeRuntime/relationshipWeatherEngine");
   const { createRelationshipWeatherBridge } = require("../src/lifeRuntime/relationshipWeatherBridge");
 
-  check("EVENT_TYPES has 19 entries", Array.isArray(EVENT_TYPES) && EVENT_TYPES.length === 19);
+  check("EVENT_TYPES has repair persistence entries", Array.isArray(EVENT_TYPES) && EVENT_TYPES.length === 22);
   check("SEVERITY has minor/moderate/major", SEVERITY.length === 3 && SEVERITY.includes("major"));
 
   const weather = createRelationshipWeatherEngine({ config: {}, logger: null });

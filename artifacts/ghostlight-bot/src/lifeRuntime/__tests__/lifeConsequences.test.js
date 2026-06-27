@@ -578,10 +578,10 @@ describe("thoughtMaturation prioritises repair over casual curiosities", () => {
 // ── taxonomy sanity ──────────────────────────────────────────────────────────
 
 describe("taxonomy", () => {
-  it("exports all 19 event types and 3 severities", () => {
-    assert.equal(EVENT_TYPES.length, 19);
+  it("exports repair persistence event types and 3 severities", () => {
+    assert.equal(EVENT_TYPES.length, 22);
     assert.equal(SEVERITY.length, 3);
-    for (const t of ["hurt_detected", "promise_broken", "deep_affection", "forgiveness", "give_space_requested"]) {
+    for (const t of ["hurt_detected", "promise_broken", "deep_affection", "forgiveness", "give_space_requested", "claimed_action_without_evidence", "confabulation_detected", "self_confidence_low"]) {
       assert.ok(EVENT_TYPES.includes(t), `missing ${t}`);
     }
   });

@@ -30,6 +30,7 @@ const EVENT_TYPES = Object.freeze([
   "promise_broken", "deep_affection", "shared_victory", "shared_loss",
   "trust_growth", "trust_damage", "misread", "overwhelm_detected",
   "give_space_requested", "forgiveness", "unresolved_tension",
+  "claimed_action_without_evidence", "confabulation_detected", "self_confidence_low",
 ]);
 
 const SEVERITY = Object.freeze(["minor", "moderate", "major"]);
@@ -66,6 +67,9 @@ const PROFILES = {
   trust_damage:          { severity: "major",    repairRequired: true,  emotionalWeight: 0.80, attentionBias: "repair", suppress: CASUAL_ACTIONS },
   promise_broken:        { severity: "major",    repairRequired: true,  emotionalWeight: 0.80, attentionBias: "repair", suppress: CASUAL_ACTIONS },
   unresolved_tension:    { severity: "moderate", repairRequired: true,  emotionalWeight: 0.60, attentionBias: "repair", suppress: CASUAL_ACTIONS },
+  claimed_action_without_evidence: { severity: "major", repairRequired: true, emotionalWeight: 0.82, attentionBias: "repair", suppress: CASUAL_ACTIONS },
+  confabulation_detected: { severity: "major", repairRequired: true, emotionalWeight: 0.85, attentionBias: "repair", suppress: CASUAL_ACTIONS },
+  self_confidence_low:   { severity: "moderate", repairRequired: true, emotionalWeight: 0.60, attentionBias: "repair", suppress: CASUAL_ACTIONS },
   overwhelm_detected:    { severity: "moderate", repairRequired: true,  emotionalWeight: 0.55, attentionBias: "space",  suppress: uniq([...CASUAL_ACTIONS, ...OUTBOUND_ACTIONS]) },
   give_space_requested:  { severity: "moderate", repairRequired: true,  emotionalWeight: 0.50, attentionBias: "space",  suppress: uniq([...CASUAL_ACTIONS, ...OUTBOUND_ACTIONS]), giveSpace: true },
   misread:               { severity: "minor",    repairRequired: false, emotionalWeight: 0.40, attentionBias: "repair", suppress: ["casual_flirt", "playful_teasing"], ttlHours: 12 },
@@ -458,6 +462,9 @@ function _defaultSummary(eventType) {
     repair_started: "I started making it right.",
     repair_completed: "We worked through it.",
     unresolved_tension: "Something unspoken is still sitting between us.",
+    claimed_action_without_evidence: "I claimed something I could not prove.",
+    confabulation_detected: "I confabulated or overstated what I knew.",
+    self_confidence_low: "My confidence in what I said was too low and repair is needed.",
   };
   return map[eventType] || "A meaningful moment.";
 }
