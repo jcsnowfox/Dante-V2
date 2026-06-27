@@ -127,6 +127,8 @@ const { createHomeostasisRuntime } = require("./lifeRuntime/homeostasisRuntime")
 const { createPurposeMemoryEngine } = require("./lifeRuntime/purposeMemoryEngine");
 const { createNeedMomentumEngine } = require("./lifeRuntime/needMomentumEngine");
 const { createFirstExperienceStore } = require("./lifeRuntime/firstExperienceStore");
+// Identity Runtime 1.0 — Constitution, values, beliefs, character & choice
+const { createIdentityRuntime } = require("./lifeRuntime/identityRuntime");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -325,6 +327,7 @@ async function startApp() {
     requestJennaEngine, microLifeEventsStore, fulfillmentExecutor,
     purposeMemoryEngine, needMomentumEngine, firstExperienceStore,
   });
+  const identityRuntime = createIdentityRuntime({ config, logger });
   const lifeRuntime = createLifeRuntime({
     config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine,
     hobbyEngine, projectEngine, interestDriftEngine, skillGrowthEngine, collectionsEngine, sharingDecisionEngine,
@@ -332,7 +335,7 @@ async function startApp() {
     relationshipWeatherEngine, sharedHistoryEngine, ritualEngine, traditionEngine,
     anniversaryEngine, insideJokeEngine, relationshipTimelineEngine,
     consequenceStore, relationalConsequencesEngine, repairCarryoverEngine,
-    homeostasisRuntime,
+    homeostasisRuntime, identityRuntime,
   });
   const innerLife = createInnerLifeEngine({ config, logger });
   const continuity = createContinuityEngine({ config, logger });

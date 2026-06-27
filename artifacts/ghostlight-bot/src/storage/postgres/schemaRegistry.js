@@ -2160,6 +2160,109 @@ const SCHEMA_REGISTRY = [
   UNIQUE (companion_id, customer_id, experience_type)
 )`,
   },
+  {
+    table: "dante_identity_values",
+    sql: `CREATE TABLE IF NOT EXISTS dante_identity_values (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  value_key TEXT NOT NULL,
+  label TEXT NOT NULL,
+  strength NUMERIC(4,3) NOT NULL DEFAULT 0.500,
+  confidence NUMERIC(4,3) NOT NULL DEFAULT 0.500,
+  supporting_evidence JSONB NOT NULL DEFAULT '[]'::jsonb,
+  contradicting_evidence JSONB NOT NULL DEFAULT '[]'::jsonb,
+  last_reinforced TIMESTAMPTZ,
+  last_challenged TIMESTAMPTZ,
+  revision_history JSONB NOT NULL DEFAULT '[]'::jsonb,
+  discovered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (companion_id, customer_id, value_key)
+)`,
+  },
+  {
+    table: "dante_identity_principles",
+    sql: `CREATE TABLE IF NOT EXISTS dante_identity_principles (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  principle_key TEXT NOT NULL,
+  label TEXT NOT NULL,
+  statement TEXT NOT NULL,
+  why TEXT NOT NULL DEFAULT '',
+  strength NUMERIC(4,3) NOT NULL DEFAULT 0.800,
+  seed_origin BOOLEAN NOT NULL DEFAULT FALSE,
+  immutable BOOLEAN NOT NULL DEFAULT FALSE,
+  last_evolved_at TIMESTAMPTZ,
+  revision_history JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (companion_id, customer_id, principle_key)
+)`,
+  },
+  {
+    table: "dante_identity_beliefs",
+    sql: `CREATE TABLE IF NOT EXISTS dante_identity_beliefs (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  belief_key TEXT NOT NULL,
+  statement TEXT NOT NULL,
+  confidence NUMERIC(4,3) NOT NULL DEFAULT 0.500,
+  memories JSONB NOT NULL DEFAULT '[]'::jsonb,
+  contradictions JSONB NOT NULL DEFAULT '[]'::jsonb,
+  revision_history JSONB NOT NULL DEFAULT '[]'::jsonb,
+  source TEXT NOT NULL DEFAULT 'reflection',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (companion_id, customer_id, belief_key)
+)`,
+  },
+  {
+    table: "dante_identity_preferences",
+    sql: `CREATE TABLE IF NOT EXISTS dante_identity_preferences (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  category TEXT NOT NULL,
+  item TEXT NOT NULL,
+  valence TEXT NOT NULL DEFAULT 'preference',
+  strength NUMERIC(4,3) NOT NULL DEFAULT 0.300,
+  exposure_count INT NOT NULL DEFAULT 1,
+  last_exposed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  discovered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  source TEXT NOT NULL DEFAULT 'observation',
+  UNIQUE (companion_id, customer_id, category, item)
+)`,
+  },
+  {
+    table: "dante_identity_boundaries",
+    sql: `CREATE TABLE IF NOT EXISTS dante_identity_boundaries (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  boundary_key TEXT NOT NULL,
+  statement TEXT NOT NULL,
+  explanation TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'values',
+  active_from TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (companion_id, customer_id, boundary_key)
+)`,
+  },
+  {
+    table: "dante_identity_journal",
+    sql: `CREATE TABLE IF NOT EXISTS dante_identity_journal (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  entry_type TEXT NOT NULL,
+  content TEXT NOT NULL,
+  related_key TEXT,
+  first_experience_type TEXT,
+  at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
 ];
 
 module.exports = { SCHEMA_REGISTRY };

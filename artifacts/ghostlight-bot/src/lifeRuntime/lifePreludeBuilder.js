@@ -21,6 +21,7 @@
  */
 
 const { buildConsequencePrelude } = require("./consequencePreludeBuilder");
+const { buildIdentitySignal }     = require("./identityPreludeBuilder");
 
 function buildLifePrelude(state = {}) {
   if (!state) return null;
@@ -33,6 +34,7 @@ function buildLifePrelude(state = {}) {
     relationshipContext = null,
     consequenceContext  = null,
     homeostasisContext  = null,
+    identityContext    = null,
   } = state;
 
   const lines = [];
@@ -91,6 +93,12 @@ function buildLifePrelude(state = {}) {
   if (homeostasisContext) {
     const signal = _buildHomeostasisSignal(homeostasisContext);
     if (signal) lines.push(signal);
+  }
+
+  // Identity signal — ONE compact line, only when something meaningful to surface
+  if (identityContext) {
+    const identityLine = buildIdentitySignal(identityContext);
+    if (identityLine) lines.push(identityLine);
   }
 
   // Relationship signal — at most one compact line, never raw scores
