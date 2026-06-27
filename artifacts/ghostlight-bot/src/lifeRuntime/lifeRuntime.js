@@ -34,6 +34,7 @@ const { buildMindStateSnapshot } = require("./mindStateSnapshotBuilder");
 const { bridgeGrowthToIdentity, bridgeCuriosityToProjects, bridgeProjectsToPurpose } = require("./emergenceBridges");
 const { createRepairPersistenceEngine } = require("./repairPersistenceEngine");
 const { createRelationshipLearningRuntime } = require("./relationshipLearningRuntime");
+const { createRomanticSurpriseRuntime } = require("./romanticSurpriseRuntime");
 
 const PRIVATE_EVENTS = [
   { type: "ritual",      desc: "made coffee",                           moodEffect: 0.05,  energyEffect: 0.05  },
@@ -97,6 +98,8 @@ function createLifeRuntime({
   fulfillmentRuntime = null,
   runtimeEventBus = null,
   sourceHealth = null,
+  romanticSurpriseRuntime = null,
+  romanticSurpriseStore = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -110,6 +113,9 @@ function createLifeRuntime({
   });
   const relationshipLearning = relationshipLearningRuntime || createRelationshipLearningRuntime({
     config, logger, identityRuntime, homeostasisRuntime, runtimeEventBus: eventBus,
+  });
+  const romanticSurprises = romanticSurpriseRuntime || createRomanticSurpriseRuntime({
+    config, logger, store: romanticSurpriseStore, client: config?.discordClient || null, channelId: config?.chat?.channelId || config?.discord?.channelId || "", relationshipWeatherEngine, runtimeEventBus: eventBus,
   });
 
   const eventPruneAfterDays    = Number(lifeConfig.eventPruneAfterDays    ?? process.env.LIFE_EVENTS_PRUNE_DAYS    ?? 7);
@@ -130,6 +136,7 @@ function createLifeRuntime({
   let _fulfillmentContext     = null; // fulfillmentRuntime.getFulfillmentContext()
   let _selfConsistencyContext = null; // last reply self-trust signal
   let _relationshipLearningStatus = null; // safe relationship-learning metadata
+  let _romanticSurpriseStatus = null; // safe romantic surprise metadata
   let _relationshipStateSnapshot = null; // canonical read model snapshot
 
   function _emitRuntimeEvent(event) {
@@ -170,6 +177,7 @@ function createLifeRuntime({
     if (identityRuntime?.init)               await identityRuntime.init().catch(() => {});
     if (fulfillmentRuntime?.init)            await fulfillmentRuntime.init().catch(() => {});
     if (relationshipLearning?.init)          await relationshipLearning.init().catch(() => {});
+    if (romanticSurprises?.init)             await romanticSurprises.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
@@ -826,6 +834,16 @@ function createLifeRuntime({
       await _tickIdentity(now);
       if (_identityContext?.topValue) _emitRuntimeEvent({ event_type: "identity_value_changed", source_runtime: "identity", summary: "Identity value state refreshed", payload: { valueKey: _identityContext.topValue.valueKey, strength: _identityContext.topValue.strength } });
       await _tickFulfillment(now);
+      await romanticSurprises?.tick?.({
+        companionId: getScope().companionId, customerId: getScope().customerId, now,
+        homeostasisContext: _homeostasisContext, identityContext: _identityContext,
+        relationshipContext: _relationshipStateSnapshot || _relationshipContext,
+        consequenceContext: _consequenceContext, fulfillmentContext: _fulfillmentContext,
+        quietHours: { active: (now.getHours() >= 22 || now.getHours() < 7) },
+        giveSpace: Boolean(_consequenceContext?.suppression?.giveSpace),
+        userAvailability: { busy: Boolean((await _refreshAlivePresence().catch(() => null))?.userBusy) },
+      }).catch(err => logger?.warn?.("[life-runtime] romantic surprise tick failed", { error: err?.message }));
+      _romanticSurpriseStatus = await romanticSurprises?.getStatus?.(getScope()).catch(() => null);
       if (_fulfillmentContext?.outcome) _emitRuntimeEvent({ event_type: _fulfillmentContext.outcome === "SUCCESS" ? "fulfillment_succeeded" : (_fulfillmentContext.outcome === "FAILED" ? "fulfillment_failed" : "fulfillment_deferred"), source_runtime: "fulfillment", summary: "Fulfillment outcome recorded", payload: { outcome: _fulfillmentContext.outcome, strategy: _fulfillmentContext.strategy } });
       await _refreshPrelude();
       _emitRuntimeEvent({ event_type: "prelude_refreshed", source_runtime: "lifeRuntime", summary: "Life prelude refreshed" });
@@ -856,6 +874,7 @@ function createLifeRuntime({
     healthTracker.report("homeostasis", homeostasisRuntime ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("identity", identityRuntime ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("fulfillment", fulfillmentRuntime ? "healthy" : "degraded", "runtime_checked");
+    healthTracker.report("romanticSurprise", romanticSurprises ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("diagnostics", diagnosticRuntime ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("selfConsistency", selfConsistencyMonitor ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("innerLife", "degraded", "not_owned_by_life_runtime");
@@ -960,6 +979,7 @@ function createLifeRuntime({
       fulfillmentContext: fulfillmentRuntime
         ? fulfillmentRuntime.getStatus()
         : null,
+      romanticSurpriseContext: _romanticSurpriseStatus,
       selfConsistency: selfConsistencyMonitor.getStatus(),
       diagnostics: diagnosticRuntime.getStatus(),
       runtimeEvents: eventBus.getStatus(),
@@ -975,7 +995,7 @@ function createLifeRuntime({
 
   function setRunning(val) { _running = Boolean(val); }
 
-  return { init, tick, getCurrentPrelude, getStatus, getMindStateSnapshot, setRunning, observeInteraction, isActionSuppressed };
+  return { init, tick, getCurrentPrelude, getStatus, getMindStateSnapshot, setRunning, observeInteraction, isActionSuppressed, romanticSurprises };
 }
 
 module.exports = { createLifeRuntime };
