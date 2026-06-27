@@ -286,9 +286,15 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
             }.`,
           },
         ],
-        recentDecisions: (Array.isArray(heartbeatRuntime?.recentDecisions) ? heartbeatRuntime.recentDecisions : [])
-          .filter((item) => item && (item.status === "fired" || (item.status === "skipped" && ["low_confidence", "hold_back"].includes(item.reason))))
-          .slice(0, 2)
+        recentDecisions: [
+          ...(Array.isArray(heartbeatRuntime?.recentDecisions) ? heartbeatRuntime.recentDecisions : []),
+          ...(Array.isArray(heartbeatRuntime?.recentDebugEvents) ? heartbeatRuntime.recentDebugEvents : [])
+            .filter((item) => item && ["failed", "skipped"].includes(item.status))
+            .map((item) => ({ ...item, why: item.reason || "Heartbeat did not run.", executorType: item.executorType || "" })),
+        ]
+          .filter((item) => item && (item.status === "fired" || ["failed", "skipped"].includes(item.status)))
+          .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
+          .slice(0, 5)
           .map((item) => {
             const matchedAction = heartbeatActions.find((action) => action.actionId === item.actionId);
             const typeLabels = {
@@ -300,9 +306,9 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
             return {
               label: item.status === "fired"
                 ? (matchedAction?.name || typeLabels[item.executorType] || item.actionId || "Heartbeat")
-                : "Held back",
+                : (item.status === "failed" ? "Heartbeat error" : "Held back"),
               status: item.status,
-              executorType: item.executorType || "",
+              executorType: item.executorType || matchedAction?.actionType || "",
               actionType: matchedAction?.actionType || "",
               enabledTools: Array.isArray(matchedAction?.enabledTools) ? matchedAction.enabledTools : [],
               at: item.at || "",

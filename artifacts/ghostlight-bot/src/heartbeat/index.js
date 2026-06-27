@@ -898,7 +898,7 @@ function createHeartbeatService({
         proactiveActionStore,
         cache,
         tools,
-        action: selected.action,
+        action: { ...selected.action, target: selected.target.channelId },
         target: selected.target,
         channelModes,
         generatedImages,

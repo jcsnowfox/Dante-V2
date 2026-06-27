@@ -9,6 +9,8 @@ export const journalSchema = {
 
 export const startupSchema = {
   app_settings: { columns: ["setting_key","setting_value","updated_at"], indexes: [] },
+  runtime_schema_registry: { columns: ["schema_key","schema_version","owner_runtime","applied_at","metadata"], indexes: [] },
+  romantic_surprises: { columns: ["id","companion_id","customer_id","surprise_type","status","reason","evidence_ids","message","planned_for","sent_at","blocked_reason","acknowledged_at","metadata","created_at","updated_at"], indexes: ["romantic_surprises_scope_status_idx","romantic_surprises_scope_created_idx"] },
   conversation_events: { columns: ["id","conversation_id","thread_id","channel_id","guild_id","discord_message_id","author_id","author_name","role","source","event_type","content_text","metadata","created_at"], indexes: ["conversation_events_conversation_created_at_idx","conversation_events_channel_created_at_idx","conversation_events_thread_created_at_idx","conversation_events_discord_message_id_idx","conversation_events_discord_message_message_unique_idx"] },
   memories: { columns: ["id","memory_id","title","content","memory_type","domain","sensitivity","source","active","importance","user_scope","reference_date","created_at","updated_at","last_used_at","use_count"], indexes: ["memories_user_scope_active_idx","memories_memory_type_idx","memories_domain_idx","memories_reference_date_idx","memories_updated_at_idx"] },
   memory_usage_events: { columns: ["id","memory_id","user_scope","used_at"], indexes: [] },
