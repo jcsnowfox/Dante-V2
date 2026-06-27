@@ -24,8 +24,12 @@
 
 const { createPostgresPool } = require("../storage/postgres/createPostgresPool");
 
-const VALENCES = Object.freeze(["found", "want", "jenna_would_like"]);
-const STATUSES = Object.freeze(["new", "consuming", "completed", "recommended"]);
+const VALENCES       = Object.freeze(["found", "want", "jenna_would_like"]);
+const STATUSES       = Object.freeze(["new", "consuming", "completed", "recommended"]);
+const RESOURCE_TYPES = Object.freeze([
+  "book", "article", "movie", "music", "video", "course", "poem",
+  "image_reference", "second_life_place", "project_idea", "conversation_topic", "learning_resource",
+]);
 
 const CREATE_TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS dante_resource_library (
@@ -35,8 +39,13 @@ const CREATE_TABLE_SQL = `
     resource_type TEXT NOT NULL DEFAULT 'article',
     title TEXT NOT NULL DEFAULT '',
     author TEXT NOT NULL DEFAULT '',
+    creator TEXT NOT NULL DEFAULT '',
     url TEXT NOT NULL DEFAULT '',
     note TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    why_saved TEXT NOT NULL DEFAULT '',
+    need_type TEXT NOT NULL DEFAULT '',
+    confidence NUMERIC(4,3) NOT NULL DEFAULT 0.500,
     valence TEXT NOT NULL DEFAULT 'found',
     status TEXT NOT NULL DEFAULT 'new',
     source TEXT NOT NULL DEFAULT 'discovery',
@@ -59,15 +68,20 @@ function mapRow(row) {
     resourceType: row.resource_type,
     title:        row.title,
     author:       row.author,
+    creator:      row.creator      || "",
     url:          row.url,
     note:         row.note,
+    summary:      row.summary      || "",
+    whySaved:     row.why_saved    || "",
+    needType:     row.need_type    || "",
+    confidence:   Number(row.confidence) || 0.5,
     valence:      row.valence,
     status:       row.status,
     source:       row.source,
     whyRelevant:  row.why_relevant,
     jennaTag:     Boolean(row.jenna_tag),
     metadata:     row.metadata || {},
-    addedAt:      row.added_at ? new Date(row.added_at) : null,
+    addedAt:      row.added_at  ? new Date(row.added_at)  : null,
     updatedAt:    row.updated_at ? new Date(row.updated_at) : null,
   };
 }
@@ -94,7 +108,8 @@ function createResourceLibraryStore({ config = {}, logger = null } = {}) {
 
   async function add({
     companionId, customerId, resourceType = "article", title = "", author = "",
-    url = "", note = "", valence = "found", source = "discovery",
+    creator = "", url = "", note = "", summary = "", whySaved = "", needType = "",
+    confidence = 0.5, valence = "found", source = "discovery",
     whyRelevant = "", jennaTag = false, metadata = {},
   } = {}) {
     const safeValence = VALENCES.includes(valence) ? valence : "found";
@@ -103,13 +118,14 @@ function createResourceLibraryStore({ config = {}, logger = null } = {}) {
       try {
         const { rows } = await pool.query(
           `INSERT INTO dante_resource_library
-            (companion_id, customer_id, resource_type, title, author, url, note,
-             valence, source, why_relevant, jenna_tag, metadata)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)
+            (companion_id, customer_id, resource_type, title, author, creator, url, note,
+             summary, why_saved, need_type, confidence, valence, source, why_relevant, jenna_tag, metadata)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb)
            RETURNING *`,
           [
-            companionId, customerId, resourceType, title, author, url, note,
-            safeValence, source, whyRelevant, jennaTag, JSON.stringify(metadata),
+            companionId, customerId, resourceType, title, author, creator, url, note,
+            summary, whySaved, needType, confidence, safeValence, source, whyRelevant, jennaTag,
+            JSON.stringify(metadata),
           ]
         );
         return mapRow(rows[0]);
@@ -119,8 +135,9 @@ function createResourceLibraryStore({ config = {}, logger = null } = {}) {
     }
 
     const entry = {
-      id: _nextId++, companionId, customerId, resourceType, title, author, url, note,
-      valence: safeValence, status: "new", source, whyRelevant, jennaTag, metadata,
+      id: _nextId++, companionId, customerId, resourceType, title, author, creator, url, note,
+      summary, whySaved, needType, confidence, valence: safeValence, status: "new",
+      source, whyRelevant, jennaTag, metadata,
       addedAt: new Date(), updatedAt: new Date(),
     };
     _mem.push(entry);
@@ -248,4 +265,4 @@ function createResourceLibraryStore({ config = {}, logger = null } = {}) {
   return { init, add, getLibrary, updateStatus, tagForJenna, count, pruneOlderThan };
 }
 
-module.exports = { createResourceLibraryStore, VALENCES, STATUSES };
+module.exports = { createResourceLibraryStore, VALENCES, STATUSES, RESOURCE_TYPES };

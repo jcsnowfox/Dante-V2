@@ -36,9 +36,14 @@ const CREATE_TABLE_SQL = `
     customer_id TEXT NOT NULL,
     need_type TEXT NOT NULL,
     strategy TEXT NOT NULL,
+    action_type TEXT NOT NULL DEFAULT '',
     outcome TEXT NOT NULL DEFAULT 'UNAVAILABLE',
     confidence NUMERIC(4,3) NOT NULL DEFAULT 0.500,
+    summary TEXT NOT NULL DEFAULT '',
     evidence JSONB NOT NULL DEFAULT '{}',
+    evidence_ids JSONB NOT NULL DEFAULT '[]',
+    identity_feedback JSONB NOT NULL DEFAULT '{}',
+    homeostasis_feedback JSONB NOT NULL DEFAULT '{}',
     note TEXT NOT NULL DEFAULT '',
     follow_up TEXT NOT NULL DEFAULT '',
     identity_impact TEXT NOT NULL DEFAULT '',
@@ -55,20 +60,25 @@ const CREATE_TABLE_SQL = `
 function mapRow(row) {
   if (!row) return null;
   return {
-    id:             Number(row.id),
-    companionId:    row.companion_id,
-    customerId:     row.customer_id,
-    needType:       row.need_type,
-    strategy:       row.strategy,
-    outcome:        row.outcome,
-    confidence:     Number(row.confidence) || 0.5,
-    evidence:       row.evidence || {},
-    note:           row.note || "",
-    followUp:       row.follow_up || "",
-    identityImpact: row.identity_impact || "",
-    reason:         row.reason || "",
-    needDelta:      Number(row.need_delta) || 0,
-    createdAt:      row.created_at ? new Date(row.created_at) : null,
+    id:                 Number(row.id),
+    companionId:        row.companion_id,
+    customerId:         row.customer_id,
+    needType:           row.need_type,
+    strategy:           row.strategy,
+    actionType:         row.action_type    || "",
+    outcome:            row.outcome,
+    confidence:         Number(row.confidence) || 0.5,
+    summary:            row.summary        || "",
+    evidence:           row.evidence       || {},
+    evidenceIds:        Array.isArray(row.evidence_ids) ? row.evidence_ids : (row.evidence_ids || []),
+    identityFeedback:   row.identity_feedback    || {},
+    homeostasisFeedback: row.homeostasis_feedback || {},
+    note:               row.note           || "",
+    followUp:           row.follow_up      || "",
+    identityImpact:     row.identity_impact || "",
+    reason:             row.reason         || "",
+    needDelta:          Number(row.need_delta) || 0,
+    createdAt:          row.created_at ? new Date(row.created_at) : null,
   };
 }
 
@@ -95,6 +105,8 @@ function createFulfillmentHistoryStore({ config = {}, logger = null } = {}) {
     companionId, customerId, needType, strategy,
     outcome, confidence = 0.5, evidence = {}, note = "",
     followUp = "", identityImpact = "", reason = "", needDelta = 0,
+    actionType = "", summary = "", evidenceIds = [],
+    identityFeedback = {}, homeostasisFeedback = {},
   } = {}) {
     if (!OUTCOMES.includes(outcome)) {
       logger?.warn("[fulfillment-history-store] invalid outcome", { outcome });
@@ -117,13 +129,16 @@ function createFulfillmentHistoryStore({ config = {}, logger = null } = {}) {
       try {
         const { rows } = await pool.query(
           `INSERT INTO dante_fulfillment_history
-            (companion_id, customer_id, need_type, strategy, outcome, confidence,
-             evidence, note, follow_up, identity_impact, reason, need_delta)
-           VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12)
+            (companion_id, customer_id, need_type, strategy, action_type, outcome, confidence,
+             summary, evidence, evidence_ids, identity_feedback, homeostasis_feedback,
+             note, follow_up, identity_impact, reason, need_delta)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13,$14,$15,$16,$17)
            RETURNING *`,
           [
-            companionId, customerId, needType, strategy, outcome, confidence,
-            JSON.stringify(evidence), note, followUp, identityImpact, reason, needDelta,
+            companionId, customerId, needType, strategy, actionType, outcome, confidence,
+            summary, JSON.stringify(evidence), JSON.stringify(Array.isArray(evidenceIds) ? evidenceIds : []),
+            JSON.stringify(identityFeedback), JSON.stringify(homeostasisFeedback),
+            note, followUp, identityImpact, reason, needDelta,
           ]
         );
         return mapRow(rows[0]);
@@ -134,7 +149,10 @@ function createFulfillmentHistoryStore({ config = {}, logger = null } = {}) {
 
     const entry = {
       id: Date.now(), companionId, customerId, needType, strategy,
-      outcome, confidence, evidence, note, followUp, identityImpact, reason, needDelta,
+      actionType, outcome, confidence, summary, evidence,
+      evidenceIds: Array.isArray(evidenceIds) ? evidenceIds : [],
+      identityFeedback, homeostasisFeedback,
+      note, followUp, identityImpact, reason, needDelta,
       createdAt: new Date(),
     };
     _mem.push(entry);

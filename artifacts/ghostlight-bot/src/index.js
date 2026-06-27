@@ -134,6 +134,8 @@ const { createFulfillmentRuntime }       = require("./lifeRuntime/fulfillmentRun
 const { createFulfillmentHistoryStore }  = require("./lifeRuntime/fulfillmentHistoryStore");
 const { createResourceLibraryStore }     = require("./lifeRuntime/resourceLibraryStore");
 const { createResourceDiscoveryRuntime } = require("./lifeRuntime/resourceDiscoveryRuntime");
+const { createEvidenceStore }            = require("./lifeRuntime/evidenceStore");
+const { createPendingRequestStore }      = require("./lifeRuntime/pendingRequestStore");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -338,11 +340,15 @@ async function startApp() {
   const resourceDiscoveryRuntime = createResourceDiscoveryRuntime({
     resourceDiscoveryEngine, resourceLibraryStore, logger,
   });
-  const fulfillmentRuntime = createFulfillmentRuntime({
+  const evidenceStore       = createEvidenceStore({ config, logger });
+  const pendingRequestStore = createPendingRequestStore({ config, logger });
+  const fulfillmentRuntime  = createFulfillmentRuntime({
     config, logger,
     fulfillmentHistoryStore,
     resourceLibraryStore,
     resourceDiscoveryRuntime,
+    evidenceStore,
+    pendingRequestStore,
     identityRuntime,
     homeostasisRuntime,
   });

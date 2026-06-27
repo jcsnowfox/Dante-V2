@@ -42,11 +42,27 @@ const IDENTITY_IMPACT = Object.freeze({
   UNAVAILABLE: "action unavailable — resilience tested",
 });
 
+// Map strategy → actionType for evidence records
+const STRATEGY_ACTION_TYPE = Object.freeze({
+  learn_from_web:            "web_search",
+  web_article_read:          "web_article_read",
+  write_private_reflection:  "private_reflection",
+  work_on_project:           "project_work",
+  use_image_generation:      "image_generation",
+  use_voice_note:            "voice_note",
+  second_life_action:        "second_life_visit",
+  ask_jenna:                 "jenna_request",
+  discover_resource:         "resource_discovery",
+  create_something:          "create_something",
+  conversation_topic:        "conversation_topic",
+});
+
 function createAgencyExecutor({
-  adapterRegistry    = null,
+  adapterRegistry         = null,
   fulfillmentHistoryStore = null,
-  identityRuntime    = null,
-  logger             = null,
+  evidenceStore           = null,
+  identityRuntime         = null,
+  logger                  = null,
 } = {}) {
 
   /**
@@ -103,12 +119,34 @@ function createAgencyExecutor({
     // Compute confidence based on outcome
     const confidence = _computeConfidence(outcome, adapter !== null);
 
-    // Record to fulfillment history store
+    // Store separate evidence artifact (real actions only)
+    let evidenceRecord = null;
+    if (evidenceStore && (outcome === OUTCOMES.SUCCESS || outcome === OUTCOMES.PARTIAL)) {
+      const actionType = STRATEGY_ACTION_TYPE[strategy] ?? "private_reflection";
+      evidenceRecord = await evidenceStore.record({
+        companionId, customerId,
+        actionType,
+        source:     evidence.source     ?? "",
+        sourceUrl:  evidence.sourceUrl  ?? evidence.url ?? "",
+        summary:    evidence.summary    ?? note,
+        rawExcerpt: evidence.rawExcerpt ?? evidence.excerpt ?? "",
+        confidence,
+        metadata:   { strategy, needType, ...evidence },
+      }).catch(() => null);
+    }
+
+    const evidenceIds = evidenceRecord ? [evidenceRecord.id] : [];
+
+    // Record to fulfillment history store (references evidence by ID)
     let recorded = null;
     if (fulfillmentHistoryStore) {
       recorded = await fulfillmentHistoryStore.record({
-        companionId, customerId, needType, strategy, outcome,
-        confidence, evidence: { ...evidence, identityNotes },
+        companionId, customerId, needType, strategy,
+        actionType: STRATEGY_ACTION_TYPE[strategy] ?? "",
+        outcome, confidence,
+        summary:    evidence.summary ?? note,
+        evidence:   { ...evidence, identityNotes },
+        evidenceIds,
         note, followUp, identityImpact, reason: reason ?? "", needDelta,
       }).catch(() => null);
     }
@@ -135,7 +173,7 @@ function createAgencyExecutor({
       }).catch(() => {});
     }
 
-    return { outcome, evidence, note, followUp, identityImpact, needDelta, confidence, recorded };
+    return { outcome, evidence, note, followUp, identityImpact, needDelta, confidence, recorded, evidenceIds, evidenceRecord };
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────

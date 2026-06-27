@@ -2293,8 +2293,13 @@ const SCHEMA_REGISTRY = [
   resource_type TEXT NOT NULL DEFAULT 'article',
   title TEXT NOT NULL DEFAULT '',
   author TEXT NOT NULL DEFAULT '',
+  creator TEXT NOT NULL DEFAULT '',
   url TEXT NOT NULL DEFAULT '',
   note TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  why_saved TEXT NOT NULL DEFAULT '',
+  need_type TEXT NOT NULL DEFAULT '',
+  confidence NUMERIC(4,3) NOT NULL DEFAULT 0.500,
   valence TEXT NOT NULL DEFAULT 'found',
   status TEXT NOT NULL DEFAULT 'new',
   source TEXT NOT NULL DEFAULT 'discovery',
@@ -2303,6 +2308,39 @@ const SCHEMA_REGISTRY = [
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
+  // Fulfillment Runtime (Life Runtime 8.0) — immutable evidence artifacts
+  {
+    table: "dante_action_evidence",
+    sql: `CREATE TABLE IF NOT EXISTS dante_action_evidence (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  action_type TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT '',
+  source_url TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  raw_excerpt TEXT NOT NULL DEFAULT '',
+  confidence NUMERIC(4,3) NOT NULL DEFAULT 0.500,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
+  // Fulfillment Runtime (Life Runtime 8.0) — pending requests Dante queues for Jenna
+  {
+    table: "dante_pending_resource_requests",
+    sql: `CREATE TABLE IF NOT EXISTS dante_pending_resource_requests (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  request_type TEXT NOT NULL DEFAULT 'ask_resource',
+  need_type TEXT NOT NULL DEFAULT '',
+  message TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ
 )`,
   },
 ];
