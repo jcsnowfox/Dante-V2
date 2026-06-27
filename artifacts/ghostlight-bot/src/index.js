@@ -105,6 +105,13 @@ const { createThoughtMaturationEngine } = require("./lifeRuntime/thoughtMaturati
 const { createPrivateQuestionStore } = require("./lifeRuntime/privateQuestionStore");
 const { createAttentionDriftEngine } = require("./lifeRuntime/attentionDriftEngine");
 const { createInsightEngine } = require("./lifeRuntime/insightEngine");
+const { createRelationshipWeatherEngine } = require("./lifeRuntime/relationshipWeatherEngine");
+const { createSharedHistoryEngine } = require("./lifeRuntime/sharedHistoryEngine");
+const { createRitualEngine } = require("./lifeRuntime/ritualEngine");
+const { createTraditionEngine } = require("./lifeRuntime/traditionEngine");
+const { createAnniversaryEngine } = require("./lifeRuntime/anniversaryEngine");
+const { createInsideJokeEngine } = require("./lifeRuntime/insideJokeEngine");
+const { createRelationshipTimelineEngine } = require("./lifeRuntime/relationshipTimelineEngine");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -274,10 +281,19 @@ async function startApp() {
   const insightEngine = createInsightEngine({ config, logger });
   const curiosityEngine = createCuriosityEngine({ logger });
   const thoughtMaturationEngine = createThoughtMaturationEngine({ privateQuestionStore, insightEngine, logger });
+  const relationshipWeatherEngine = createRelationshipWeatherEngine({ config, logger });
+  const sharedHistoryEngine = createSharedHistoryEngine({ config, logger });
+  const ritualEngine = createRitualEngine({ config, logger });
+  const traditionEngine = createTraditionEngine({ config, logger });
+  const anniversaryEngine = createAnniversaryEngine({ config, logger });
+  const insideJokeEngine = createInsideJokeEngine({ config, logger });
+  const relationshipTimelineEngine = createRelationshipTimelineEngine({ config, logger });
   const lifeRuntime = createLifeRuntime({
     config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine,
     hobbyEngine, projectEngine, interestDriftEngine, skillGrowthEngine, collectionsEngine, sharingDecisionEngine,
     curiosityEngine, thoughtMaturationEngine, privateQuestionStore, attentionDriftEngine, insightEngine,
+    relationshipWeatherEngine, sharedHistoryEngine, ritualEngine, traditionEngine,
+    anniversaryEngine, insideJokeEngine, relationshipTimelineEngine,
   });
   const innerLife = createInnerLifeEngine({ config, logger });
   const continuity = createContinuityEngine({ config, logger });

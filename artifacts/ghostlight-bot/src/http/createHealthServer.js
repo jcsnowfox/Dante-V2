@@ -70,6 +70,7 @@ const {
   renderMemoryLayout,
   buildAdminPageHelpers,
   renderAdminWorkspacePage,
+  escapeHtml,
 } = require("./adminRenderHelpers");
 const {
   buildImportRecordFromForm,
@@ -369,6 +370,33 @@ function createHealthServer({
             innerRes.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
             innerRes.end(JSON.stringify({ error: "life status unavailable" }));
           }
+        })(req, res, context);
+      }
+
+      if (req.method === "GET" && url.pathname === "/admin/life-runtime") {
+        return withAdmin(async (_req, innerRes, innerContext) => {
+          const lr = innerContext.lifeRuntime;
+          const status = lr ? lr.getStatus() : { enabled: false };
+          const theme = resolveRequestTheme({ url, req: _req });
+          const { nav } = buildAdminPageHelpers({ location: "life-runtime", theme });
+          const html = renderAdminShell({
+            title: "Life Runtime Inspector",
+            theme,
+            nav,
+            body: `
+<div class="page-header">
+  <h1 class="page-title">Life Runtime Inspector</h1>
+  <p class="page-description">Read-only view of the runtime state. Never modifies the runtime.</p>
+</div>
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Runtime Status</h2></div>
+  <div class="card-body">
+    <pre style="font-family:monospace;font-size:0.85rem;white-space:pre-wrap;overflow-wrap:anywhere;">${escapeHtml(JSON.stringify(status, null, 2))}</pre>
+  </div>
+</div>`,
+          });
+          innerRes.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+          innerRes.end(html);
         })(req, res, context);
       }
 

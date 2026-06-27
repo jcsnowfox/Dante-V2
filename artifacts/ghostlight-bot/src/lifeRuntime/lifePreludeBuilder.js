@@ -18,7 +18,7 @@
 function buildLifePrelude(state = {}) {
   if (!state) return null;
 
-  const { dailyPlan = null, recentEvents = [], growthContext = null, curiosityContext = null } = state;
+  const { dailyPlan = null, recentEvents = [], growthContext = null, curiosityContext = null, relationshipContext = null } = state;
 
   const lines = [];
 
@@ -66,6 +66,17 @@ function buildLifePrelude(state = {}) {
       lines.push(`Quietly circling: ${attentionFocus.focus}`);
     } else if (maturingCount > 0) {
       lines.push(`${maturingCount} private thought${maturingCount === 1 ? "" : "s"} maturing`);
+    }
+  }
+
+  // Relationship signal — at most one compact line, never raw scores
+  if (relationshipContext) {
+    const { weatherSummary, upcomingAnniversaries } = relationshipContext;
+    const upcoming = Array.isArray(upcomingAnniversaries) ? upcomingAnniversaries : [];
+    if (upcoming.length > 0) {
+      lines.push(`Relationship: ${weatherSummary || "present"} — ${upcoming[0].label} coming up`);
+    } else if (weatherSummary) {
+      lines.push(`Relationship: ${weatherSummary}`);
     }
   }
 
