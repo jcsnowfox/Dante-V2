@@ -83,6 +83,9 @@ const { createCompanionEventProcessor } = require("./companion/processCompanionE
 const { createGameSystem } = require("./games");
 const { createNorwegianLearningStore } = require("./norwegian");
 const { runSchemaGuard } = require("./storage/postgres/runSchemaGuard");
+const { createAliveEventsStore } = require("./alive/aliveEventsStore");
+const { createIntentionQueueStore } = require("./alive/intentionQueueStore");
+const { createAliveEngine } = require("./alive/aliveEngine");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -235,6 +238,8 @@ async function startApp() {
     emotionalArc,
     feedbackLearning,
   });
+  const aliveEventsStore = createAliveEventsStore({ config, logger });
+  const intentionQueue = createIntentionQueueStore({ config, logger });
   const innerLife = createInnerLifeEngine({ config, logger });
   const continuity = createContinuityEngine({ config, logger });
   const secondLife = createSecondLifeStore({ config, logger });
@@ -319,6 +324,13 @@ async function startApp() {
     imageAppearancePresets,
     situationalAwarenessEngine,
   });
+  const aliveEngine = createAliveEngine({
+    config,
+    logger,
+    aliveEventsStore,
+    intentionQueue,
+    interactionPresenceStore,
+  });
   const automationRunner = createAutomationRunner({
     client,
     config,
@@ -396,6 +408,9 @@ async function startApp() {
     situationalAwarenessStore,
     situationalAwarenessEngine,
     webSearchService,
+    aliveEventsStore,
+    intentionQueue,
+    aliveEngine,
     secondLife,
     secondLifeAdapter,
     secondLifeIdentityResolver,
@@ -438,6 +453,9 @@ async function startApp() {
     proactiveVarietyMemoryStore,
     situationalAwarenessStore,
     situationalAwarenessEngine,
+    aliveEventsStore,
+    intentionQueue,
+    aliveEngine,
     heartbeat,
     mainUserPresence,
     reactionContext,
@@ -507,6 +525,8 @@ async function startApp() {
   await runStartupStep("emotionalArc.init", logger, () => emotionalArc.init());
   await runStartupStep("feedbackLearning.init", logger, () => feedbackLearning.init());
   await runStartupStep("relationalState.init", logger, () => relationalState.init());
+  await runStartupStep("aliveEventsStore.init", logger, () => aliveEventsStore.init());
+  await runStartupStep("intentionQueue.init", logger, () => intentionQueue.init());
   await runStartupStep("recentDecisionStore.init", logger, () => recentDecisionStore.init());
   await runStartupStep("conversationFollowupStore.init", logger, () => conversationFollowupStore.init());
   await runStartupStep("timedNotesStore.init", logger, () => timedNotesStore.init());
@@ -563,6 +583,7 @@ async function startApp() {
     client.appContext.gameSettings = loaded;
   });
   await runStartupStep("heartbeat.init", logger, () => heartbeat.init());
+  await runStartupStep("aliveEngine.start", logger, () => { aliveEngine.start(); });
   await runStartupStep("musicLibrary.background.start", logger, () => musicLibrary.startBackgroundProcessing?.({
     userScope: config.memory?.userScope || "user",
   }));

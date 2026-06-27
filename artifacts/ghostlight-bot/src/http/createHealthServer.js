@@ -398,7 +398,8 @@ function createHealthServer({
         url.pathname === "/admin/norwegian" ||
         url.pathname.startsWith("/admin/norwegian/") ||
         url.pathname === "/admin/human-simulation" ||
-        url.pathname.startsWith("/admin/human-simulation/")
+        url.pathname.startsWith("/admin/human-simulation/") ||
+        url.pathname === "/admin/alive"
       )) {
         return withAdmin(async (_req, innerRes, innerContext) => {
           setThemeCookie(innerRes, resolvedTheme);

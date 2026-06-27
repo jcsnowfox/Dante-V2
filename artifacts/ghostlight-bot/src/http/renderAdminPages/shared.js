@@ -21,6 +21,7 @@ const NAV_GROUPS = [
     { section: "norwegian", label: "Norwegian", path: "/admin/norwegian", icon: "feedbackLearning" },
   ] },
   { label: "Systems", links: [
+    { section: "alive", label: "Alive Layer", path: "/admin/alive", icon: "heartbeat" },
     { section: "games", label: "Games", path: "/admin/games", icon: "tools" },
     { section: "heartbeat", label: "Heartbeat", path: "/admin/heartbeat/timing", icon: "heartbeat" },
     { section: "schedules", label: "Schedules", path: "/admin/schedules", icon: "automation" },
