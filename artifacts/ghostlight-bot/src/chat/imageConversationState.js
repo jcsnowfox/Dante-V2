@@ -129,7 +129,7 @@ function buildImageConversationContextSection(state) {
   ];
 
   if (state.status === "generated_image") {
-    lines.push("A generated image was already sent in this conversation recently.");
+    lines.push("A generated image was already sent in this conversation recently. If the user directly requests another image or says 'try another one', call generate_image immediately.");
   } else if (state.status === "prompt_only") {
     lines.push("A prompt or image concept was already discussed recently, but that does not automatically mean a new image should be generated now.");
   }
