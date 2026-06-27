@@ -93,6 +93,7 @@ function createChatPipeline({
   alivePresenceStore = null,
   aliveEventsStore = null,
   intentionQueue = null,
+  lifeRuntime = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
@@ -614,6 +615,20 @@ function createChatPipeline({
           }
         } catch (aliveCtxErr) {
           logger.debug?.("[alive] context injection failed; continuing", { error: aliveCtxErr?.message });
+        }
+      }
+
+      // Life Runtime prelude — compact private life state (daily plan, current activity).
+      // Injected as a private internal section; shapes natural references, not narration.
+      if (!inDevMode && lifeRuntime) {
+        try {
+          const lifePrelude = lifeRuntime.getCurrentPrelude();
+          if (lifePrelude) {
+            contextSections.push(lifePrelude);
+            logger.debug?.("[chat] Life runtime prelude injected", { messageId: message.id });
+          }
+        } catch (lifeErr) {
+          logger.debug?.("[life-runtime] prelude injection failed; continuing", { error: lifeErr?.message });
         }
       }
 

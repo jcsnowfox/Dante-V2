@@ -1666,6 +1666,57 @@ const SCHEMA_REGISTRY = [
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )`,
   },
+  {
+    table: "life_daily_plans",
+    sql: `CREATE TABLE IF NOT EXISTS life_daily_plans (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  date_key TEXT NOT NULL,
+  mood TEXT NOT NULL DEFAULT 'neutral',
+  energy TEXT NOT NULL DEFAULT 'steady',
+  focus TEXT NOT NULL DEFAULT '',
+  private_activity TEXT NOT NULL DEFAULT '',
+  reachout_windows JSONB NOT NULL DEFAULT '[]',
+  quiet_hours JSONB NOT NULL DEFAULT '{}',
+  wind_down_hour INT NOT NULL DEFAULT 22,
+  sleep_hour INT NOT NULL DEFAULT 23,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (companion_id, customer_id, date_key)
+)`,
+  },
+  {
+    table: "life_events",
+    sql: `CREATE TABLE IF NOT EXISTS life_events (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  event_type TEXT NOT NULL DEFAULT 'activity',
+  description TEXT NOT NULL DEFAULT '',
+  mood_effect NUMERIC(4,2) NOT NULL DEFAULT 0,
+  energy_effect NUMERIC(4,2) NOT NULL DEFAULT 0,
+  private BOOLEAN NOT NULL DEFAULT TRUE,
+  tags JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
+  {
+    table: "life_decisions",
+    sql: `CREATE TABLE IF NOT EXISTS life_decisions (
+  id BIGSERIAL PRIMARY KEY,
+  companion_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  decision_type TEXT NOT NULL,
+  considered JSONB NOT NULL DEFAULT '[]',
+  chosen TEXT NOT NULL DEFAULT '',
+  rejected JSONB NOT NULL DEFAULT '[]',
+  confidence NUMERIC(4,2) NOT NULL DEFAULT 0.5,
+  reason TEXT NOT NULL DEFAULT '',
+  context_summary TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)`,
+  },
 ];
 
 module.exports = { SCHEMA_REGISTRY };

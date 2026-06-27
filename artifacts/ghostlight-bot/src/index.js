@@ -89,6 +89,11 @@ const { createAliveEngine } = require("./alive/aliveEngine");
 const { createAlivePresenceStore } = require("./alive/alivePresenceStore");
 const { executeNextIntention } = require("./alive/aliveExecutor");
 const { createSchedulerRegistry } = require("./runtime/schedulerRegistry");
+const { createMicroLifeEventsStore } = require("./lifeRuntime/microLifeEventsStore");
+const { createDailyPlanEngine } = require("./lifeRuntime/dailyPlanEngine");
+const { createDecisionEngine } = require("./lifeRuntime/decisionEngine");
+const { createLifeRuntime } = require("./lifeRuntime/lifeRuntime");
+const { registerLifeRuntime } = require("./lifeRuntime/lifeRuntimeScheduler");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -244,6 +249,10 @@ async function startApp() {
   const aliveEventsStore = createAliveEventsStore({ config, logger });
   const intentionQueue = createIntentionQueueStore({ config, logger });
   const alivePresenceStore = createAlivePresenceStore({ config, logger });
+  const microLifeEventsStore = createMicroLifeEventsStore({ config, logger });
+  const dailyPlanEngine = createDailyPlanEngine({ config, logger });
+  const decisionEngine = createDecisionEngine({ config, logger });
+  const lifeRuntime = createLifeRuntime({ config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine });
   const innerLife = createInnerLifeEngine({ config, logger });
   const continuity = createContinuityEngine({ config, logger });
   const secondLife = createSecondLifeStore({ config, logger });
@@ -274,6 +283,7 @@ async function startApp() {
     alivePresenceStore,
     aliveEventsStore,
     intentionQueue,
+    lifeRuntime,
   });
   const secondLifeReplyGenerator = createSecondLifeReplyGenerator({
     config,
@@ -430,6 +440,7 @@ async function startApp() {
     intentionQueue,
     alivePresenceStore,
     aliveEngine,
+    lifeRuntime,
     secondLife,
     secondLifeAdapter,
     secondLifeIdentityResolver,
@@ -476,6 +487,7 @@ async function startApp() {
     intentionQueue,
     alivePresenceStore,
     aliveEngine,
+    lifeRuntime,
     heartbeat,
     mainUserPresence,
     reactionContext,
@@ -548,6 +560,7 @@ async function startApp() {
   await runStartupStep("aliveEventsStore.init", logger, () => aliveEventsStore.init());
   await runStartupStep("intentionQueue.init", logger, () => intentionQueue.init());
   await runStartupStep("alivePresenceStore.init", logger, () => alivePresenceStore.init());
+  await runStartupStep("lifeRuntime.init", logger, () => lifeRuntime.init());
   await runStartupStep("recentDecisionStore.init", logger, () => recentDecisionStore.init());
   await runStartupStep("conversationFollowupStore.init", logger, () => conversationFollowupStore.init());
   await runStartupStep("timedNotesStore.init", logger, () => timedNotesStore.init());
@@ -684,6 +697,7 @@ async function startApp() {
     });
   }
   schedulerRegistry.registerPostLogin("emotionalArc.scheduler", () => emotionalArc.scheduler.start());
+  registerLifeRuntime({ schedulerRegistry, lifeRuntime, config, logger });
   await schedulerRegistry.startPostLogin();
   appContext.schedulerRegistry = schedulerRegistry;
   client.appContext.schedulerRegistry = schedulerRegistry;
