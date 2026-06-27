@@ -593,7 +593,6 @@ function createImageGenerationTool({
             imageIds: [result.record.imageId],
             files: [result.file],
           },
-          skippedReferenceImages: Boolean(result.skippedReferenceImages),
           toolMessage: noAppearancePresetHint
             ? `The generated image is ready and will be attached automatically. Note: ${noAppearancePresetHint}`
             : "The generated image is ready and will be attached to the reply automatically.",
