@@ -12,8 +12,9 @@
  *   2. Probabilistically generates a private micro life event
  *   3. Ticks personal growth engines (Life Runtime 2.0)
  *   4. Ticks curiosity and thought maturation (Life Runtime 3.0)
- *   5. Refreshes the cached life prelude
- *   6. Runs the pruning protocol once per day
+ *   5. Ticks relationship continuity engines (Life Runtime 4.0)
+ *   6. Refreshes the cached life prelude
+ *   7. Runs the pruning protocol once per day
  *
  * getCurrentPrelude() returns a { label, content } section for injection
  * into createChatPipeline.js. Fast — no async call, just returns the cache.
@@ -65,6 +66,14 @@ function createLifeRuntime({
   privateQuestionStore = null,
   attentionDriftEngine = null,
   insightEngine = null,
+  // Relationship continuity (Life Runtime 4.0)
+  relationshipWeatherEngine = null,
+  sharedHistoryEngine = null,
+  ritualEngine = null,
+  traditionEngine = null,
+  anniversaryEngine = null,
+  insideJokeEngine = null,
+  relationshipTimelineEngine = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -73,13 +82,14 @@ function createLifeRuntime({
   const decisionPruneAfterDays = Number(lifeConfig.decisionPruneAfterDays ?? process.env.LIFE_DECISIONS_PRUNE_DAYS ?? 7);
   const planPruneAfterDays     = Number(lifeConfig.planPruneAfterDays     ?? process.env.LIFE_PLANS_PRUNE_DAYS    ?? 30);
 
-  let _cachedPrelude    = null;
-  let _lastTickAt       = null;
-  let _lastPruneAt      = null;
-  let _todaysPlan       = null;
-  let _running          = false;
-  let _growthContext    = null; // { activeHobby, activeProject, recentInterest }
-  let _curiosityContext = null; // { attentionFocus, openCount, maturingCount, recentInsight }
+  let _cachedPrelude          = null;
+  let _lastTickAt             = null;
+  let _lastPruneAt            = null;
+  let _todaysPlan             = null;
+  let _running                = false;
+  let _growthContext          = null; // { activeHobby, activeProject, recentInterest }
+  let _curiosityContext       = null; // { attentionFocus, openCount, maturingCount, recentInsight }
+  let _relationshipContext    = null; // { chapter, weatherSummary, activeRitualsCount, traditionsCount, sharedHistoryCount, insideJokeCount, upcomingAnniversaries }
 
   function getScope() {
     return {
@@ -99,7 +109,14 @@ function createLifeRuntime({
     if (collectionsEngine?.init)      await collectionsEngine.init().catch(() => {});
     if (privateQuestionStore?.init)   await privateQuestionStore.init().catch(() => {});
     if (attentionDriftEngine?.init)   await attentionDriftEngine.init().catch(() => {});
-    if (insightEngine?.init)          await insightEngine.init().catch(() => {});
+    if (insightEngine?.init)                  await insightEngine.init().catch(() => {});
+    if (relationshipWeatherEngine?.init)      await relationshipWeatherEngine.init().catch(() => {});
+    if (sharedHistoryEngine?.init)            await sharedHistoryEngine.init().catch(() => {});
+    if (ritualEngine?.init)                   await ritualEngine.init().catch(() => {});
+    if (traditionEngine?.init)                await traditionEngine.init().catch(() => {});
+    if (anniversaryEngine?.init)              await anniversaryEngine.init().catch(() => {});
+    if (insideJokeEngine?.init)               await insideJokeEngine.init().catch(() => {});
+    if (relationshipTimelineEngine?.init)     await relationshipTimelineEngine.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
@@ -308,6 +325,74 @@ function createLifeRuntime({
     }
   }
 
+  // Relationship tick: weather drift, ritual/tradition decay, upcoming anniversaries
+  async function _tickRelationship(now) {
+    const { companionId, customerId } = getScope();
+    if (!companionId) return;
+
+    // Passive weather tick (no interaction signal at runtime level — interactions happen in chat)
+    if (relationshipWeatherEngine) {
+      await relationshipWeatherEngine.tick({ companionId, customerId, hadInteraction: false }).catch(() => {});
+    }
+
+    // Ritual decay
+    if (ritualEngine) {
+      await ritualEngine.applyDecay({ companionId, customerId }).catch(() => {});
+
+      // Promote strong active rituals to traditions
+      if (traditionEngine) {
+        const activeRituals = await ritualEngine.getRituals({ companionId, customerId, status: "active" }).catch(() => []);
+        for (const r of activeRituals) {
+          if (r.occurrenceCount >= 8) {
+            await traditionEngine.promoteFromRitual({
+              companionId, customerId, name: r.name, origin: r.pattern, tags: r.tags,
+            }).catch(() => {});
+          }
+        }
+      }
+    }
+
+    // Tradition decay
+    if (traditionEngine) {
+      await traditionEngine.applyDecay({ companionId, customerId }).catch(() => {});
+    }
+
+    // Inside joke decay
+    if (insideJokeEngine) {
+      await insideJokeEngine.applyDecay({ companionId, customerId }).catch(() => {});
+    }
+
+    // Build & cache relationship context for prelude
+    _relationshipContext = await _buildRelationshipContext({ companionId, customerId, now });
+  }
+
+  async function _buildRelationshipContext({ companionId, customerId, now = new Date() }) {
+    try {
+      const [weather, activeRitualsCount, traditionsCount, sharedHistoryCount, insideJokeCount,
+             upcomingAnniversaries, currentChapter] = await Promise.all([
+        relationshipWeatherEngine?.getWeather?.({ companionId, customerId }).catch(() => null) ?? null,
+        ritualEngine?.count?.({ companionId, customerId }).catch(() => 0) ?? 0,
+        traditionEngine?.count?.({ companionId, customerId }).catch(() => 0) ?? 0,
+        sharedHistoryEngine?.count?.({ companionId, customerId }).catch(() => 0) ?? 0,
+        insideJokeEngine?.count?.({ companionId, customerId }).catch(() => 0) ?? 0,
+        anniversaryEngine?.getUpcoming?.({ companionId, customerId, now }).catch(() => []) ?? [],
+        relationshipTimelineEngine?.getCurrentChapter?.({ companionId, customerId }).catch(() => "beginning") ?? "beginning",
+      ]);
+      return {
+        chapter: currentChapter,
+        weatherSummary: weather?.weatherSummary ?? null,
+        weather,
+        activeRitualsCount,
+        traditionsCount,
+        sharedHistoryCount,
+        insideJokeCount,
+        upcomingAnniversaries,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async function _refreshPrelude() {
     const { companionId, customerId } = getScope();
     if (!companionId) { _cachedPrelude = null; return; }
@@ -317,10 +402,11 @@ function createLifeRuntime({
       : [];
 
     _cachedPrelude = buildLifePrelude({
-      dailyPlan:       _todaysPlan,
-      recentEvents:    recentEvents.slice(0, 2),
-      growthContext:   _growthContext,
-      curiosityContext: _curiosityContext,
+      dailyPlan:            _todaysPlan,
+      recentEvents:         recentEvents.slice(0, 2),
+      growthContext:        _growthContext,
+      curiosityContext:     _curiosityContext,
+      relationshipContext:  _relationshipContext,
     });
   }
 
@@ -330,7 +416,9 @@ function createLifeRuntime({
 
     const [eventsDeleted, decisionsDeleted, plansDeleted,
            hobbiesDeleted, projectsDeleted, interestsDeleted,
-           questionsDeleted, attentionDeleted, insightsDeleted] = await Promise.all([
+           questionsDeleted, attentionDeleted, insightsDeleted,
+           sharedHistoryDeleted, ritualsDeleted, traditionsDeleted,
+           anniversariesDeleted, insideJokesDeleted, timelineDeleted] = await Promise.all([
       microLifeEventsStore?.pruneOlderThan?.({ companionId, customerId, days: eventPruneAfterDays }).catch(() => 0)    ?? Promise.resolve(0),
       decisionEngine?.pruneOlderThan?.({ companionId, customerId, days: decisionPruneAfterDays }).catch(() => 0)       ?? Promise.resolve(0),
       dailyPlanEngine?.pruneOlderThan?.({ companionId, customerId, days: planPruneAfterDays }).catch(() => 0)          ?? Promise.resolve(0),
@@ -340,16 +428,26 @@ function createLifeRuntime({
       privateQuestionStore?.pruneOlderThan?.({ companionId, customerId, days: 14 }).catch(() => 0)                     ?? Promise.resolve(0),
       attentionDriftEngine?.pruneOlderThan?.({ companionId, customerId, days: 14 }).catch(() => 0)                     ?? Promise.resolve(0),
       insightEngine?.pruneOlderThan?.({ companionId, customerId, days: 90 }).catch(() => 0)                            ?? Promise.resolve(0),
+      sharedHistoryEngine?.pruneOlderThan?.({ companionId, customerId, days: 365 }).catch(() => 0)                     ?? Promise.resolve(0),
+      ritualEngine?.pruneOlderThan?.({ companionId, customerId, days: 180 }).catch(() => 0)                            ?? Promise.resolve(0),
+      traditionEngine?.pruneOlderThan?.({ companionId, customerId, days: 365 }).catch(() => 0)                         ?? Promise.resolve(0),
+      anniversaryEngine?.pruneOlderThan?.({ companionId, customerId, days: 730 }).catch(() => 0)                       ?? Promise.resolve(0),
+      insideJokeEngine?.pruneOlderThan?.({ companionId, customerId, days: 365 }).catch(() => 0)                        ?? Promise.resolve(0),
+      relationshipTimelineEngine?.pruneOlderThan?.({ companionId, customerId, days: 730 }).catch(() => 0)              ?? Promise.resolve(0),
     ]);
 
     const totalDeleted = eventsDeleted + decisionsDeleted + plansDeleted
       + hobbiesDeleted + projectsDeleted + interestsDeleted
-      + questionsDeleted + attentionDeleted + insightsDeleted;
+      + questionsDeleted + attentionDeleted + insightsDeleted
+      + sharedHistoryDeleted + ritualsDeleted + traditionsDeleted
+      + anniversariesDeleted + insideJokesDeleted + timelineDeleted;
     if (totalDeleted) {
       logger?.info("[life-runtime] Pruning complete", {
         eventsDeleted, decisionsDeleted, plansDeleted,
         hobbiesDeleted, projectsDeleted, interestsDeleted,
         questionsDeleted, attentionDeleted, insightsDeleted,
+        sharedHistoryDeleted, ritualsDeleted, traditionsDeleted,
+        anniversariesDeleted, insideJokesDeleted, timelineDeleted,
       });
     }
   }
@@ -366,6 +464,7 @@ function createLifeRuntime({
       await _maybeGenerateEvent();
       await _tickGrowth(now);
       await _tickCuriosity(now);
+      await _tickRelationship(now);
       await _refreshPrelude();
 
       const shouldPrune = !_lastPruneAt || (now.getTime() - _lastPruneAt.getTime() > 23 * 60 * 60 * 1000);
@@ -417,6 +516,18 @@ function createLifeRuntime({
             recentInsight:   _curiosityContext.recentInsight
               ? { topic: _curiosityContext.recentInsight.topic, confidence: _curiosityContext.recentInsight.confidence }
               : null,
+          }
+        : null,
+      relationshipContext: _relationshipContext
+        ? {
+            chapter:             _relationshipContext.chapter ?? "beginning",
+            weatherSummary:      _relationshipContext.weatherSummary ?? null,
+            activeRituals:       _relationshipContext.activeRitualsCount ?? 0,
+            traditions:          _relationshipContext.traditionsCount ?? 0,
+            sharedHistory:       _relationshipContext.sharedHistoryCount ?? 0,
+            insideJokes:         _relationshipContext.insideJokeCount ?? 0,
+            upcomingAnniversaries: (_relationshipContext.upcomingAnniversaries ?? [])
+              .map(a => ({ label: a.label, anniversaryDate: a.anniversaryDate })),
           }
         : null,
       pruneSchedule: {
