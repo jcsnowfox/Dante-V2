@@ -74,6 +74,10 @@ function createLifeRuntime({
   anniversaryEngine = null,
   insideJokeEngine = null,
   relationshipTimelineEngine = null,
+  // Relational consequences (Life Runtime 5.0) — Dante & Jenna
+  consequenceStore = null,
+  relationalConsequencesEngine = null,
+  repairCarryoverEngine = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -90,6 +94,7 @@ function createLifeRuntime({
   let _growthContext          = null; // { activeHobby, activeProject, recentInterest }
   let _curiosityContext       = null; // { attentionFocus, openCount, maturingCount, recentInsight }
   let _relationshipContext    = null; // { chapter, weatherSummary, activeRitualsCount, traditionsCount, sharedHistoryCount, insideJokeCount, upcomingAnniversaries }
+  let _consequenceContext     = null; // { suppression, carryover, activeCount, lastConsequenceAt }
 
   function getScope() {
     return {
@@ -117,6 +122,7 @@ function createLifeRuntime({
     if (anniversaryEngine?.init)              await anniversaryEngine.init().catch(() => {});
     if (insideJokeEngine?.init)               await insideJokeEngine.init().catch(() => {});
     if (relationshipTimelineEngine?.init)     await relationshipTimelineEngine.init().catch(() => {});
+    if (consequenceStore?.init)               await consequenceStore.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
@@ -234,9 +240,13 @@ function createLifeRuntime({
         interestDriftEngine?.getInterests?.({ companionId, customerId, minStrength: 0.5 }).catch(() => []) ?? [],
       ]);
 
+      // Casual sharing is held back while a relational consequence is unresolved.
+      const sup = _consequenceContext?.suppression;
+      const consequenceSuppressed = Boolean(sup && (sup.repairRequired || sup.healing || sup.giveSpace));
+
       // Pick most enthusiastic hobby that passes quick share check
       const activeHobby = hobbies.find(h =>
-        sharingDecisionEngine?.quickCheck?.({ enthusiasm: h.enthusiasm, isPrivate: false, context: "hobby" }),
+        sharingDecisionEngine?.quickCheck?.({ enthusiasm: h.enthusiasm, isPrivate: false, context: "hobby", consequenceSuppressed }),
       ) ?? null;
 
       // Pick most-progressed active project
@@ -260,12 +270,19 @@ function createLifeRuntime({
 
     const hasActiveProject = Boolean(_growthContext?.activeProject);
 
+    // Relational consequence bias: when repair is unresolved (or mending),
+    // attention drifts toward repair and casual thought-maturation is held back.
+    const sup = _consequenceContext?.suppression;
+    const hasRepair = Boolean(sup && (sup.repairRequired || sup.healing));
+    const isGiveSpace = Boolean(sup && (sup.giveSpace || sup.repairRequired));
+
     // 1. Update attention drift
     if (attentionDriftEngine) {
       const { focus, focusType, weight } = attentionDriftEngine.selectFocus({
         dailyPlan: _todaysPlan,
         growthContext: _growthContext,
         hasActiveProject,
+        hasRepair,
       });
       await attentionDriftEngine.updateFocus({ companionId, customerId, focus, focusType, weight }).catch(() => {});
     }
@@ -295,10 +312,12 @@ function createLifeRuntime({
       }
     }
 
-    // 3. Mature existing questions → possibly generate insights or alive intentions
+    // 3. Mature existing questions → possibly generate insights or alive intentions.
+    //    While repair is unresolved, isGiveSpace holds back casual intention
+    //    conversion so repair/meaning-making is what surfaces, not curiosities.
     if (thoughtMaturationEngine) {
       await thoughtMaturationEngine.tick({
-        companionId, customerId, now,
+        companionId, customerId, now, isGiveSpace,
       }).catch(() => {});
     }
 
@@ -393,6 +412,100 @@ function createLifeRuntime({
     }
   }
 
+  // Relational consequences tick (Life Runtime 5.0): review active marks,
+  // let Dante begin repair on his own, expire only what is safe, and refresh
+  // the suppression/carryover context that shapes the next reply and his day.
+  async function _tickConsequences(now) {
+    if (!relationalConsequencesEngine) { return; }
+    const { companionId, customerId } = getScope();
+    if (!companionId) return;
+
+    const review = await relationalConsequencesEngine
+      .reviewActive({ companionId, customerId, now })
+      .catch(() => null);
+    if (!review) return;
+
+    // When Dante just began repair on something, log one private reflection
+    // micro-event through the EXISTING micro-life store (no new store).
+    if (review.newlyStarted?.length && microLifeEventsStore && repairCarryoverEngine) {
+      const carry = repairCarryoverEngine.buildCarryover({ suppression: review.suppression });
+      const ev = repairCarryoverEngine.reflectionEvent(carry);
+      if (ev) {
+        await microLifeEventsStore.logEvent({
+          companionId, customerId,
+          eventType: ev.eventType, description: ev.description,
+          moodEffect: ev.moodEffect, energyEffect: ev.energyEffect,
+          isPrivate: true, tags: ev.tags || [],
+        }).catch(() => {});
+      }
+    }
+
+    _applyConsequenceContext(review.suppression, review.activeConsequences);
+  }
+
+  // Build & cache the consequence context from a suppression state + active set,
+  // and overlay the cached daily plan toward repair/reflection when needed.
+  function _applyConsequenceContext(suppression, activeConsequences = []) {
+    if (!suppression) { _consequenceContext = null; return; }
+    const carryover = repairCarryoverEngine
+      ? repairCarryoverEngine.buildCarryover({ suppression })
+      : null;
+
+    let lastConsequenceAt = null;
+    for (const c of activeConsequences) {
+      const t = c?.createdAt ? new Date(c.createdAt).getTime() : 0;
+      if (t && (!lastConsequenceAt || t > lastConsequenceAt)) lastConsequenceAt = t;
+    }
+
+    _consequenceContext = {
+      suppression,
+      carryover,
+      activeCount: activeConsequences.length,
+      lastConsequenceAt: lastConsequenceAt ? new Date(lastConsequenceAt).toISOString() : null,
+    };
+
+    if (_todaysPlan && carryover?.active && repairCarryoverEngine) {
+      _todaysPlan = repairCarryoverEngine.applyToPlan(_todaysPlan, carryover);
+    }
+  }
+
+  /**
+   * observeInteraction — post-message hook. After every interaction with Jenna,
+   * read her language (+ the existing repair analysis) to resolve or create a
+   * consequence, then refresh the cached suppression context and prelude so the
+   * effect carries into the NEXT reply. Fire-and-forget from the chat pipeline.
+   */
+  async function observeInteraction({ userText = "", repairResult = null, now = new Date() } = {}) {
+    if (!relationalConsequencesEngine) return null;
+    const { companionId, customerId } = getScope();
+    if (!companionId) return null;
+    try {
+      // Resolution / reconciliation first, so a forgiving message doesn't also
+      // get read as a fresh hurt.
+      await relationalConsequencesEngine.resolveFromSignals({ companionId, customerId, userText, now }).catch(() => {});
+      const created = await relationalConsequencesEngine.detect({ companionId, customerId, userText, repairResult, source: "chat", now }).catch(() => null);
+
+      const active = consequenceStore?.getActive
+        ? await consequenceStore.getActive({ companionId, customerId }).catch(() => [])
+        : [];
+      const suppression = relationalConsequencesEngine.computeSuppression(active);
+      _applyConsequenceContext(suppression, active);
+      await _refreshPrelude();
+      return created;
+    } catch (error) {
+      logger?.warn?.("[life-runtime] observeInteraction failed", { error: error?.message });
+      return null;
+    }
+  }
+
+  // Is a casual/outbound action currently suppressed by an unresolved
+  // consequence? Consulted by sharing/alive surfaces before acting casual.
+  function isActionSuppressed(actionType) {
+    const sup = _consequenceContext?.suppression;
+    if (!sup || !Array.isArray(sup.suppressed)) return false;
+    return sup.suppressed.includes(actionType);
+  }
+
   async function _refreshPrelude() {
     const { companionId, customerId } = getScope();
     if (!companionId) { _cachedPrelude = null; return; }
@@ -407,6 +520,7 @@ function createLifeRuntime({
       growthContext:        _growthContext,
       curiosityContext:     _curiosityContext,
       relationshipContext:  _relationshipContext,
+      consequenceContext:   _consequenceContext?.carryover ?? null,
     });
   }
 
@@ -418,7 +532,8 @@ function createLifeRuntime({
            hobbiesDeleted, projectsDeleted, interestsDeleted,
            questionsDeleted, attentionDeleted, insightsDeleted,
            sharedHistoryDeleted, ritualsDeleted, traditionsDeleted,
-           anniversariesDeleted, insideJokesDeleted, timelineDeleted] = await Promise.all([
+           anniversariesDeleted, insideJokesDeleted, timelineDeleted,
+           consequencesDeleted] = await Promise.all([
       microLifeEventsStore?.pruneOlderThan?.({ companionId, customerId, days: eventPruneAfterDays }).catch(() => 0)    ?? Promise.resolve(0),
       decisionEngine?.pruneOlderThan?.({ companionId, customerId, days: decisionPruneAfterDays }).catch(() => 0)       ?? Promise.resolve(0),
       dailyPlanEngine?.pruneOlderThan?.({ companionId, customerId, days: planPruneAfterDays }).catch(() => 0)          ?? Promise.resolve(0),
@@ -434,13 +549,15 @@ function createLifeRuntime({
       anniversaryEngine?.pruneOlderThan?.({ companionId, customerId, days: 730 }).catch(() => 0)                       ?? Promise.resolve(0),
       insideJokeEngine?.pruneOlderThan?.({ companionId, customerId, days: 365 }).catch(() => 0)                        ?? Promise.resolve(0),
       relationshipTimelineEngine?.pruneOlderThan?.({ companionId, customerId, days: 730 }).catch(() => 0)              ?? Promise.resolve(0),
+      consequenceStore?.pruneOlderThan?.({ companionId, customerId, days: 90 }).catch(() => 0)                        ?? Promise.resolve(0),
     ]);
 
     const totalDeleted = eventsDeleted + decisionsDeleted + plansDeleted
       + hobbiesDeleted + projectsDeleted + interestsDeleted
       + questionsDeleted + attentionDeleted + insightsDeleted
       + sharedHistoryDeleted + ritualsDeleted + traditionsDeleted
-      + anniversariesDeleted + insideJokesDeleted + timelineDeleted;
+      + anniversariesDeleted + insideJokesDeleted + timelineDeleted
+      + consequencesDeleted;
     if (totalDeleted) {
       logger?.info("[life-runtime] Pruning complete", {
         eventsDeleted, decisionsDeleted, plansDeleted,
@@ -448,6 +565,7 @@ function createLifeRuntime({
         questionsDeleted, attentionDeleted, insightsDeleted,
         sharedHistoryDeleted, ritualsDeleted, traditionsDeleted,
         anniversariesDeleted, insideJokesDeleted, timelineDeleted,
+        consequencesDeleted,
       });
     }
   }
@@ -463,6 +581,7 @@ function createLifeRuntime({
       _todaysPlan = await _ensureDailyPlan(now);
       await _maybeGenerateEvent();
       await _tickGrowth(now);
+      await _tickConsequences(now);
       await _tickCuriosity(now);
       await _tickRelationship(now);
       await _refreshPrelude();
@@ -530,6 +649,23 @@ function createLifeRuntime({
               .map(a => ({ label: a.label, anniversaryDate: a.anniversaryDate })),
           }
         : null,
+      // Relational consequences (Life Runtime 5.0) — safe metadata only, never
+      // raw private text or scores.
+      consequenceContext: _consequenceContext
+        ? {
+            activeConsequencesCount:    _consequenceContext.activeCount ?? 0,
+            highestConsequenceSeverity: _consequenceContext.suppression?.highestSeverity ?? null,
+            repairRequired:             _consequenceContext.suppression?.repairRequired ?? false,
+            repairStarted:              _consequenceContext.suppression?.repairStarted ?? false,
+            repairCompleted:            _consequenceContext.suppression?.healing ?? false,
+            giveSpace:                  _consequenceContext.suppression?.giveSpace ?? false,
+            suppressedActionTypes:      _consequenceContext.suppression?.suppressed ?? [],
+            attentionBias:              _consequenceContext.suppression?.attentionBias ?? null,
+            affectionMode:              _consequenceContext.suppression?.affectionMode ?? "normal",
+            relationshipWeatherSummary: _relationshipContext?.weatherSummary ?? null,
+            lastConsequenceAt:          _consequenceContext.lastConsequenceAt ?? null,
+          }
+        : null,
       pruneSchedule: {
         eventsDays:    eventPruneAfterDays,
         decisionsDays: decisionPruneAfterDays,
@@ -540,7 +676,7 @@ function createLifeRuntime({
 
   function setRunning(val) { _running = Boolean(val); }
 
-  return { init, tick, getCurrentPrelude, getStatus, setRunning };
+  return { init, tick, getCurrentPrelude, getStatus, setRunning, observeInteraction, isActionSuppressed };
 }
 
 module.exports = { createLifeRuntime };

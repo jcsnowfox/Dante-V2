@@ -50,8 +50,16 @@ function createSharingDecisionEngine({ decisionEngine = null, logger = null } = 
     relevance   = 0,
     hour        = new Date().getHours(),
     recentShareCount = 0,
+    consequenceSuppressed = false,
   } = {}) {
     let score = BASE_SCORE[context] ?? 0.2;
+
+    // Hard block: an unresolved relational consequence holds back casual
+    // sharing (Life Runtime 5.0). Affection/repair flow elsewhere; growth
+    // chatter stays private until things are okay.
+    if (consequenceSuppressed) {
+      return _record({ companionId, customerId, context, item, score: 0, reason: "consequence_suppressed" });
+    }
 
     // Hard block: explicitly private stays private
     if (isPrivate && !isShareable) {
@@ -99,7 +107,8 @@ function createSharingDecisionEngine({ decisionEngine = null, logger = null } = 
   }
 
   // Quick check with no recording — for prelude builder to use synchronously
-  function quickCheck({ enthusiasm = 0.5, isPrivate = true, isShareable = false, context = "hobby" }) {
+  function quickCheck({ enthusiasm = 0.5, isPrivate = true, isShareable = false, context = "hobby", consequenceSuppressed = false }) {
+    if (consequenceSuppressed) return false;
     if (isPrivate && !isShareable) return false;
     let score = BASE_SCORE[context] ?? 0.2;
     if (isShareable) score += 0.20;
