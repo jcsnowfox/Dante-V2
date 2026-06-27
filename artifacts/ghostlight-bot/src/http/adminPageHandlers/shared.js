@@ -224,6 +224,10 @@ function getAdminRouteState(pathname) {
     return { section: "humanSimulation" };
   }
 
+  if (pathname === "/admin/alive") {
+    return { section: "alive" };
+  }
+
   return { section: "home" };
 }
 

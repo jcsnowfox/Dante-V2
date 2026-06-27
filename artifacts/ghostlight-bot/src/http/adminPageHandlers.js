@@ -39,6 +39,7 @@ const { handleNorwegianLearningPageRequest } = require("./adminPageHandlers/norw
 const { handleNorwegianDashboardRequest } = require("./adminPageHandlers/norwegianDashboardHandler");
 const { handleSystemTruthPageRequest } = require("./adminPageHandlers/systemTruthPageHandler");
 const { handleSituationalAwarenessPageRequest } = require("./adminPageHandlers/situationalAwarenessPageHandler");
+const { handleAlivePageRequest } = require("./adminPageHandlers/alivePageHandler");
 
 async function handleAdminPageRequest({
   req = null,
@@ -376,6 +377,11 @@ async function handleAdminPageRequest({
 
   if (route.section === "awareness") {
     await handleSituationalAwarenessPageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });
+    return;
+  }
+
+  if (route.section === "alive") {
+    await handleAlivePageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });
     return;
   }
 
