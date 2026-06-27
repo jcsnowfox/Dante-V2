@@ -71,10 +71,16 @@ function evaluateSelfConsistency({
   fulfillmentEvidence = [],
   memoryContext = [],
   relationshipState = null,
+  responseIntent = "",
 } = {}) {
   const user = String(userText || "");
   const reply = String(replyText || "");
   const evidence = [];
+
+  const naturalismIssue = detectConversationNaturalismIssue({ responseIntent, replyText: reply });
+  if (naturalismIssue) {
+    return low(naturalismIssue.reason, naturalismIssue.evidence, naturalismIssue.recommended_action);
+  }
 
   if (duplicate || isDuplicateReply(reply, recentHistory)) {
     return low("Reply appears duplicated or near-duplicated.", ["duplicate_reply"], "Do not resend; clarify or answer freshly next turn.");
@@ -202,6 +208,20 @@ function detectRepetitiveRhetoricalPattern({ replyText = "", recentHistory = [] 
   return null;
 }
 
+function detectConversationNaturalismIssue({ responseIntent = "", replyText = "" } = {}) {
+  const intent = String(responseIntent || "").toUpperCase();
+  const reply = String(replyText || "").trim();
+  if (!intent || !reply) return null;
+  const wordCount = reply.split(/\s+/).filter(Boolean).length;
+  if (["NO_RESPONSE", "REACTION_ONLY", "EMOJI_ONLY", "END_THREAD"].includes(intent) && reply) {
+    return { reason: `Reply generated after ${intent} intent.`, evidence: ["over_answering", intent.toLowerCase()], recommended_action: "Do not send text when the classified conversational moment calls for silence or reaction only." };
+  }
+  if (intent === "SHORT_REPLY" && (wordCount > 28 || /[.!?].+[.!?]/s.test(reply))) {
+    return { reason: "Reply too long for SHORT_REPLY intent.", evidence: ["short_reply_over_answered"], recommended_action: "Collapse to one sentence or less." };
+  }
+  return null;
+}
+
 function ignoredAsk(userText, replyText) {
   const user = String(userText || "").toLowerCase();
   const reply = String(replyText || "").toLowerCase();
@@ -231,5 +251,6 @@ module.exports = {
   SELF_CHECK_WARNING,
   createSelfConsistencyMonitor,
   evaluateSelfConsistency,
+  detectConversationNaturalismIssue,
   detectRepetitiveRhetoricalPattern,
 };

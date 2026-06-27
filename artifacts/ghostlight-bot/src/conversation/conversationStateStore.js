@@ -1,0 +1,10 @@
+"use strict";
+
+class ConversationStateStore {
+  constructor({ now = () => new Date() } = {}) { this.now = now; this.states = new Map(); }
+  key({ conversation_id, conversationId, channel_id, channelId, user_id, userId, companion_id, companionId } = {}) { return [conversation_id || conversationId || channel_id || channelId || "default", user_id || userId || "user", companion_id || companionId || "Dante"].join(":"); }
+  async get(input = {}) { return this.states.get(this.key(input)) || null; }
+  async upsert(input = {}) { const key = this.key(input); const prev = this.states.get(key) || {}; const now = this.now().toISOString(); const next = { conversation_id: input.conversation_id || input.conversationId || prev.conversation_id || input.channel_id || input.channelId || "default", channel_id: input.channel_id || input.channelId || prev.channel_id || "", user_id: input.user_id || input.userId || prev.user_id || "user", companion_id: input.companion_id || input.companionId || prev.companion_id || "Dante", state: input.state || prev.state || "ACTIVE", satisfaction_score: input.satisfaction_score ?? prev.satisfaction_score ?? 0.5, emotional_completion: input.emotional_completion ?? prev.emotional_completion ?? 0, open_loop_score: input.open_loop_score ?? prev.open_loop_score ?? 0, follow_up_score: input.follow_up_score ?? prev.follow_up_score ?? 0, repair_score: input.repair_score ?? prev.repair_score ?? 0, last_user_message_id: input.last_user_message_id || input.lastUserMessageId || prev.last_user_message_id || "", last_companion_message_id: input.last_companion_message_id || input.lastCompanionMessageId || prev.last_companion_message_id || "", last_event_type: input.last_event_type || input.lastEventType || prev.last_event_type || "message", last_intent: input.last_intent || input.lastIntent || prev.last_intent || "", last_update_at: now, metadata: { ...(prev.metadata || {}), ...(input.metadata || {}) } }; this.states.set(key, next); return next; }
+  async list() { return [...this.states.values()]; }
+}
+module.exports = { ConversationStateStore, createConversationStateStore: (opts) => new ConversationStateStore(opts) };
