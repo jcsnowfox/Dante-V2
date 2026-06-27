@@ -35,6 +35,7 @@ const { projectAdapter }                          = require("./worldActionAdapte
 const { voiceNoteAdapter }                        = require("./worldActionAdapters/voiceNoteAdapter");
 const { imageGenerationAdapter }                  = require("./worldActionAdapters/imageGenerationAdapter");
 const { secondLifeAdapter }                       = require("./worldActionAdapters/secondLifeAdapter");
+const { jennaRequestAdapter }                    = require("./worldActionAdapters/jennaRequestAdapter");
 const { bridgeFulfillmentToRelationship, bridgeEvidenceToBeliefs } = require("./emergenceBridges");
 
 const MAX_AGENCY_PER_TICK = 1;   // proactive actions per tick
