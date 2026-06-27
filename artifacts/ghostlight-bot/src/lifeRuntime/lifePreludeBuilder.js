@@ -18,7 +18,7 @@
 function buildLifePrelude(state = {}) {
   if (!state) return null;
 
-  const { dailyPlan = null, recentEvents = [] } = state;
+  const { dailyPlan = null, recentEvents = [], growthContext = null } = state;
 
   const lines = [];
 
@@ -43,6 +43,18 @@ function buildLifePrelude(state = {}) {
 
   if (visibleEvents.length) {
     lines.push(...visibleEvents);
+  }
+
+  // Growth context — at most one line to stay within token budget
+  if (growthContext) {
+    const { activeHobby, activeProject, recentInterest } = growthContext;
+    if (activeProject?.title) {
+      lines.push(`Project: ${activeProject.title}`);
+    } else if (activeHobby?.name) {
+      lines.push(`Into: ${activeHobby.name} lately`);
+    } else if (recentInterest?.topic) {
+      lines.push(`Thinking about: ${recentInterest.topic}`);
+    }
   }
 
   if (!lines.length) return null;

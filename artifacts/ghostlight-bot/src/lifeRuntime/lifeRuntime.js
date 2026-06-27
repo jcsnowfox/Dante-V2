@@ -50,6 +50,13 @@ function createLifeRuntime({
   microLifeEventsStore = null,
   dailyPlanEngine = null,
   decisionEngine = null,
+  // Personal growth engines (Life Runtime 2.0)
+  hobbyEngine = null,
+  projectEngine = null,
+  interestDriftEngine = null,
+  skillGrowthEngine = null,
+  collectionsEngine = null,
+  sharingDecisionEngine = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -58,11 +65,12 @@ function createLifeRuntime({
   const decisionPruneAfterDays = Number(lifeConfig.decisionPruneAfterDays ?? process.env.LIFE_DECISIONS_PRUNE_DAYS ?? 7);
   const planPruneAfterDays   = Number(lifeConfig.planPruneAfterDays   ?? process.env.LIFE_PLANS_PRUNE_DAYS    ?? 30);
 
-  let _cachedPrelude = null;
-  let _lastTickAt    = null;
-  let _lastPruneAt   = null;
-  let _todaysPlan    = null;
-  let _running       = false;
+  let _cachedPrelude  = null;
+  let _lastTickAt     = null;
+  let _lastPruneAt    = null;
+  let _todaysPlan     = null;
+  let _running        = false;
+  let _growthContext  = null; // { activeHobby, activeProject, recentInterest }
 
   function getScope() {
     return {
@@ -72,9 +80,23 @@ function createLifeRuntime({
   }
 
   async function init() {
-    if (microLifeEventsStore?.init) await microLifeEventsStore.init().catch(() => {});
-    if (dailyPlanEngine?.init)      await dailyPlanEngine.init().catch(() => {});
-    if (decisionEngine?.init)       await decisionEngine.init().catch(() => {});
+    if (microLifeEventsStore?.init)  await microLifeEventsStore.init().catch(() => {});
+    if (dailyPlanEngine?.init)       await dailyPlanEngine.init().catch(() => {});
+    if (decisionEngine?.init)        await decisionEngine.init().catch(() => {});
+    if (hobbyEngine?.init)           await hobbyEngine.init().catch(() => {});
+    if (projectEngine?.init)         await projectEngine.init().catch(() => {});
+    if (interestDriftEngine?.init)   await interestDriftEngine.init().catch(() => {});
+    if (skillGrowthEngine?.init)     await skillGrowthEngine.init().catch(() => {});
+    if (collectionsEngine?.init)     await collectionsEngine.init().catch(() => {});
+
+    // Seed defaults once companion is known
+    const { companionId, customerId } = getScope();
+    if (companionId) {
+      await hobbyEngine?.seedDefaults?.({ companionId, customerId }).catch(() => {});
+      await interestDriftEngine?.seedDefaults?.({ companionId, customerId }).catch(() => {});
+      await skillGrowthEngine?.seedDefaults?.({ companionId, customerId }).catch(() => {});
+      await collectionsEngine?.seedDefaults?.({ companionId, customerId }).catch(() => {});
+    }
   }
 
   async function _refreshAlivePresence() {
@@ -125,6 +147,83 @@ function createLifeRuntime({
     }).catch(() => null);
   }
 
+  // Growth tick: hobby activity, interest drift, skill practice
+  async function _tickGrowth(now) {
+    const { companionId, customerId } = getScope();
+    if (!companionId) return;
+
+    // Maybe record hobby activity (~30% per tick)
+    if (hobbyEngine && Math.random() < 0.30) {
+      const hobbies = await hobbyEngine.getHobbies({ companionId, customerId }).catch(() => []);
+      if (hobbies.length > 0) {
+        // Weight selection by enthusiasm so active hobbies stay active
+        const total = hobbies.reduce((s, h) => s + h.enthusiasm, 0);
+        let pick = Math.random() * total;
+        const chosen = hobbies.find(h => (pick -= h.enthusiasm) <= 0) || hobbies[0];
+        await hobbyEngine.recordActivity({ companionId, customerId, hobbyId: chosen.id }).catch(() => {});
+
+        // Reinforce a related interest
+        if (interestDriftEngine && chosen.category) {
+          const interests = await interestDriftEngine
+            .getInterests({ companionId, customerId, minStrength: 0.2 }).catch(() => []);
+          const related = interests.find(i => i.category === chosen.category || i.topic.toLowerCase().includes(chosen.name));
+          if (related) {
+            await interestDriftEngine.reinforce({
+              companionId, customerId, topic: related.topic, delta: 0.01, source: "hobby",
+            }).catch(() => {});
+          }
+        }
+      }
+      // Decay enthusiasm for hobbies untouched this week
+      await hobbyEngine.applyDecay({ companionId, customerId }).catch(() => {});
+    }
+
+    // Interest drift tick (~50% per tick — gentle, frequent)
+    if (interestDriftEngine && Math.random() < 0.50) {
+      const mood = _todaysPlan?.mood || null;
+      await interestDriftEngine.tick({ companionId, customerId, mood, now }).catch(() => {});
+    }
+
+    // Maybe practice a skill (~20% per tick)
+    if (skillGrowthEngine && Math.random() < 0.20) {
+      const skills = await skillGrowthEngine.getSkills({ companionId, customerId }).catch(() => []);
+      if (skills.length > 0) {
+        const skill = skills[Math.floor(Math.random() * skills.length)];
+        await skillGrowthEngine.practice({ companionId, customerId, skillName: skill.skillName }).catch(() => {});
+      }
+    }
+
+    // Build & cache growth context for prelude
+    _growthContext = await _buildGrowthContext({ companionId, customerId });
+  }
+
+  async function _buildGrowthContext({ companionId, customerId }) {
+    try {
+      const [hobbies, projects, interests] = await Promise.all([
+        hobbyEngine?.getHobbies?.({ companionId, customerId }).catch(() => []) ?? [],
+        projectEngine?.getProjects?.({ companionId, customerId, status: "active" }).catch(() => []) ?? [],
+        interestDriftEngine?.getInterests?.({ companionId, customerId, minStrength: 0.5 }).catch(() => []) ?? [],
+      ]);
+
+      // Pick most enthusiastic hobby that passes quick share check
+      const activeHobby = hobbies.find(h =>
+        sharingDecisionEngine?.quickCheck?.({ enthusiasm: h.enthusiasm, isPrivate: false, context: "hobby" }),
+      ) ?? null;
+
+      // Pick most-progressed active project
+      const activeProject = projects.length > 0
+        ? projects.reduce((best, p) => p.progress > (best?.progress ?? -1) ? p : best, null)
+        : null;
+
+      // Top interest
+      const recentInterest = interests[0] ?? null;
+
+      return { activeHobby, activeProject, recentInterest };
+    } catch {
+      return null;
+    }
+  }
+
   async function _refreshPrelude() {
     const { companionId, customerId } = getScope();
     if (!companionId) { _cachedPrelude = null; return; }
@@ -134,8 +233,9 @@ function createLifeRuntime({
       : [];
 
     _cachedPrelude = buildLifePrelude({
-      dailyPlan:    _todaysPlan,
-      recentEvents: recentEvents.slice(0, 2),
+      dailyPlan:     _todaysPlan,
+      recentEvents:  recentEvents.slice(0, 2),
+      growthContext: _growthContext,
     });
   }
 
@@ -143,14 +243,21 @@ function createLifeRuntime({
     const { companionId, customerId } = getScope();
     if (!companionId) return;
 
-    const [eventsDeleted, decisionsDeleted, plansDeleted] = await Promise.all([
+    const [eventsDeleted, decisionsDeleted, plansDeleted,
+           hobbiesDeleted, projectsDeleted, interestsDeleted] = await Promise.all([
       microLifeEventsStore?.pruneOlderThan?.({ companionId, customerId, days: eventPruneAfterDays }).catch(() => 0) ?? Promise.resolve(0),
       decisionEngine?.pruneOlderThan?.({ companionId, customerId, days: decisionPruneAfterDays }).catch(() => 0)    ?? Promise.resolve(0),
       dailyPlanEngine?.pruneOlderThan?.({ companionId, customerId, days: planPruneAfterDays }).catch(() => 0)       ?? Promise.resolve(0),
+      hobbyEngine?.pruneOlderThan?.({ companionId, customerId, days: 90 }).catch(() => 0)                          ?? Promise.resolve(0),
+      projectEngine?.pruneOlderThan?.({ companionId, customerId, days: 60 }).catch(() => 0)                        ?? Promise.resolve(0),
+      interestDriftEngine?.pruneOlderThan?.({ companionId, customerId, days: 30 }).catch(() => 0)                  ?? Promise.resolve(0),
     ]);
 
-    if (eventsDeleted || decisionsDeleted || plansDeleted) {
-      logger?.info("[life-runtime] Pruning complete", { eventsDeleted, decisionsDeleted, plansDeleted });
+    const totalDeleted = eventsDeleted + decisionsDeleted + plansDeleted + hobbiesDeleted + projectsDeleted + interestsDeleted;
+    if (totalDeleted) {
+      logger?.info("[life-runtime] Pruning complete", {
+        eventsDeleted, decisionsDeleted, plansDeleted, hobbiesDeleted, projectsDeleted, interestsDeleted,
+      });
     }
   }
 
@@ -164,6 +271,7 @@ function createLifeRuntime({
     try {
       _todaysPlan = await _ensureDailyPlan(now);
       await _maybeGenerateEvent();
+      await _tickGrowth(now);
       await _refreshPrelude();
 
       const shouldPrune = !_lastPruneAt || (now.getTime() - _lastPruneAt.getTime() > 23 * 60 * 60 * 1000);
@@ -198,6 +306,13 @@ function createLifeRuntime({
           }
         : null,
       preludeActive:  Boolean(_cachedPrelude),
+      growthContext: _growthContext
+        ? {
+            activeHobby:    _growthContext.activeHobby    ? { name: _growthContext.activeHobby.name, enthusiasm: _growthContext.activeHobby.enthusiasm } : null,
+            activeProject:  _growthContext.activeProject  ? { title: _growthContext.activeProject.title, progress: _growthContext.activeProject.progress } : null,
+            recentInterest: _growthContext.recentInterest ? { topic: _growthContext.recentInterest.topic, strength: _growthContext.recentInterest.strength } : null,
+          }
+        : null,
       pruneSchedule: {
         eventsDays:   eventPruneAfterDays,
         decisionsDays: decisionPruneAfterDays,
