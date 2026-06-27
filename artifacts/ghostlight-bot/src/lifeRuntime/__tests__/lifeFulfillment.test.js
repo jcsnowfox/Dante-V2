@@ -744,4 +744,41 @@ describe("no fabrication guarantee", () => {
     });
     assert.strictEqual(entry.outcome, "UNAVAILABLE");
   });
+
+  it("EVIDENCE_PRINCIPLE: SUCCESS with no evidence → forced to UNAVAILABLE", async () => {
+    const store = createFulfillmentHistoryStore();
+    const entry = await store.record({
+      companionId: "dante", customerId: "jenna",
+      needType: "learning", strategy: "learn_from_web",
+      outcome: "SUCCESS",
+      evidence: {},  // no evidence
+    });
+    assert.strictEqual(entry.outcome, "UNAVAILABLE",
+      "SUCCESS without evidence must be treated as if it never happened");
+  });
+
+  it("EVIDENCE_PRINCIPLE: PARTIAL with no evidence → forced to UNAVAILABLE", async () => {
+    const store = createFulfillmentHistoryStore();
+    const entry = await store.record({
+      companionId: "dante", customerId: "jenna",
+      needType: "reflection", strategy: "write_private_reflection",
+      outcome: "PARTIAL",
+      evidence: {},  // no evidence
+    });
+    assert.strictEqual(entry.outcome, "UNAVAILABLE",
+      "PARTIAL without evidence must be treated as if it never happened");
+  });
+
+  it("EVIDENCE_PRINCIPLE: SUCCESS with real evidence is stored as-is", async () => {
+    const { EVIDENCE_PRINCIPLE } = require("../fulfillmentHistoryStore");
+    const store = createFulfillmentHistoryStore();
+    const entry = await store.record({
+      companionId: "dante", customerId: "jenna",
+      needType: "learning", strategy: "learn_from_web",
+      outcome: "SUCCESS",
+      evidence: { query: "Norse burial ships", result: "found 3 articles", searchedAt: new Date().toISOString() },
+    });
+    assert.strictEqual(entry.outcome, "SUCCESS");
+    assert.ok(EVIDENCE_PRINCIPLE.statement.includes("Every autonomous action must leave evidence"));
+  });
 });

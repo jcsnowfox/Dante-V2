@@ -62,3 +62,39 @@ async function captureOwnerPromise({ store, config = {}, message = "", sourceMes
 
 module.exports.captureCompanionPromise = captureCompanionPromise;
 module.exports.captureOwnerPromise = captureOwnerPromise;
+
+// Simple boolean detectors — used by verify scripts and lightweight callers.
+// Broader than detectPromise because I'll (contraction) implies future commitment.
+function detectCompanionPromise(text) {
+  if (!text || text.length < 4) return false;
+  const lower = text.toLowerCase();
+  return [
+    /\bi['']ll\b/,
+    /\bi will\b/,
+    /\bi promise\b/,
+    /\bi won['']?t forget\b/,
+    /\bi['']ll remember\b/,
+    /\bi['']ll remind\b/,
+    /\bi['']ll follow up\b/,
+    /\bi['']ll fix\b/,
+    /\bi won['']?t let\b/,
+    /\bi choose you\b/,
+  ].some(p => p.test(lower));
+}
+
+function detectOwnerPromise(text) {
+  if (!text || text.length < 4) return false;
+  const lower = text.toLowerCase();
+  return [
+    /\bi['']ll\b/,
+    /\bi will\b/,
+    /\bi promise\b/,
+    /\bremind me\b/,
+    /\bi swear\b/,
+    /\bhold me to this\b/,
+    /\bi['']m going to\b/,
+  ].some(p => p.test(lower));
+}
+
+module.exports.detectCompanionPromise = detectCompanionPromise;
+module.exports.detectOwnerPromise = detectOwnerPromise;

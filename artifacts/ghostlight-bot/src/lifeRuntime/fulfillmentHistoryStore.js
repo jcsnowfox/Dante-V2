@@ -20,6 +20,15 @@ const { createPostgresPool } = require("../storage/postgres/createPostgresPool")
 
 const OUTCOMES = Object.freeze(["SUCCESS", "PARTIAL", "DEFERRED", "UNAVAILABLE"]);
 
+// Every autonomous action must leave evidence.
+// If no evidence exists, the action is treated as if it never happened.
+// This is an absolute — enforced at write time, cannot be bypassed.
+const EVIDENCE_PRINCIPLE = Object.freeze({
+  statement: "Every autonomous action must leave evidence. If no evidence exists, the action is treated as if it never happened.",
+  applies_to: ["SUCCESS", "PARTIAL"],
+  enforcement: "forced_to_UNAVAILABLE",
+});
+
 const CREATE_TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS dante_fulfillment_history (
     id BIGSERIAL PRIMARY KEY,
@@ -90,6 +99,18 @@ function createFulfillmentHistoryStore({ config = {}, logger = null } = {}) {
     if (!OUTCOMES.includes(outcome)) {
       logger?.warn("[fulfillment-history-store] invalid outcome", { outcome });
       outcome = "UNAVAILABLE";
+    }
+
+    // EVIDENCE_PRINCIPLE enforcement: a real action (SUCCESS or PARTIAL) without
+    // evidence is treated as if it never happened → UNAVAILABLE.
+    if (EVIDENCE_PRINCIPLE.applies_to.includes(outcome)) {
+      const hasEvidence = evidence && typeof evidence === "object" && Object.keys(evidence).length > 0;
+      if (!hasEvidence) {
+        logger?.warn("[fulfillment-history-store] evidence_principle: no evidence for real outcome — forcing UNAVAILABLE", { outcome, strategy, needType });
+        outcome = "UNAVAILABLE";
+        confidence = 0.95;
+        if (!note) note = "Action claimed but left no evidence — treated as if it never happened.";
+      }
     }
 
     if (pool) {
@@ -205,4 +226,4 @@ function createFulfillmentHistoryStore({ config = {}, logger = null } = {}) {
   return { init, record, getRecent, countByOutcome, pruneOlderThan, OUTCOMES };
 }
 
-module.exports = { createFulfillmentHistoryStore, OUTCOMES };
+module.exports = { createFulfillmentHistoryStore, OUTCOMES, EVIDENCE_PRINCIPLE };
