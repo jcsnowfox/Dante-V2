@@ -45,7 +45,7 @@ function planWithIdentity(need, context = {}, identityCtx = null) {
     return { ...base, identityNotes: "", identityAffirmed: false };
   }
 
-  const { topValue, activeConstraint, values = [], principles = [] } = identityCtx;
+  const { topValue, activeConstraint, values = [], principles = [], beliefs = [] } = identityCtx;
   const notes = [];
   let identityAffirmed = false;
 
@@ -96,6 +96,20 @@ function planWithIdentity(need, context = {}, identityCtx = null) {
         };
       }
     }
+  }
+
+  // ── Belief overlay ──────────────────────────────────────────────────────────
+  const askJennaCaution = beliefs.find((b) => /don'?t ask jenna|jenna is unavailable|avoid asking jenna|give jenna space/i.test(`${b.beliefKey || ""} ${b.statement || ""}`));
+  if (askJennaCaution && base.canAskJenna) {
+    notes.push(`Belief "${askJennaCaution.beliefKey || "ask_jenna_caution"}" favours self-directed action`);
+    return {
+      strategy: "write_private_reflection",
+      reason:   "identity_belief_jenna_space",
+      canAskJenna: false,
+      selfOptions: ["reflection"],
+      identityNotes: notes.join("; "),
+      identityAffirmed: true,
+    };
   }
 
   // ── Principle overlay ───────────────────────────────────────────────────────

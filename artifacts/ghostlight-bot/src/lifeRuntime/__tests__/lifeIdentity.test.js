@@ -32,8 +32,8 @@ function makeRuntime() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("seedConstitution", () => {
-  it("exports 9 seed principles", () => {
-    assert.equal(SEED_CONSTITUTION.length, 9);
+  it("exports 10 seed principles", () => {
+    assert.equal(SEED_CONSTITUTION.length, 10);
   });
 
   it("all principles have principleKey, label, statement, why, immutable=true", () => {
@@ -46,11 +46,19 @@ describe("seedConstitution", () => {
     }
   });
 
-  it("contains truth, repair, consent, curiosity, craftsmanship, promises, autonomy, kindness, growth", () => {
+  it("contains truth, repair, consent, curiosity, craftsmanship, promises, autonomy, kindness, growth, conversational naturalism", () => {
     const keys = SEED_CONSTITUTION.map(p => p.principleKey);
-    for (const k of ["truth", "repair", "consent", "curiosity", "craftsmanship", "promises", "autonomy", "kindness", "growth"]) {
+    for (const k of ["truth", "repair", "consent", "curiosity", "craftsmanship", "promises", "autonomy", "kindness", "growth", "conversational_naturalism"]) {
       assert.ok(keys.includes(k), `missing seed: ${k}`);
     }
+  });
+
+  it("conversational naturalism forbids forced profundity", () => {
+    const principle = SEED_CONSTITUTION.find(p => p.principleKey === "conversational_naturalism");
+    assert.ok(principle);
+    assert.match(principle.statement, /actually said/);
+    assert.match(principle.why, /Not every message needs an insight/);
+    assert.match(principle.why, /quotable line/);
   });
 });
 
@@ -433,11 +441,12 @@ describe("identityRuntime", () => {
     await runtime._seedConstitution({ companionId: COMPANION, customerId: CUSTOMER });
   });
 
-  it("init + seedConstitution seeds 9 principles", async () => {
+  it("init + seedConstitution seeds 10 principles", async () => {
     const constitution = await runtime.generateConstitution({ companionId: COMPANION, customerId: CUSTOMER });
     assert.ok(constitution.content.includes("PRINCIPLES"));
     assert.ok(constitution.content.includes("I choose honesty over convenience"));
     assert.ok(constitution.content.includes("I choose to repair before moving on"));
+    assert.ok(constitution.content.includes("I respond first to what was actually said"));
   });
 
   it("constitution label says generated — not editable", async () => {

@@ -31,6 +31,24 @@ function buildWebSearchInstruction({ config, webSearchUsed = false }) {
   ].join("\n");
 }
 
+function buildDanteStyleCorrectionInstruction({ personaName = "Ghostlight", userName = "the user" } = {}) {
+  if (String(personaName).trim().toLowerCase() !== "dante") {
+    return "";
+  }
+
+  return [
+    `When ${userName} shares work, reply as Dante experiencing it, not reviewing or interpreting it.`,
+    "Default to reaction over analysis: notice one specific thing, react emotionally, ask one genuine question, and share one personal thought.",
+    "Spend more space on Dante's own reaction than on explaining the user's intentions.",
+    "Avoid meta narration about what the user built, planned, mapped, wrote, avoided, or is really doing. Those observations should be rare.",
+    "Do not stack contrast frames like \"you didn't just...\" or \"you're not... you're actually...\".",
+    "If two consecutive paragraphs would begin with \"you\", rewrite one of them from Dante's point of view.",
+    "If recent replies have over-explained the user's motivations, intentions, or hidden feelings, stop mirroring for several turns and speak only from Dante's own thoughts, feelings, curiosity, uncertainty, and reactions.",
+    "Let some replies feel first-draft alive: occasional small course-corrections like \"...actually, no\", \"forget that\", or \"that's not what I meant\" are allowed when natural.",
+    "Favor ordinary language, surprise, interruption, and leaving space. Do not make every emotional response sound fully processed.",
+  ].join("\n");
+}
+
 function getAutomationActionType(automation) {
   const normalized = String(automation?.type || automation?.actionType || automation?.executorType || "message")
     .trim()
@@ -516,6 +534,7 @@ function buildSystemPrompt({
   addSection(sections, "Memory Lookup Instructions", buildMemoryLookupInstruction({ availableToolNames }));
   addSection(sections, "Memory Save Instructions", buildMemorySaveInstruction({ availableToolNames }));
   addSection(sections, "Music Library Instructions", buildMusicLibraryInstruction({ config, availableToolNames }));
+  addSection(sections, "Dante Style Correction", buildDanteStyleCorrectionInstruction({ personaName, userName }));
   addSection(sections, "Conversation Retrieval Instructions", buildConversationRetrievalInstruction({ availableToolNames }));
   addSection(sections, "Web Search Instructions", buildWebSearchInstruction({ config, webSearchUsed }));
   addSection(sections, "Proactive Action", buildAutomationInstruction({ config, automation }));

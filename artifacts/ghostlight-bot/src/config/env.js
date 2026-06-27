@@ -326,6 +326,26 @@ function loadConfig() {
       maxAttachmentMb: readPositiveInt(process.env.MAX_ATTACHMENT_MB, 25, { min: 1, max: 500 }),
       maxVideoSeconds: readPositiveInt(process.env.MAX_VIDEO_SECONDS, 600, { min: 1, max: 3600 }),
     },
+    innerLife: {
+      autonomyChannelId: String(process.env.INNER_LIFE_AUTONOMY_CHANNEL_ID || "1513266945577717881").trim(),
+      diagnosticChannelId: String(process.env.INNER_LIFE_DIAGNOSTIC_CHANNEL_ID || "1520510624617201804").trim(),
+      selfCheck: {
+        enabled: readBoolean(process.env.INNER_LIFE_SELF_CHECK_ENABLED, true),
+        hours: String(process.env.INNER_LIFE_SELF_CHECK_HOURS || "8,12,21").trim(),
+      },
+    },
+    alive: {
+      enabled: readBoolean(process.env.ALIVE_ENABLED, true),
+      unpromptedEnabled: readBoolean(process.env.ALIVE_UNPROMPTED_ENABLED, false),
+      targetChannelId: String(process.env.ALIVE_TARGET_CHANNEL_ID || "").trim(),
+      tickIntervalMs: readPositiveInt(process.env.ALIVE_TICK_INTERVAL_MS, 15 * 60 * 1000, { min: 60 * 1000, max: 24 * 60 * 60 * 1000 }),
+      absenceThresholdMs: readPositiveInt(process.env.ALIVE_ABSENCE_THRESHOLD_MS, 4 * 60 * 60 * 1000, { min: 60 * 1000, max: 30 * 24 * 60 * 60 * 1000 }),
+      dailyReachOutCap: readPositiveInt(process.env.ALIVE_DAILY_REACH_OUT_CAP, 3, { min: 0, max: 20 }),
+      cooldownMs: readPositiveInt(process.env.ALIVE_COOLDOWN_MS, 2 * 60 * 60 * 1000, { min: 60 * 1000, max: 7 * 24 * 60 * 60 * 1000 }),
+      quietHoursStart: readPositiveInt(process.env.ALIVE_QUIET_HOURS_START, 23, { min: 0, max: 23 }),
+      quietHoursEnd: readPositiveInt(process.env.ALIVE_QUIET_HOURS_END, 7, { min: 0, max: 23 }),
+      timezone: normalizeIanaTimezone(process.env.ALIVE_TIMEZONE || process.env.CHAT_TIMEZONE || "UTC"),
+    },
     situationalAwareness: {
       enabled: readBoolean(process.env.SITUATIONAL_AWARENESS_ENABLED, true),
       storeSnapshots: readBoolean(process.env.SITUATIONAL_AWARENESS_STORE_SNAPSHOTS, false),

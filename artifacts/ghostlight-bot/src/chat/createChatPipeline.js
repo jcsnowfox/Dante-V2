@@ -25,6 +25,7 @@ const { classifyEmotionalBeat, formatContinuityPrelude, isProposalText, isForgot
 const { detectPromise } = require("../continuity/promiseLedger");
 const { resolveToneMode, formatTonePrelude } = require("../continuity/toneModeResolver");
 const { buildVoiceRules } = require("../continuity/voiceFingerprintGuard");
+const { buildConversationMirrorLimiterSection } = require("./conversationMirrorLimiter");
 const { tinyFallbackForReason, checkDuplicateReply, rememberReply } = require("../continuity/replyFallbacks");
 const { analyzeRepair, buildRepairPrelude, saveRepairBeat } = require("../relationshipRepair/engine");
 const { updateSystemTruth } = require("../systemTruth/runtimeState");
@@ -32,6 +33,14 @@ const { curateRuntimeMemory } = require("../memory/runtimeCurator");
 const { buildModelContext } = require("../context/modelContextBuilder");
 const { detectURLsInText, shouldFetchURL, fetchAndAnalyzeURL } = require("../context/urlHandler");
 const { buildAttachmentUnderstanding } = require("../context/attachmentUnderstanding");
+const { classifyResponseIntent, buildIntentInstruction, INTENTS } = require("../conversation/responseIntentClassifier");
+const { updateConversationSatisfaction } = require("../conversation/conversationSatisfactionEngine");
+const { createConversationStateStore } = require("../conversation/conversationStateStore");
+const { createFollowUpCandidateStore } = require("../conversation/followUpCandidateStore");
+const { planReactionResponse } = require("../conversation/reactionResponsePlanner");
+
+const defaultConversationStateStore = createConversationStateStore();
+const defaultFollowUpCandidateStore = createFollowUpCandidateStore();
 
 function normalizeAdultPrivateChannelId(channelId) {
   const value = String(channelId || "").trim();
@@ -94,6 +103,8 @@ function createChatPipeline({
   aliveEventsStore = null,
   intentionQueue = null,
   lifeRuntime = null,
+  conversationStateStore = defaultConversationStateStore,
+  followUpCandidateStore = defaultFollowUpCandidateStore,
 }) {
   return {
     async run({ message, mode, modeName }) {
@@ -278,6 +289,10 @@ function createChatPipeline({
         listPresetsSafe(imageAppearancePresets, config.memory?.userScope),
       ]);
       const contextSections = [];
+      const mirrorLimiterSection = buildConversationMirrorLimiterSection({ recentHistory });
+      if (mirrorLimiterSection) {
+        contextSections.push(mirrorLimiterSection);
+      }
       const reactionContextSection = reactionContext?.consumeContextSection?.({ conversationId });
       if (reactionContextSection) {
         contextSections.push(reactionContextSection);
@@ -654,6 +669,61 @@ function createChatPipeline({
           logDecision("repair_mode_triggered", `Repair: ${repairResult.repairType}`, `severity=${repairResult.severity}`, { inputs: [repairResult.repairType] });
         }
       }
+      const messageEventType = message.eventType || message.type || (message.reaction || message.emoji ? "reaction" : "message");
+      const reactionEmoji = message.emoji?.name || message.reaction?.emoji?.name || message.reactionEmoji || "";
+      const responseIntent = classifyResponseIntent({
+        text: input.content,
+        eventType: messageEventType,
+        emoji: reactionEmoji,
+        attachments: Array.from(message.attachments?.values?.() || message.attachments || []),
+        stickers: Array.from(message.stickers?.values?.() || message.stickers || []),
+        recentConversationState: await conversationStateStore.get?.({ conversationId, channelId: message.channelId, userId: input.authorId, companionId: beatScope.companion_id }),
+        repairActive: Boolean(repairResult?.repairNeeded),
+        giveSpace: Boolean(relationalState?.getState?.()?.giveSpace || lifeRuntime?.isActionSuppressed?.("casual_flirt")),
+        openLoopGravity: openPromises?.length ? 0.75 : 0,
+        needPressure: alivePresenceStore ? 0.2 : 0,
+        quietHours: Boolean(mainUserPresence?.getSnapshotForUser?.(input.authorId)?.quietHours),
+      });
+      replyTrace.responseIntent = responseIntent.intent;
+      logger.info?.(`[reply-trace] responseIntent=${responseIntent.intent} reason=${responseIntent.reason} shouldCallLlm=${responseIntent.shouldCallLlm ? "true" : "false"}`);
+      logDecision("response_intent_classified", `Intent: ${responseIntent.intent}`, responseIntent.reason, { inputs: [input.content.slice(0, 80)] });
+
+      const intentInstruction = buildIntentInstruction(responseIntent);
+      if (intentInstruction) contextSections.push(intentInstruction);
+
+      if (responseIntent.createFollowUp && followUpCandidateStore?.create) {
+        await followUpCandidateStore.create({
+          conversation_id: conversationId,
+          channel_id: message.channelId || message.channel?.id || "",
+          user_id: input.authorId || "",
+          companion_id: beatScope.companion_id,
+          topic: input.content.slice(0, 120) || "unfinished thread",
+          reason: responseIntent.reason,
+          gravity_score: openPromises?.length ? 0.75 : 0.55,
+          source_message_id: message.id || "",
+          metadata: { intent: responseIntent.intent },
+        });
+      }
+
+      if (!responseIntent.shouldCallLlm && [INTENTS.NO_RESPONSE, INTENTS.REACTION_ONLY, INTENTS.EMOJI_ONLY, INTENTS.END_THREAD, INTENTS.FOLLOW_UP_LATER].includes(responseIntent.intent)) {
+        const plan = planReactionResponse({ intent: responseIntent.intent, text: input.content, emoji: reactionEmoji, eventType: messageEventType, media: Boolean(message.attachments?.size || message.stickers?.size) });
+        if (plan.action === "react" && plan.emoji && typeof message.react === "function") {
+          await message.react(plan.emoji).catch(() => {});
+        }
+        await updateConversationSatisfaction({
+          store: conversationStateStore,
+          conversation: { conversation_id: conversationId, channel_id: message.channelId || message.channel?.id || "", user_id: input.authorId || "", companion_id: beatScope.companion_id, last_user_message_id: message.id || "" },
+          text: input.content,
+          eventType: messageEventType,
+          emoji: reactionEmoji,
+          intent: responseIntent.intent,
+          repairActive: Boolean(repairResult?.repairNeeded),
+          openLoopGravity: openPromises?.length ? 0.75 : 0,
+        });
+        logger.info?.(`[reply-trace] llm called=false bypassReason=${responseIntent.intent}`);
+        return plan.action === "tiny_text" && plan.text ? { content: plan.text, metadata: { responseIntent, reactionPlan: plan } } : null;
+      }
+
       if (!inDevMode) { const voiceText = buildVoiceRules(); contextSections.push({ label: "VOICE RULES", content: voiceText.replace(/^VOICE RULES:\n?/, "") }); }
       logger.info?.(`[reply-context] continuity prelude built beats=${rankedBeats.length} promises=${openPromises.length} mode=${repairResult?.repairNeeded ? "repair" : (toneDecision?.mode || "dev")}`);
 
@@ -971,6 +1041,22 @@ function createChatPipeline({
       logger.info?.(`[reply-trace] fallbackUsed=${replyTrace.fallbackUsed} fallbackReason=${replyTrace.fallbackReason || "null"}`);
       logger.info?.(`[reply-trace] finalSource=${replyTrace.finalSource}`);
 
+      // Inner Life post-reply observation — lets Dante persist his own diagnostic
+      // carry-forward notes when he identifies a continuity/journal gap.
+      if (!inDevMode && innerLife?.observeInteraction) {
+        innerLife.observeInteraction({
+          message: input.content || "",
+          reply: reply?.content || "",
+          sourceMessageId: message.id,
+          sourceChannelId: message.channel?.id || message.channelId || null,
+        }).catch((error) => {
+          logger.warn?.("[chat] Inner life interaction journal failed; continuing", {
+            messageId: message.id,
+            error: error?.message,
+          });
+        });
+      }
+
       // Human Simulation Pack 2 post-processing — updates presence last_companion_reply_at.
       // Fire-and-forget: never delays the reply.
       if (!inDevMode && humanSimulation?.postProcessMessage) {
@@ -1000,8 +1086,16 @@ function createChatPipeline({
       if (!inDevMode && lifeRuntime?.observeInteraction) {
         lifeRuntime.observeInteraction({
           userText: input.content || "",
+          replyText: reply?.content || "",
           repairResult,
           now: new Date(),
+          recentHistory,
+          duplicate: Boolean(duplicateCheck?.duplicate || replyTrace.duplicateBlocked),
+          tone: toneDecision?.mode || selectedMode?.name || "",
+          generatedImageIds: modelOutput?.generatedImageIds || [],
+          generatedAudioIds: modelOutput?.generatedAudioIds || [],
+          memoryContext: memories,
+          responseIntent: responseIntent?.intent || "",
         }).catch(() => {});
       }
 
@@ -1037,6 +1131,8 @@ function createChatPipeline({
       } catch (error) {
         logger.warn("[chat] Companion reply beat curation failed; continuing", { messageId: message.id, error: error.message });
       }
+
+      await updateConversationSatisfaction({ store: conversationStateStore, conversation: { conversation_id: conversationId, channel_id: message.channelId || message.channel?.id || "", user_id: input.authorId || "", companion_id: beatScope.companion_id, last_user_message_id: message.id || "", last_companion_message_id: `${message.id}:assistant` }, text: input.content, eventType: messageEventType, emoji: reactionEmoji, intent: responseIntent?.intent || "FULL_REPLY", replyText: reply?.content || "", repairActive: Boolean(repairResult?.repairNeeded), recentHistory, openLoopGravity: openPromises?.length ? 0.75 : 0 });
 
       updateSystemTruth("llm", { activeChatProvider: config.llm?.provider || config.openai?.provider || "unknown", activeModel: effectiveMode.chatModel || config.openai?.chatModel || "unknown", lastModelUsed: modelOutput.model || effectiveMode.chatModel || "unknown" });
       updateSystemTruth("memory", { lastMemoryRetrieval: new Date().toISOString(), lastContinuityPreludeBuilt: new Date().toISOString(), lastCrossChannelRetrieval: rankedBeats.length ? new Date().toISOString() : undefined, lastEmotionalBeatSaved: rankedBeats[0]?.updated_at || rankedBeats[0]?.created_at || undefined });

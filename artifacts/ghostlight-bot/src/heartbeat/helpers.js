@@ -3,6 +3,7 @@ const { ChannelType } = require("discord.js");
 const { splitTextIntoChunks } = require("../bot/events/messageCreate");
 const { buildMemoryQueries } = require("../chat/pipeline/retrieveMemory");
 const { replaceCustomEmojiLabelsForDiscord } = require("../reactions/customEmojiPalette");
+const { sendDiscordMessage } = require("../discord/discordSendGateway");
 const {
   CACHE_KEYS,
   CONTEXT_LOOKBACK_DAYS,
@@ -175,7 +176,7 @@ async function sendChunks(channel, text, { config = {} } = {}) {
   let sentMessage = null;
 
   for (const chunk of outgoingChunks) {
-    sentMessage = await channel.send({ content: chunk });
+    sentMessage = (await sendDiscordMessage({ channel, payload: { content: chunk }, label: "heartbeat-send", throwOnError: true })).sentMessage;
   }
 
   return {

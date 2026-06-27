@@ -244,8 +244,8 @@ function renderStateOfUsTab({ emotionalBeats, helpers }) {
 
 function renderDiagnosticsTab({ config, helpers }) {
   const { escapeHtml } = helpers;
-  const innerLifeEnabled = config?.inner_life?.enabled ?? false;
-  const continuityEnabled = config?.continuity?.enabled ?? false;
+  const innerLifeEnabled = config?.innerLife?.inner_life_enabled ?? config?.inner_life?.enabled ?? true;
+  const continuityEnabled = config?.continuity?.continuity_enabled ?? config?.continuity?.enabled ?? true;
 
   return [
     renderPageIntro({ title: "Diagnostics", copy: "Runtime configuration for the Continuity and Inner Life engines." }),
