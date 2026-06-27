@@ -35,6 +35,7 @@ const { bridgeGrowthToIdentity, bridgeCuriosityToProjects, bridgeProjectsToPurpo
 const { createRepairPersistenceEngine } = require("./repairPersistenceEngine");
 const { createRelationshipLearningRuntime } = require("./relationshipLearningRuntime");
 const { createRomanticSurpriseRuntime } = require("./romanticSurpriseRuntime");
+const { createAffectiveDecisionRuntime } = require("./affectiveDecisionRuntime");
 
 const PRIVATE_EVENTS = [
   { type: "ritual",      desc: "made coffee",                           moodEffect: 0.05,  energyEffect: 0.05  },
@@ -100,6 +101,7 @@ function createLifeRuntime({
   sourceHealth = null,
   romanticSurpriseRuntime = null,
   romanticSurpriseStore = null,
+  affectiveDecisionRuntime = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -108,14 +110,17 @@ function createLifeRuntime({
   const diagnosticRuntime = createDiagnosticRuntime({ config, selfConsistencyMonitor });
   const healthTracker = sourceHealth || createSourceHealthTracker();
   const eventBus = runtimeEventBus || createRuntimeEventBus({ logger, sourceHealth: healthTracker });
+  const affectiveDecision = affectiveDecisionRuntime || createAffectiveDecisionRuntime({ config, logger });
   const repairPersistence = repairPersistenceEngine || createRepairPersistenceEngine({
     consequenceStore, logger, client: config?.discordClient || null, channelId: config?.chat?.channelId || config?.discord?.channelId || "",
+    affectiveDecisionRuntime: affectiveDecision,
   });
   const relationshipLearning = relationshipLearningRuntime || createRelationshipLearningRuntime({
     config, logger, identityRuntime, homeostasisRuntime, runtimeEventBus: eventBus,
   });
   const romanticSurprises = romanticSurpriseRuntime || createRomanticSurpriseRuntime({
     config, logger, store: romanticSurpriseStore, client: config?.discordClient || null, channelId: config?.chat?.channelId || config?.discord?.channelId || "", relationshipWeatherEngine, runtimeEventBus: eventBus,
+    affectiveDecisionRuntime: affectiveDecision,
   });
 
   const eventPruneAfterDays    = Number(lifeConfig.eventPruneAfterDays    ?? process.env.LIFE_EVENTS_PRUNE_DAYS    ?? 7);
@@ -980,6 +985,7 @@ function createLifeRuntime({
         ? fulfillmentRuntime.getStatus()
         : null,
       romanticSurpriseContext: _romanticSurpriseStatus,
+      affectiveDecision: affectiveDecision.getStatus(),
       selfConsistency: selfConsistencyMonitor.getStatus(),
       diagnostics: diagnosticRuntime.getStatus(),
       runtimeEvents: eventBus.getStatus(),

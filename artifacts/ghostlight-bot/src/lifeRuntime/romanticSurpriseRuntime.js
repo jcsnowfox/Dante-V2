@@ -9,7 +9,7 @@ const { isMessageStyleSafe } = require("./romanticGestureLibrary");
 const ACK_REACTIONS = new Set(["❤️", "❤", "🥹", "😭", "😂", "💕", "💜", "🥰"]);
 function iso(v = new Date()) { return (v instanceof Date ? v : new Date(v)).toISOString(); }
 
-function createRomanticSurpriseRuntime({ config = {}, logger = null, planner = null, store = null, discordSendGateway = sendDiscordMessage, client = null, channel = null, channelId = "", relationshipWeatherEngine = null, runtimeEventBus = null } = {}) {
+function createRomanticSurpriseRuntime({ config = {}, logger = null, planner = null, store = null, discordSendGateway = sendDiscordMessage, client = null, channel = null, channelId = "", relationshipWeatherEngine = null, runtimeEventBus = null, affectiveDecisionRuntime = null } = {}) {
   const surprisePlanner = planner || createRomanticSurprisePlanner(config?.romanticSurprise || {});
   const surpriseStore = store || createRomanticSurpriseStore({ db: config?.db || null, config, logger });
   async function init() { await surpriseStore.init?.(); }
@@ -39,6 +39,18 @@ function createRomanticSurpriseRuntime({ config = {}, logger = null, planner = n
       const gate = evaluateRomanticSurpriseConsent({ companionId, customerId, config, surpriseType: row.surprise_type, now, quietHours: input.quietHours, giveSpace: input.giveSpace, consentState: input.consentState, consequenceContext: input.consequenceContext, userAvailability: input.userAvailability });
       if (!gate.allowed) { await surpriseStore.markBlocked({ id: row.id, companionId, customerId, reason: gate.blockedReason, now }); blocked++; continue; }
       if (!isMessageStyleSafe(row.message)) { await surpriseStore.markBlocked({ id: row.id, companionId, customerId, reason: "message_style", now }); blocked++; continue; }
+      if (affectiveDecisionRuntime) {
+        const adr = await affectiveDecisionRuntime.consult({
+          decisionType: "romantic_surprise",
+          context: { consequenceContext: input.consequenceContext, relationshipContext: input.relationshipContext, giveSpace: input.giveSpace, quietHours: input.quietHours, userAvailability: input.userAvailability, fulfillmentContext: { evidenceAvailable: Boolean(row.evidence_ids?.length) } },
+          companionId, customerId, now,
+        }).catch(err => { logger?.warn("[romantic-surprise] affective decision unavailable", { error: err?.message }); return null; });
+        if (adr && (adr.outcome === "blocked" || adr.outcome === "delay" || adr.outcome === "suppress")) {
+          await surpriseStore.markBlocked({ id: row.id, companionId, customerId, reason: `affective_decision_${adr.outcome}`, now });
+          blocked++;
+          continue;
+        }
+      }
       const result = await discordSendGateway({ client: input.client || client, channel: input.channel || channel, channelId: input.channelId || channelId || config?.chat?.channelId || config?.discord?.channelId || "", content: row.message, logger, label: "romantic-surprise-runtime" }).catch(e => ({ skipped: true, reason: e?.message || "send_failed" }));
       if (result?.sent) { await surpriseStore.markSent({ id: row.id, companionId, customerId, now, metadata: { ...(row.metadata || {}), sentMessageId: result.messageId || null, sentAt: iso(now), outboundPath: "discordSendGateway" } }); sent++; await runtimeEventBus?.emit?.({ companionId, customerId, event_type: "romantic_surprise_sent", source_runtime: "romanticSurpriseRuntime", summary: "Romantic surprise sent", payload: { surpriseType: row.surprise_type } }).catch(() => {}); }
       else { await surpriseStore.markBlocked({ id: row.id, companionId, customerId, reason: result?.reason || "send_unavailable", now }); blocked++; }

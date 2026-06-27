@@ -54,7 +54,7 @@ function messageStyleOk(text) {
   return s.length <= 140 && !/[\*_][^\n]+[\*_]/.test(s) && !/\b(kneels|door|silence is killing me|don't leave me|can't function|have to talk|after everything)\b/i.test(s);
 }
 
-function createRepairPersistenceEngine({ consequenceStore, logger = null, discordSendGateway = sendDiscordMessage, client = null, channel = null, channelId = "", quietHours = null } = {}) {
+function createRepairPersistenceEngine({ consequenceStore, logger = null, discordSendGateway = sendDiscordMessage, client = null, channel = null, channelId = "", quietHours = null, affectiveDecisionRuntime = null } = {}) {
   async function _patch(companionId, customerId, c, repairFollowUp, now) {
     return consequenceStore.update({ companionId, customerId, id: c.id, patch: { metadata: { ...(c.metadata || {}), repairFollowUp } }, now });
   }
@@ -117,6 +117,18 @@ function createRepairPersistenceEngine({ consequenceStore, logger = null, discor
       const content = buildMessage(c);
       if (!reason && !messageStyleOk(content)) reason = "message_style";
       if (reason) { await _patch(companionId, customerId, c, { ...fm, blockedReason: reason, pending: true }, now); blocked++; continue; }
+      if (affectiveDecisionRuntime) {
+        const adr = await affectiveDecisionRuntime.consult({
+          decisionType: "repair_followup",
+          context: { consequenceContext: c, giveSpace: giveSpace || Boolean(c.metadata?.giveSpace), quietHours: quietHoursActive ?? isQuietHours(now, quietHours) },
+          companionId, customerId, now,
+        }).catch(err => { logger?.warn("[repair-persistence] affective decision unavailable", { error: err?.message }); return null; });
+        if (adr && (adr.outcome === "delay" || adr.outcome === "blocked" || adr.outcome === "suppress")) {
+          await _patch(companionId, customerId, c, { ...fm, blockedReason: `affective_decision_${adr.outcome}`, pending: true }, now);
+          blocked++;
+          continue;
+        }
+      }
       const result = await discordSendGateway({ client, channel: tickChannel || channel, channelId: tickChannelId || channelId, content, logger, label: "repair-persistence" }).catch(e => ({ skipped: true, reason: e?.message || "send_failed" }));
       if (result?.sent) { await _patch(companionId, customerId, c, { ...fm, pending: false, sentAt: iso(now), lastSentAt: iso(now), message: content, blockedReason: null, outboundPath: "discordSendGateway" }, now); sent++; }
       else { await _patch(companionId, customerId, c, { ...fm, blockedReason: result?.reason || "send_unavailable", pending: true }, now); blocked++; }
