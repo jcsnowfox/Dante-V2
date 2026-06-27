@@ -40,9 +40,14 @@ function buildLifePrelude(state = {}) {
     selfConsistencyContext = null,
     relationshipLearningSignal = null,
     learningContext     = null,
+    evidenceIntegrityContext = null,
   } = state;
 
   const lines = [];
+
+  if (evidenceIntegrityContext?.preludeWarning) {
+    lines.push(evidenceIntegrityContext.preludeWarning);
+  }
 
   if (selfConsistencyContext?.preludeWarning) {
     lines.push(selfConsistencyContext.preludeWarning);

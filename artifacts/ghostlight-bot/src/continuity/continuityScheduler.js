@@ -27,7 +27,7 @@ const { ITEM_STATUSES } = require("./continuityTypes");
  * Success requires a message_id. Failure must include exact reason.
  */
 
-function createContinuityScheduler({ store, config, deliverFn, logger }) {
+function createContinuityScheduler({ store, config, deliverFn, logger, affectiveDecisionRuntime = null }) {
   let intervalId = null;
   const TICK_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -68,6 +68,17 @@ function createContinuityScheduler({ store, config, deliverFn, logger }) {
         if (!deliverFn) {
           logger?.debug?.("[continuity] no deliverFn — proactive delivery skipped", { id: item.id });
           continue;
+        }
+
+        if (affectiveDecisionRuntime) {
+          const adr = await affectiveDecisionRuntime.consult({
+            decisionType: "conversation_followup",
+            context: { conversationState: { openLoop: item.type === "follow_up", pending: true } },
+          }).catch(err => { logger?.warn("[continuity] affective decision unavailable", { error: err?.message }); return null; });
+          if (adr && (adr.outcome === "suppress" || adr.outcome === "blocked" || adr.outcome === "delay")) {
+            logger?.info("[continuity] affective decision deferred follow-up", { id: item.id, outcome: adr.outcome });
+            continue;
+          }
         }
 
         const seed = Number(item.id) % 100;
