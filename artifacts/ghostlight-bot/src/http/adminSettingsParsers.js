@@ -64,6 +64,14 @@ function parseGeneralSettingsFields(fields) {
   includeField(raw, fields, "chat.historyLimit", "historyLimit");
   includeField(raw, fields, "chat.defaultMode", "defaultMode");
   includeField(raw, fields, "chat.timezone", "chatTimezone");
+  includeField(raw, fields, "temporal.preferredTimeFormat", "temporalPreferredTimeFormat");
+  includeField(raw, fields, "temporal.quietHoursStart", "temporalQuietHoursStart");
+  includeField(raw, fields, "temporal.quietHoursEnd", "temporalQuietHoursEnd");
+  includeField(raw, fields, "temporal.activeHoursStart", "temporalActiveHoursStart");
+  includeField(raw, fields, "temporal.activeHoursEnd", "temporalActiveHoursEnd");
+  includeField(raw, fields, "temporal.seasonalAwarenessEnabled", "temporalSeasonalAwarenessEnabled", (value) => readBooleanField(value));
+  includeField(raw, fields, "temporal.dayCycleAwarenessEnabled", "temporalDayCycleAwarenessEnabled", (value) => readBooleanField(value));
+  includeField(raw, fields, "temporal.clockPresetId", "temporalClockPresetId");
   includeField(raw, fields, "chat.userId", "chatUserId");
   includeField(raw, fields, "heartbeat.userPresenceContextEnabled", "mainUserPresenceContextEnabled", (value) => readBooleanField(value));
   includeField(raw, fields, "memoryLookup.enabled", "memoryLookupEnabled", (value) => readBooleanField(value));

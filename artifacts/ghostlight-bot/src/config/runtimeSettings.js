@@ -215,6 +215,15 @@ const EDITABLE_RUNTIME_SETTINGS = Object.freeze([
     path: ["chat", "timezone"],
     normalize: (value) => normalizeIanaTimezone(value),
   },
+
+  { key: "temporal.preferredTimeFormat", path: ["temporal", "preferredTimeFormat"], normalize: (value) => String(value || "12h").trim() === "24h" ? "24h" : "12h" },
+  { key: "temporal.quietHoursStart", path: ["temporal", "quietHoursStart"], normalize: (value) => String(value || "23:00").trim() || "23:00" },
+  { key: "temporal.quietHoursEnd", path: ["temporal", "quietHoursEnd"], normalize: (value) => String(value || "07:00").trim() || "07:00" },
+  { key: "temporal.activeHoursStart", path: ["temporal", "activeHoursStart"], normalize: (value) => String(value || "09:00").trim() || "09:00" },
+  { key: "temporal.activeHoursEnd", path: ["temporal", "activeHoursEnd"], normalize: (value) => String(value || "22:00").trim() || "22:00" },
+  { key: "temporal.seasonalAwarenessEnabled", path: ["temporal", "seasonalAwarenessEnabled"], normalize: (value) => Boolean(value) },
+  { key: "temporal.dayCycleAwarenessEnabled", path: ["temporal", "dayCycleAwarenessEnabled"], normalize: (value) => Boolean(value) },
+  { key: "temporal.clockPresetId", path: ["temporal", "clockPresetId"], normalize: (value) => String(value || "dante-wolf-hour-clock").trim() || "dante-wolf-hour-clock" },
   {
     key: "chat.userId",
     path: ["chat", "userId"],

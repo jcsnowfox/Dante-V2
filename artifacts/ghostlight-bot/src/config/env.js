@@ -171,6 +171,16 @@ function loadConfig() {
       },
       customReactionEmojis: [],
     },
+    temporal: {
+      preferredTimeFormat: process.env.TEMPORAL_TIME_FORMAT === "24h" ? "24h" : "12h",
+      quietHoursStart: process.env.TEMPORAL_QUIET_HOURS_START || "23:00",
+      quietHoursEnd: process.env.TEMPORAL_QUIET_HOURS_END || "07:00",
+      activeHoursStart: process.env.TEMPORAL_ACTIVE_HOURS_START || "09:00",
+      activeHoursEnd: process.env.TEMPORAL_ACTIVE_HOURS_END || "22:00",
+      seasonalAwarenessEnabled: readBoolean(process.env.TEMPORAL_SEASONAL_AWARENESS_ENABLED, true),
+      dayCycleAwarenessEnabled: readBoolean(process.env.TEMPORAL_DAY_CYCLE_AWARENESS_ENABLED, true),
+      clockPresetId: process.env.TEMPORAL_CLOCK_PRESET_ID || "dante-wolf-hour-clock",
+    },
     llm: {
       provider: "openrouter",
       apiKey: process.env.OPENROUTER_API_KEY || "",

@@ -1,6 +1,7 @@
 const { buildSystemPrompt, isSharedServerMode } = require("../prompt/buildSystemPrompt");
 const { shouldUseWebSearch, buildWebSearchRequestOptions } = require("./webSearch");
 const { buildChatInput, buildInternalContextText, formatTimestamp } = require("./buildChatInput");
+const { createTemporalAwarenessService, buildTemporalPromptSection } = require("../../temporal/temporalAwarenessService");
 
 // Generous default cap on a single reply's generated tokens. A long companion
 // message fits comfortably under this; the cap exists so a degenerate/looping
@@ -166,6 +167,14 @@ function buildChatRequest({
     privacyLevel,
   });
   const effectiveContextSections = [...contextSections];
+  const temporalContext = createTemporalAwarenessService({ config }).buildContext({
+    now: input?.messageTimestamp ? new Date(input.messageTimestamp) : new Date(),
+    lastInteractionAt: recentHistory?.length ? (recentHistory[recentHistory.length - 1]?.createdAt || recentHistory[recentHistory.length - 1]?.createdTimestamp) : null,
+  });
+  const temporalPromptSection = buildTemporalPromptSection(temporalContext);
+  if (temporalPromptSection) {
+    effectiveContextSections.push(temporalPromptSection);
+  }
   const timeContext = buildTimeContextSection({ input, includeTimeContext, timeZone });
   if (timeContext) {
     effectiveContextSections.push(timeContext);

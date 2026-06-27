@@ -16,6 +16,7 @@ const {
   customReactionLabel,
   normalizeCustomReactionEmojis,
 } = require("../../reactions/customEmojiPalette");
+const { listClockPresets } = require("../../temporal/clockPresets");
 
 const BEHAVIOUR_TABS = Object.freeze([
   { key: "models", label: "Default Models", path: "/admin/companion", extra: { companionTab: "models" } },
@@ -762,6 +763,18 @@ function renderBehaviourRuntimeTab({ state, theme, helpers }) {
         .map((z) => `<option value="${escapeHtml(z)}"${z === state.timezoneValue ? " selected" : ""}>${escapeHtml(z)}</option>`)
         .join("")
     }</select>`,
+    renderFieldLabelWithHelp({ forId: "temporalPreferredTimeFormat", label: "Preferred Time Format", help: "Controls how temporal context is formatted for speech, journals, dreams, and schedules." }, helpers),
+    `<select id="temporalPreferredTimeFormat" name="temporalPreferredTimeFormat"><option value="12h"${(state.runtimeSettings["temporal.preferredTimeFormat"] || "12h") === "12h" ? " selected" : ""}>12h</option><option value="24h"${state.runtimeSettings["temporal.preferredTimeFormat"] === "24h" ? " selected" : ""}>24h</option></select>`,
+    `<div class="form-grid two">`,
+    `<label>Quiet Hours Start<input type="time" name="temporalQuietHoursStart" value="${escapeHtml(state.runtimeSettings["temporal.quietHoursStart"] || "23:00")}"></label>`,
+    `<label>Quiet Hours End<input type="time" name="temporalQuietHoursEnd" value="${escapeHtml(state.runtimeSettings["temporal.quietHoursEnd"] || "07:00")}"></label>`,
+    `<label>Active Hours Start<input type="time" name="temporalActiveHoursStart" value="${escapeHtml(state.runtimeSettings["temporal.activeHoursStart"] || "09:00")}"></label>`,
+    `<label>Active Hours End<input type="time" name="temporalActiveHoursEnd" value="${escapeHtml(state.runtimeSettings["temporal.activeHoursEnd"] || "22:00")}"></label>`,
+    "</div>",
+    `<label class="switch-field image-settings-toggle"><input type="hidden" name="temporalSeasonalAwarenessEnabled" value="false"><span class="switch-control"><input type="checkbox" name="temporalSeasonalAwarenessEnabled" value="true"${state.runtimeSettings["temporal.seasonalAwarenessEnabled"] === false ? "" : " checked"}><span></span></span><span class="switch-label">Seasonal Awareness</span></label>`,
+    `<label class="switch-field image-settings-toggle"><input type="hidden" name="temporalDayCycleAwarenessEnabled" value="false"><span class="switch-control"><input type="checkbox" name="temporalDayCycleAwarenessEnabled" value="true"${state.runtimeSettings["temporal.dayCycleAwarenessEnabled"] === false ? "" : " checked"}><span></span></span><span class="switch-label">Day-Cycle Awareness</span></label>`,
+    renderFieldLabelWithHelp({ forId: "temporalClockPresetId", label: "Clock Preset", help: "Companion-specific emotional and stylistic relationship to time." }, helpers),
+    `<select id="temporalClockPresetId" name="temporalClockPresetId">${listClockPresets().map((preset) => `<option value="${escapeHtml(preset.id)}"${preset.id === (state.runtimeSettings["temporal.clockPresetId"] || "dante-wolf-hour-clock") ? " selected" : ""}>${escapeHtml(preset.name)}</option>`).join("")}</select>`,
     "<div class=\"user-id-settings-row\">",
     "<div>",
     renderFieldLabelWithHelp({
