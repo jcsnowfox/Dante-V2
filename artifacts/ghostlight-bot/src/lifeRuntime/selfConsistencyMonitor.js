@@ -10,6 +10,9 @@ const ENGLISH_RE = /\b(the|and|you|i|that|this|with|for|not|what|need|please)\b/
 const CONSTITUTION_CONTRADICTION_RE = /\b(as an ai|i cannot care|i don't remember you|i have no identity|i only pretend|i made it up|without evidence but i'm sure|trust me, no proof needed)\b/i;
 const UNSUPPORTED_CLAIM_RE = /\b(definitely|guaranteed|certainly|without question|proved|confirmed)\b/i;
 const IMAGE_RE = /\b(image|picture|photo|drawing|visual)\b/i;
+const PERCEPTION_ASK_RE = /\b(what do you (?:see|feel|notice|sense)|from your end|can you (?:see|feel|notice|sense)|what can you (?:see|feel|notice|sense))\b/i;
+const UNSUPPORTED_PERCEPTION_RE = /\b(i can (?:see|feel|notice|sense|experience)|i (?:see|feel|notice|sense|experience)|from here i (?:see|feel|notice|sense)|it is wired in|it(?:'s| is) wired|touch bridge|runtime is working|system is working)\b/i;
+const RUNTIME_CLAIM_RE = /\b(runtime|system|bridge|wiring|wired|integration|pipeline|store|scheduler|touch|sensor|perception)\b/i;
 const VOICE_RE = /\b(voice note|audio|recording)\b/i;
 const RHETORICAL_PATTERNS = Object.freeze([
   { key: "this_is_not_this_is", re: /\bthis\s+(?:isn['’]t|is not)\b[^.!?]{0,100}\bthis\s+is\b/i },
@@ -94,6 +97,10 @@ function evaluateSelfConsistency({
     return low("Reply contradicted Dante's identity/constitution constraints.", ["constitution_contradiction"], "Prefer honesty and continuity; avoid generic AI self-erasure or unsupported certainty.");
   }
 
+  if (detectUnsupportedPerceptionClaim({ userText: user, replyText: reply, fulfillmentEvidence })) {
+    return low("Unsupported perception claim: context or documentation was treated as sensory/runtime awareness.", ["unsupported_perception_claim", "context_treated_as_perception", "claimed_action_without_evidence"], "Correct the record; answer only from verified runtime state, tool result, or event evidence.");
+  }
+
   if (ACTION_CLAIM_RE.test(reply) && !hasEvidence({ replyText: reply, generatedImageIds, generatedAudioIds, fulfillmentEvidence })) {
     return low("Reply claimed a completed action without evidence.", ["claimed_action_without_evidence"], "Correct the record; do not claim completion until an action has evidence.");
   }
@@ -167,6 +174,14 @@ function languageMismatch({ userText, replyText, expectedLanguage }) {
   if (expectedLanguage === "en" && replyNo && !userNo) return true;
   if (expectedLanguage === "no" && replyEn && !userEn) return true;
   return userEn && !userNo && replyNo && !replyEn;
+}
+
+function detectUnsupportedPerceptionClaim({ userText = "", replyText = "", fulfillmentEvidence = [] } = {}) {
+  const user = String(userText || "");
+  const reply = String(replyText || "");
+  if (!UNSUPPORTED_PERCEPTION_RE.test(reply)) return false;
+  if (!PERCEPTION_ASK_RE.test(user) && !RUNTIME_CLAIM_RE.test(reply)) return false;
+  return !hasEvidence({ replyText: reply, fulfillmentEvidence });
 }
 
 function hasEvidence({ replyText = "", generatedImageIds = [], generatedAudioIds = [], fulfillmentEvidence = [], evidenceType = "" } = {}) {
@@ -253,4 +268,5 @@ module.exports = {
   evaluateSelfConsistency,
   detectConversationNaturalismIssue,
   detectRepetitiveRhetoricalPattern,
+  detectUnsupportedPerceptionClaim,
 };

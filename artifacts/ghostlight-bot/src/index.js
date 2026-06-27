@@ -116,6 +116,8 @@ const { createConsequenceStore } = require("./lifeRuntime/consequenceStore");
 const { createRelationshipWeatherBridge } = require("./lifeRuntime/relationshipWeatherBridge");
 const { createRelationalConsequencesEngine } = require("./lifeRuntime/relationalConsequencesEngine");
 const { createRepairCarryoverEngine } = require("./lifeRuntime/repairCarryoverEngine");
+const { createRelationshipLearningRuntime } = require("./lifeRuntime/relationshipLearningRuntime");
+const { createRepairPersistenceEngine } = require("./lifeRuntime/repairPersistenceEngine");
 // Homeostasis Runtime (Life Runtime 6.0) — Dante's psychological needs
 const { createNeedsStore } = require("./lifeRuntime/needsStore");
 const { createFulfillmentLogStore } = require("./lifeRuntime/fulfillmentLogStore");
@@ -347,13 +349,16 @@ async function startApp() {
     homeostasisRuntime,
     relationalConsequencesEngine,
   });
+  const repairPersistenceEngine = createRepairPersistenceEngine({ consequenceStore, logger, client, channelId: config?.chat?.channelId || config?.discord?.channelId || "" });
+  const relationshipLearningRuntime = createRelationshipLearningRuntime({ config, logger, identityRuntime, homeostasisRuntime });
+
   const lifeRuntime = createLifeRuntime({
     config, logger, alivePresenceStore, microLifeEventsStore, dailyPlanEngine, decisionEngine,
     hobbyEngine, projectEngine, interestDriftEngine, skillGrowthEngine, collectionsEngine, sharingDecisionEngine,
     curiosityEngine, thoughtMaturationEngine, privateQuestionStore, attentionDriftEngine, insightEngine,
     relationshipWeatherEngine, sharedHistoryEngine, ritualEngine, traditionEngine,
     anniversaryEngine, insideJokeEngine, relationshipTimelineEngine,
-    consequenceStore, relationalConsequencesEngine, repairCarryoverEngine,
+    consequenceStore, relationalConsequencesEngine, repairCarryoverEngine, repairPersistenceEngine, relationshipLearningRuntime,
     homeostasisRuntime, identityRuntime, fulfillmentRuntime,
   });
   const innerLife = createInnerLifeEngine({ config, logger });
@@ -800,7 +805,7 @@ async function startApp() {
     });
   }
   schedulerRegistry.registerPostLogin("emotionalArc.scheduler", () => emotionalArc.scheduler.start());
-  schedulerRegistry.registerPostLogin("innerLife.selfCheck", () => innerLife.startSelfCheck({ client }));
+  schedulerRegistry.registerPostLogin("innerLife.selfCheck", () => innerLife.startSelfCheck({ client, lifeRuntime, consequenceStore, repairPersistenceEngine, relationshipLearningRuntime }));
   registerLifeRuntime({ schedulerRegistry, lifeRuntime, config, logger });
   await schedulerRegistry.startPostLogin();
   appContext.schedulerRegistry = schedulerRegistry;

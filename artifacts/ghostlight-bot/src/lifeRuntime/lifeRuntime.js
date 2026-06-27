@@ -33,6 +33,7 @@ const { createSourceHealthTracker, RUNTIME_NAMES } = require("./sourceHealth");
 const { buildMindStateSnapshot } = require("./mindStateSnapshotBuilder");
 const { bridgeGrowthToIdentity, bridgeCuriosityToProjects, bridgeProjectsToPurpose } = require("./emergenceBridges");
 const { createRepairPersistenceEngine } = require("./repairPersistenceEngine");
+const { createRelationshipLearningRuntime } = require("./relationshipLearningRuntime");
 
 const PRIVATE_EVENTS = [
   { type: "ritual",      desc: "made coffee",                           moodEffect: 0.05,  energyEffect: 0.05  },
@@ -87,6 +88,7 @@ function createLifeRuntime({
   relationalConsequencesEngine = null,
   repairCarryoverEngine = null,
   repairPersistenceEngine = null,
+  relationshipLearningRuntime = null,
   // Homeostasis runtime (Life Runtime 6.0) — needs, drives, real fulfillment
   homeostasisRuntime = null,
   // Identity runtime (Life Runtime 7.0) — constitution, values, beliefs, choice
@@ -106,6 +108,9 @@ function createLifeRuntime({
   const repairPersistence = repairPersistenceEngine || createRepairPersistenceEngine({
     consequenceStore, logger, client: config?.discordClient || null, channelId: config?.chat?.channelId || config?.discord?.channelId || "",
   });
+  const relationshipLearning = relationshipLearningRuntime || createRelationshipLearningRuntime({
+    config, logger, identityRuntime, homeostasisRuntime, runtimeEventBus: eventBus,
+  });
 
   const eventPruneAfterDays    = Number(lifeConfig.eventPruneAfterDays    ?? process.env.LIFE_EVENTS_PRUNE_DAYS    ?? 7);
   const decisionPruneAfterDays = Number(lifeConfig.decisionPruneAfterDays ?? process.env.LIFE_DECISIONS_PRUNE_DAYS ?? 7);
@@ -124,6 +129,7 @@ function createLifeRuntime({
   let _identityContext        = null; // identityRuntime.getIdentityContext()
   let _fulfillmentContext     = null; // fulfillmentRuntime.getFulfillmentContext()
   let _selfConsistencyContext = null; // last reply self-trust signal
+  let _relationshipLearningStatus = null; // safe relationship-learning metadata
   let _relationshipStateSnapshot = null; // canonical read model snapshot
 
   function _emitRuntimeEvent(event) {
@@ -163,6 +169,7 @@ function createLifeRuntime({
     if (homeostasisRuntime?.init)             await homeostasisRuntime.init().catch(() => {});
     if (identityRuntime?.init)               await identityRuntime.init().catch(() => {});
     if (fulfillmentRuntime?.init)            await fulfillmentRuntime.init().catch(() => {});
+    if (relationshipLearning?.init)          await relationshipLearning.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
@@ -674,7 +681,26 @@ function createLifeRuntime({
       await relationalConsequencesEngine.resolveFromSignals({ companionId, customerId, userText, now }).catch(() => {});
       await repairPersistence?.handleUserText?.({ companionId, customerId, userText, now }).catch(() => {});
       const created = await relationalConsequencesEngine.detect({ companionId, customerId, userText, repairResult, source: "chat", now }).catch(() => null);
-      if (created) await repairPersistence?.evaluateConsequence?.({ companionId, customerId, consequence: created, now }).catch(() => {});
+      if (created) {
+        await repairPersistence?.evaluateConsequence?.({ companionId, customerId, consequence: created, now }).catch(() => {});
+        await relationshipLearning?.learnFromConsequence?.({ companionId, customerId, consequence: created, event: "created", now }).catch(() => {});
+      }
+      const signalEvidence = Array.isArray(signal?.evidence) ? signal.evidence : [];
+      const unsupportedPerception = signalEvidence.some(e => /unsupported_perception|context_treated_as_perception/i.test(String(e)));
+      const claimedWithoutEvidence = signalEvidence.some(e => /claimed_action_without_evidence|voice_note_mismatch|image_mismatch/i.test(String(e)));
+      if ((unsupportedPerception || claimedWithoutEvidence) && relationalConsequencesEngine?.recordEvent) {
+        const eventType = unsupportedPerception ? "confabulation_detected" : "claimed_action_without_evidence";
+        const diagnosticConsequence = await relationalConsequencesEngine.recordEvent({
+          companionId, customerId, eventType, source: "self_consistency_monitor", now,
+          summary: signal.reason || eventType,
+          metadata: { evidenceIds: signalEvidence, claim: replyText ? String(replyText).slice(0, 240) : "" },
+        }).catch(() => null);
+        if (diagnosticConsequence) {
+          await repairPersistence?.evaluateConsequence?.({ companionId, customerId, consequence: diagnosticConsequence, now }).catch(() => {});
+          if (unsupportedPerception) await relationshipLearning?.learnConfabulation?.({ companionId, customerId, consequence: diagnosticConsequence, metadata: diagnosticConsequence.metadata || {}, now }).catch(() => {});
+          else await relationshipLearning?.learnEvidenceViolation?.({ companionId, customerId, consequence: diagnosticConsequence, metadata: diagnosticConsequence.metadata || {}, now }).catch(() => {});
+        }
+      }
 
       const active = consequenceStore?.getActive
         ? await consequenceStore.getActive({ companionId, customerId }).catch(() => [])
@@ -717,7 +743,9 @@ function createLifeRuntime({
       identityContext:      _identityContext ?? null,
       fulfillmentContext:   _fulfillmentContext ?? null,
       selfConsistencyContext: _selfConsistencyContext ?? null,
+      relationshipLearningSignal: await relationshipLearning?.getPreludeSignal?.({ companionId, customerId }).catch(() => null),
     });
+    _relationshipLearningStatus = relationshipLearning?.getStatus ? await relationshipLearning.getStatus({ companionId, customerId }).catch(() => null) : null;
   }
 
   async function _runPruning() {
@@ -846,6 +874,7 @@ function createLifeRuntime({
   }
 
   function getStatus() {
+    const { companionId, customerId } = getScope();
     const sourceHealth = _sourceHealthStatus();
     return {
       enabled,
@@ -902,6 +931,7 @@ function createLifeRuntime({
         : null,
       // Relational consequences (Life Runtime 5.0) — safe metadata only, never
       // raw private text or scores.
+      relationshipLearning: _relationshipLearningStatus,
       consequenceContext: _consequenceContext
         ? {
             activeConsequencesCount:    _consequenceContext.activeCount ?? 0,
