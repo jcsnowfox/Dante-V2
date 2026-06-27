@@ -1,4 +1,7 @@
 const { isDevMode, DEV_SYSTEM_PROMPT } = require("../developer/devUtils");
+const { buildAliveContextPrelude } = require("../alive/aliveContextBuilder");
+const { checkBackbone, buildBackboneSection } = require("../alive/backbonePolicy");
+const { alivePostUpdate } = require("../alive/alivePostUpdate");
 const { preprocessMessage } = require("./pipeline/preprocessMessage");
 const { enrichInput } = require("./pipeline/enrichInput");
 const { loadScopedRecentHistory } = require("./pipeline/loadRecentHistory");
@@ -87,6 +90,9 @@ function createChatPipeline({
   recentDecisionStore = null,
   timedNotesStore = null,
   situationalAwarenessEngine = null,
+  alivePresenceStore = null,
+  aliveEventsStore = null,
+  intentionQueue = null,
 }) {
   return {
     async run({ message, mode, modeName }) {
@@ -583,6 +589,34 @@ function createChatPipeline({
         }
       }
 
+      // Alive Layer context injection — compact private prelude before LLM
+      if (!inDevMode && alivePresenceStore) {
+        try {
+          const companionId = config?.memory?.companionId || "";
+          const customerId = config?.memory?.userScope || "user";
+          const alivePresence = await alivePresenceStore.getOrCreate({ companionId, customerId });
+          const pendingIntentions = intentionQueue
+            ? await intentionQueue.listPending({ companionId, customerId, limit: 1 }).catch(() => [])
+            : [];
+          const alivePrelude = buildAliveContextPrelude(alivePresence, { memories, pendingIntention: pendingIntentions[0] || null });
+          if (alivePrelude) contextSections.push(alivePrelude);
+
+          const backboneResult = checkBackbone(input.content);
+          const backboneSection = buildBackboneSection(backboneResult);
+          if (backboneSection) {
+            contextSections.push(backboneSection);
+            await aliveEventsStore?.logEvent?.({
+              companionId, customerId,
+              eventType: "pushback_triggered",
+              reason: backboneResult.reason,
+              decision: backboneResult.guidance,
+            }).catch(() => {});
+          }
+        } catch (aliveCtxErr) {
+          logger.debug?.("[alive] context injection failed; continuing", { error: aliveCtxErr?.message });
+        }
+      }
+
       const toneDecision = !inDevMode ? resolveToneMode({
         messageText: input.content,
         channelContext: beatChannelContext,
@@ -928,6 +962,22 @@ function createChatPipeline({
         humanSimulation.postProcessMessage({ message, reply: reply?.content || "", adultScope }).catch(() => {});
       }
       logger.info?.("[reply-trace] humanSimulationPack2 processed=true");
+
+      // Alive Layer post-update — fire-and-forget, never delays reply
+      if (!inDevMode && alivePresenceStore) {
+        alivePostUpdate({
+          alivePresenceStore,
+          aliveEventsStore,
+          intentionQueue,
+          companionId: config?.memory?.companionId || "",
+          customerId: config?.memory?.userScope || "user",
+          messageContent: input.content || "",
+          replyContent: reply?.content || "",
+          repairResult,
+          now: new Date(),
+          logger,
+        }).catch(() => {});
+      }
 
       try {
         if (repairResult?.repairNeeded) {

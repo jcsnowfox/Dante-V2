@@ -86,6 +86,8 @@ const { runSchemaGuard } = require("./storage/postgres/runSchemaGuard");
 const { createAliveEventsStore } = require("./alive/aliveEventsStore");
 const { createIntentionQueueStore } = require("./alive/intentionQueueStore");
 const { createAliveEngine } = require("./alive/aliveEngine");
+const { createAlivePresenceStore } = require("./alive/alivePresenceStore");
+const { executeNextIntention } = require("./alive/aliveExecutor");
 
 async function pruneStartupCache({ cache, config, logger, now = new Date() }) {
   if (!cache?.deleteExpired && !cache?.deleteHeartbeatDailyCountsBefore) {
@@ -240,6 +242,7 @@ async function startApp() {
   });
   const aliveEventsStore = createAliveEventsStore({ config, logger });
   const intentionQueue = createIntentionQueueStore({ config, logger });
+  const alivePresenceStore = createAlivePresenceStore({ config, logger });
   const innerLife = createInnerLifeEngine({ config, logger });
   const continuity = createContinuityEngine({ config, logger });
   const secondLife = createSecondLifeStore({ config, logger });
@@ -267,6 +270,9 @@ async function startApp() {
     recentDecisionStore,
     timedNotesStore,
     situationalAwarenessEngine,
+    alivePresenceStore,
+    aliveEventsStore,
+    intentionQueue,
   });
   const secondLifeReplyGenerator = createSecondLifeReplyGenerator({
     config,
@@ -330,6 +336,17 @@ async function startApp() {
     aliveEventsStore,
     intentionQueue,
     interactionPresenceStore,
+    executor: () => executeNextIntention({
+      intentionQueue,
+      alivePresenceStore,
+      aliveEventsStore,
+      client,
+      config,
+      logger,
+      memory,
+      tools,
+      conversations,
+    }),
   });
   const automationRunner = createAutomationRunner({
     client,
@@ -410,6 +427,7 @@ async function startApp() {
     webSearchService,
     aliveEventsStore,
     intentionQueue,
+    alivePresenceStore,
     aliveEngine,
     secondLife,
     secondLifeAdapter,
@@ -455,6 +473,7 @@ async function startApp() {
     situationalAwarenessEngine,
     aliveEventsStore,
     intentionQueue,
+    alivePresenceStore,
     aliveEngine,
     heartbeat,
     mainUserPresence,
@@ -527,6 +546,7 @@ async function startApp() {
   await runStartupStep("relationalState.init", logger, () => relationalState.init());
   await runStartupStep("aliveEventsStore.init", logger, () => aliveEventsStore.init());
   await runStartupStep("intentionQueue.init", logger, () => intentionQueue.init());
+  await runStartupStep("alivePresenceStore.init", logger, () => alivePresenceStore.init());
   await runStartupStep("recentDecisionStore.init", logger, () => recentDecisionStore.init());
   await runStartupStep("conversationFollowupStore.init", logger, () => conversationFollowupStore.init());
   await runStartupStep("timedNotesStore.init", logger, () => timedNotesStore.init());
