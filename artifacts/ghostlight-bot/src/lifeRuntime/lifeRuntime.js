@@ -28,6 +28,9 @@ const { buildLifePrelude } = require("./lifePreludeBuilder");
 const { createSelfConsistencyMonitor } = require("./selfConsistencyMonitor");
 const { createRelationshipStateRuntime } = require("./relationshipStateRuntime");
 const { createDiagnosticRuntime } = require("../diagnostics");
+const { createRuntimeEventBus } = require("./runtimeEventBus");
+const { createSourceHealthTracker, RUNTIME_NAMES } = require("./sourceHealth");
+const { buildMindStateSnapshot } = require("./mindStateSnapshotBuilder");
 const { bridgeGrowthToIdentity, bridgeCuriosityToProjects, bridgeProjectsToPurpose } = require("./emergenceBridges");
 
 const PRIVATE_EVENTS = [
@@ -88,12 +91,16 @@ function createLifeRuntime({
   identityRuntime = null,
   // Fulfillment runtime (Life Runtime 8.0) — proactive agency, adapters, four-outcome model
   fulfillmentRuntime = null,
+  runtimeEventBus = null,
+  sourceHealth = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
   const selfConsistencyMonitor = createSelfConsistencyMonitor({ logger });
   const relationshipStateRuntime = createRelationshipStateRuntime({ logger });
   const diagnosticRuntime = createDiagnosticRuntime({ config, selfConsistencyMonitor });
+  const healthTracker = sourceHealth || createSourceHealthTracker();
+  const eventBus = runtimeEventBus || createRuntimeEventBus({ logger, sourceHealth: healthTracker });
 
   const eventPruneAfterDays    = Number(lifeConfig.eventPruneAfterDays    ?? process.env.LIFE_EVENTS_PRUNE_DAYS    ?? 7);
   const decisionPruneAfterDays = Number(lifeConfig.decisionPruneAfterDays ?? process.env.LIFE_DECISIONS_PRUNE_DAYS ?? 7);
@@ -113,6 +120,13 @@ function createLifeRuntime({
   let _fulfillmentContext     = null; // fulfillmentRuntime.getFulfillmentContext()
   let _selfConsistencyContext = null; // last reply self-trust signal
   let _relationshipStateSnapshot = null; // canonical read model snapshot
+
+  function _emitRuntimeEvent(event) {
+    return eventBus.emit({ ...getScope(), ...event }).catch(err => {
+      logger?.warn?.("[life-runtime] runtime event emission failed", { error: err?.message, eventType: event?.event_type || event?.eventType });
+      return null;
+    });
+  }
 
   function getScope() {
     return {
@@ -636,6 +650,7 @@ function createLifeRuntime({
 
       if (!relationalConsequencesEngine) {
         await _refreshPrelude();
+      _emitRuntimeEvent({ event_type: "prelude_refreshed", source_runtime: "lifeRuntime", summary: "Life prelude refreshed" });
         return { selfConsistency: signal, consequence: null };
       }
       // Resolution / reconciliation first, so a forgiving message doesn't also
@@ -649,6 +664,7 @@ function createLifeRuntime({
       const suppression = relationalConsequencesEngine.computeSuppression(active);
       _applyConsequenceContext(suppression, active);
       await _refreshPrelude();
+      _emitRuntimeEvent({ event_type: "prelude_refreshed", source_runtime: "lifeRuntime", summary: "Life prelude refreshed" });
       return { selfConsistency: signal, consequence: created };
     } catch (error) {
       logger?.warn?.("[life-runtime] observeInteraction failed", { error: error?.message });
@@ -752,13 +768,21 @@ function createLifeRuntime({
       _todaysPlan = await _ensureDailyPlan(now);
       await _maybeGenerateEvent();
       await _tickGrowth(now);
+      _emitRuntimeEvent({ event_type: "project_progressed", source_runtime: "growth", summary: "Growth runtime ticked", payload: { hasProject: Boolean(_growthContext?.activeProject) } });
       await _tickConsequences(now);
+      if (_consequenceContext?.activeCount) _emitRuntimeEvent({ event_type: "consequence_created", source_runtime: "relationship", target_runtime: "consequences", summary: "Relational consequence context active", payload: { activeCount: _consequenceContext.activeCount } });
       await _tickCuriosity(now);
+      if (_curiosityContext?.recentInsight) _emitRuntimeEvent({ event_type: "insight_created", source_runtime: "curiosity", summary: "Curiosity insight available", payload: { confidence: _curiosityContext.recentInsight.confidence } });
       await _tickRelationship(now);
+      _emitRuntimeEvent({ event_type: "relationship_weather_changed", source_runtime: "relationship", summary: "Relationship weather refreshed", payload: { weatherSummary: _relationshipContext?.weatherSummary || null } });
       await _tickHomeostasis(now);
+      if (_homeostasisContext?.topNeed) _emitRuntimeEvent({ event_type: "need_changed", source_runtime: "homeostasis", summary: "Need state changed", payload: { needType: _homeostasisContext.topNeed.needType, urgency: _homeostasisContext.topNeed.urgency } });
       await _tickIdentity(now);
+      if (_identityContext?.topValue) _emitRuntimeEvent({ event_type: "identity_value_changed", source_runtime: "identity", summary: "Identity value state refreshed", payload: { valueKey: _identityContext.topValue.valueKey, strength: _identityContext.topValue.strength } });
       await _tickFulfillment(now);
+      if (_fulfillmentContext?.outcome) _emitRuntimeEvent({ event_type: _fulfillmentContext.outcome === "SUCCESS" ? "fulfillment_succeeded" : (_fulfillmentContext.outcome === "FAILED" ? "fulfillment_failed" : "fulfillment_deferred"), source_runtime: "fulfillment", summary: "Fulfillment outcome recorded", payload: { outcome: _fulfillmentContext.outcome, strategy: _fulfillmentContext.strategy } });
       await _refreshPrelude();
+      _emitRuntimeEvent({ event_type: "prelude_refreshed", source_runtime: "lifeRuntime", summary: "Life prelude refreshed" });
 
       const shouldPrune = !_lastPruneAt || (now.getTime() - _lastPruneAt.getTime() > 23 * 60 * 60 * 1000);
       if (shouldPrune) {
@@ -777,7 +801,34 @@ function createLifeRuntime({
     return _cachedPrelude;
   }
 
+  function _sourceHealthStatus() {
+    healthTracker.report("alive", alivePresenceStore ? "healthy" : "degraded", alivePresenceStore ? "wired" : "not_wired");
+    healthTracker.report("growth", (hobbyEngine || projectEngine || skillGrowthEngine) ? "healthy" : "degraded", "runtime_checked");
+    healthTracker.report("curiosity", (curiosityEngine || thoughtMaturationEngine || insightEngine) ? "healthy" : "degraded", "runtime_checked");
+    healthTracker.report("relationship", relationshipWeatherEngine ? "healthy" : "degraded", "runtime_checked");
+    healthTracker.report("consequences", relationalConsequencesEngine ? "healthy" : "degraded", "runtime_checked");
+    healthTracker.report("homeostasis", homeostasisRuntime ? "healthy" : "degraded", "runtime_checked");
+    healthTracker.report("identity", identityRuntime ? "healthy" : "degraded", "runtime_checked");
+    healthTracker.report("fulfillment", fulfillmentRuntime ? "healthy" : "degraded", "runtime_checked");
+    healthTracker.report("diagnostics", diagnosticRuntime ? "healthy" : "degraded", "runtime_checked");
+    healthTracker.report("selfConsistency", selfConsistencyMonitor ? "healthy" : "degraded", "runtime_checked");
+    healthTracker.report("innerLife", "degraded", "not_owned_by_life_runtime");
+    healthTracker.report("continuity", "degraded", "not_owned_by_life_runtime");
+    return healthTracker.snapshot(RUNTIME_NAMES);
+  }
+
+  async function getMindStateSnapshot() {
+    return buildMindStateSnapshot({
+      lifeRuntime: { getCurrentPrelude }, eventBus, sourceHealth: healthTracker,
+      contexts: {
+        growth: _growthContext, curiosity: _curiosityContext, relationship: _relationshipStateSnapshot || _relationshipContext, consequences: _consequenceContext,
+        homeostasis: _homeostasisContext, identity: _identityContext, fulfillment: _fulfillmentContext, diagnostics: diagnosticRuntime.getStatus(),
+      },
+    });
+  }
+
   function getStatus() {
+    const sourceHealth = _sourceHealthStatus();
     return {
       enabled,
       running: _running,
@@ -862,6 +913,9 @@ function createLifeRuntime({
         : null,
       selfConsistency: selfConsistencyMonitor.getStatus(),
       diagnostics: diagnosticRuntime.getStatus(),
+      runtimeEvents: eventBus.getStatus(),
+      sourceHealth,
+      mindStateSnapshot: { available: true, keys: ["alive","innerLife","continuity","growth","curiosity","relationship","consequences","homeostasis","identity","fulfillment","diagnostics","recentEvents","currentPrelude","sourceHealth","generatedAt"] },
       pruneSchedule: {
         eventsDays:    eventPruneAfterDays,
         decisionsDays: decisionPruneAfterDays,
@@ -872,7 +926,7 @@ function createLifeRuntime({
 
   function setRunning(val) { _running = Boolean(val); }
 
-  return { init, tick, getCurrentPrelude, getStatus, setRunning, observeInteraction, isActionSuppressed };
+  return { init, tick, getCurrentPrelude, getStatus, getMindStateSnapshot, setRunning, observeInteraction, isActionSuppressed };
 }
 
 module.exports = { createLifeRuntime };

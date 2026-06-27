@@ -25,6 +25,7 @@ const { classifyEmotionalBeat, formatContinuityPrelude, isProposalText, isForgot
 const { detectPromise } = require("../continuity/promiseLedger");
 const { resolveToneMode, formatTonePrelude } = require("../continuity/toneModeResolver");
 const { buildVoiceRules } = require("../continuity/voiceFingerprintGuard");
+const { buildConversationMirrorLimiterSection } = require("./conversationMirrorLimiter");
 const { tinyFallbackForReason, checkDuplicateReply, rememberReply } = require("../continuity/replyFallbacks");
 const { analyzeRepair, buildRepairPrelude, saveRepairBeat } = require("../relationshipRepair/engine");
 const { updateSystemTruth } = require("../systemTruth/runtimeState");
@@ -278,6 +279,10 @@ function createChatPipeline({
         listPresetsSafe(imageAppearancePresets, config.memory?.userScope),
       ]);
       const contextSections = [];
+      const mirrorLimiterSection = buildConversationMirrorLimiterSection({ recentHistory });
+      if (mirrorLimiterSection) {
+        contextSections.push(mirrorLimiterSection);
+      }
       const reactionContextSection = reactionContext?.consumeContextSection?.({ conversationId });
       if (reactionContextSection) {
         contextSections.push(reactionContextSection);
