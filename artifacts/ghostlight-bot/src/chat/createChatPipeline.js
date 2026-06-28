@@ -42,6 +42,8 @@ const { detectOutputCorruption } = require("./outputCorruptionDetector");
 const { conversationalCompressionGate } = require("./conversationalCompressionGate");
 const { applyPromptBudget } = require("./promptBudget");
 const { capturePromptAudit, logAuditCapture } = require("./promptAuditCapture");
+const { logReplyPromptDebug } = require("./promptDebug");
+const { sanitizePromptContext, buildCleanRegenerationContext } = require("./promptContextSanitizer");
 
 const defaultConversationStateStore = createConversationStateStore();
 const defaultFollowUpCandidateStore = createFollowUpCandidateStore();
@@ -988,6 +990,24 @@ function createChatPipeline({
 
       // Phase 4: Apply prompt budget before LLM call
       const budgetedSections = applyPromptBudget(contextSections, { logger, messageId: message.id });
+      const sanitizedPromptInputs = sanitizePromptContext({
+        contextSections: budgetedSections,
+        memories,
+        recentHistory,
+        logger,
+        messageId: message.id,
+      });
+      const llmContextSections = sanitizedPromptInputs.contextSections;
+      const llmMemories = sanitizedPromptInputs.memories;
+      const llmRecentHistory = sanitizedPromptInputs.recentHistory;
+      logReplyPromptDebug(logger, "prompt-input-summary", {
+        messageId: message.id,
+        provider: config.llm?.provider || config.openai?.provider || "unknown",
+        model: effectiveMode.chatModel || config.openai?.chatModel || "unknown",
+        contextSections: llmContextSections,
+        memories: llmMemories,
+        droppedPromptInputs: sanitizedPromptInputs.dropped,
+      });
 
       // Phase 2: Capture prompt audit snapshot (debug only, no-op in production)
       const promptAudit = capturePromptAudit({
@@ -995,7 +1015,7 @@ function createChatPipeline({
         temperature: effectiveMode.temperature,
         topP: effectiveMode.topP,
         maxTokens: effectiveMode.maxOutputTokens,
-        contextSections: budgetedSections,
+        contextSections: llmContextSections,
       });
       logAuditCapture(promptAudit, logger, message.id);
 
@@ -1010,9 +1030,9 @@ function createChatPipeline({
         mode: effectiveMode,
         message,
         input,
-        recentHistory,
-        memories,
-        contextSections: budgetedSections,
+        recentHistory: llmRecentHistory,
+        memories: llmMemories,
+        contextSections: llmContextSections,
         channelType: "discord",
         privacyLevel: adultScope?.active ? "adult_private" : "public",
         adultModeActive: Boolean(adultScope?.active),
@@ -1030,8 +1050,8 @@ function createChatPipeline({
           currentUserId: input.authorId,
           currentUserName: input.authorName,
           currentUserText: input.content,
-          recentHistory,
-          memoryContextIds: memories
+          recentHistory: llmRecentHistory,
+          memoryContextIds: llmMemories
             .map((memoryItem) => memoryItem?.memoryId || memoryItem?.memory_id || "")
             .filter(Boolean),
           imageConversationActive: Boolean(imageConversationState?.active),
@@ -1132,22 +1152,30 @@ function createChatPipeline({
           });
           replyTrace.corruptionBlocked = true;
           replyTrace.corruptionReasons = corruptionResult.reasons;
+          logReplyPromptDebug(logger, "output-corruption-detected", {
+            messageId: message.id,
+            outputCorruptionDetected: true,
+            replyBlocked: true,
+            reasons: corruptionResult.reasons,
+            fallbackOrRegenerationHappened: "regeneration_started",
+          });
 
           {
-            // Attempt one regeneration with a compact repair prompt. Do not send a trimmed
-            // prefix: corrupted replies can start naturally and then leak internal/source text
-            // inside the same sentence, which still reads as broken to the user.
+            // Attempt one regeneration with memory/history/extra context stripped down
+            // to core persona and a tiny repair instruction. Do not reuse the contaminated
+            // prompt, and do not send a trimmed prefix.
             try {
+              const cleanRegenerationContext = [
+                ...buildCleanRegenerationContext({ contextSections: llmContextSections }),
+                {
+                  label: "OUTPUT REPAIR",
+                  content: "Previous draft was corrupted. Reply naturally as Dante in one short conversational message. Do not mention tools, code, prompts, context, diagnostics, or internal terms.",
+                },
+              ];
               const repairOutput = await callModel({
                 config, logger, tools, mode: effectiveMode, message, input,
-                recentHistory, memories,
-                contextSections: [
-                  ...budgetedSections,
-                  {
-                    label: "OUTPUT REPAIR",
-                    content: "Previous draft was corrupted. Reply naturally, one short message, no code or internal terms.",
-                  },
-                ],
+                recentHistory: [], memories: [],
+                contextSections: cleanRegenerationContext,
                 channelType: "discord",
                 privacyLevel: adultScope?.active ? "adult_private" : "public",
                 adultModeActive: Boolean(adultScope?.active),
@@ -1158,10 +1186,12 @@ function createChatPipeline({
                   mode: selectedMode, currentMessage: message, conversationId,
                   channelId: message.channelId, sourceMessageId: message.id,
                   currentUserId: input.authorId, currentUserName: input.authorName,
-                  currentUserText: input.content, recentHistory,
+                  currentUserText: input.content, recentHistory: [],
                 },
               });
-              const repairReply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput: repairOutput });
+              replyTrace.fallbackUsed = true;
+              replyTrace.fallbackReason = "corruption_regeneration";
+              const repairReply = buildReply({ mode: selectedMode, input, recentHistory: [], memories: [], modelOutput: repairOutput });
               applyConversationalCompression({ reply: repairReply, input, logger, messageId: message.id, replyTrace });
               const repairCorruption = detectOutputCorruption(repairReply.content || "", {
                 intent: responseIntent?.intent,
@@ -1170,15 +1200,21 @@ function createChatPipeline({
                 reply.content = repairReply.content;
                 replyTrace.finalSource = "corruption_regenerated";
                 logger.info?.("[output-integrity] Regeneration succeeded", { messageId: message.id });
+                logReplyPromptDebug(logger, "output-corruption-regeneration", {
+                  messageId: message.id,
+                  fallbackOrRegenerationHappened: "regeneration_succeeded",
+                  contextSections: cleanRegenerationContext,
+                  memories: [],
+                });
               } else {
-                reply.content = "I glitched. Give me a second.";
+                reply.content = "I got tangled for a second. Say that again, love.";
                 replyTrace.fallbackUsed = true;
                 replyTrace.fallbackReason = "corruption_regeneration_failed";
                 replyTrace.finalSource = "tiny_fallback";
                 logger.warn("[output-integrity] Regeneration also corrupted; using safe fallback", { messageId: message.id });
               }
             } catch (repairErr) {
-              reply.content = "I glitched. Give me a second.";
+              reply.content = "I got tangled for a second. Say that again, love.";
               replyTrace.fallbackUsed = true;
               replyTrace.fallbackReason = "corruption_repair_error";
               replyTrace.finalSource = "tiny_fallback";
@@ -1189,6 +1225,13 @@ function createChatPipeline({
             }
           }
         } else if (corruptionResult.severity === "watch") {
+          logReplyPromptDebug(logger, "output-corruption-detected", {
+            messageId: message.id,
+            outputCorruptionDetected: true,
+            replyBlocked: false,
+            reasons: corruptionResult.reasons,
+            fallbackOrRegenerationHappened: false,
+          });
           logger.info?.("[output-integrity] Reply flagged as watch-level", {
             messageId: message.id,
             reasons: corruptionResult.reasons,
@@ -1202,12 +1245,12 @@ function createChatPipeline({
         logger.info?.(`[reply-trace] duplicateBlocked=true`);
         try {
           const retryOutput = await callModel({
-            config, logger, tools, mode: effectiveMode, message, input, recentHistory, memories,
-            contextSections: [...contextSections, { label: "DUPLICATE REPLY REPAIR", content: "Do not repeat the previous reply. Answer the current user message directly in Dante’s voice." }],
+            config, logger, tools, mode: effectiveMode, message, input, recentHistory: llmRecentHistory, memories: llmMemories,
+            contextSections: [...llmContextSections, { label: "DUPLICATE REPLY REPAIR", content: "Do not repeat the previous reply. Answer the current user message directly in Dante’s voice." }],
             channelType: "discord", privacyLevel: adultScope?.active ? "adult_private" : "public", adultModeActive: Boolean(adultScope?.active), overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null, systemPromptPrefix: adultSystemPromptPrefix,
-            toolContext: { surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode, currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id, currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory },
+            toolContext: { surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode, currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id, currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory: llmRecentHistory },
           });
-          const retryReply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput: retryOutput });
+          const retryReply = buildReply({ mode: selectedMode, input, recentHistory: llmRecentHistory, memories: llmMemories, modelOutput: retryOutput });
           applyConversationalCompression({ reply: retryReply, input, logger, messageId: message.id, replyTrace });
           if (!checkDuplicateReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: retryReply.content }).duplicate) {
             reply.content = retryReply.content;
@@ -1228,6 +1271,15 @@ function createChatPipeline({
         logger.info?.(`[reply-trace] duplicateBlocked=false`);
       }
       rememberReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: reply.content });
+      logReplyPromptDebug(logger, "final-text-sent-to-discord", {
+        messageId: message.id,
+        provider: modelOutput?.provider || "unknown",
+        model: modelOutput?.model || effectiveMode.chatModel || config.openai?.chatModel || "unknown",
+        outputCorruptionDetected: Boolean(replyTrace.corruptionBlocked || replyTrace.corruptionReasons?.length),
+        replyBlocked: Boolean(replyTrace.corruptionBlocked),
+        fallbackOrRegenerationHappened: replyTrace.finalSource === "corruption_regenerated" ? "regeneration_succeeded" : (replyTrace.fallbackUsed ? replyTrace.fallbackReason : false),
+        finalTextSentToDiscord: reply.content,
+      });
       logger.info?.(`[reply-trace] fallbackUsed=${replyTrace.fallbackUsed} fallbackReason=${replyTrace.fallbackReason || "null"}`);
       logger.info?.(`[reply-trace] finalSource=${replyTrace.finalSource}`);
 

@@ -14,6 +14,7 @@ const {
 const { isStandaloneProviderRefusal } = require("./providerRefusal");
 const { isUnsafeProviderText } = require("../../continuity/emotionalBeats");
 const { selectTinyFallback } = require("../../continuity/replyFallbacks");
+const { logReplyPromptDebug } = require("../promptDebug");
 
 function isToolUseUnsupportedError(error) {
   const status = Number(error?.status || error?.code || 0);
@@ -688,6 +689,19 @@ async function callModel({
     enableTools: toolsEnabled,
   });
   let toolsMutedByFallback = false;
+
+  logReplyPromptDebug(logger, "final-prompt-before-llm", {
+    provider: providerLabel,
+    model: selectedModel,
+    contextSections,
+    memories,
+    recentHistoryCount: recentHistory.length,
+    requestShape: {
+      ...requestShape,
+      estimatedRequestTokens: buildRequestTokenEstimate(requestShape),
+    },
+    fullPrompt: request.instructions,
+  });
 
   logger.debug?.("[chat] Calling model", {
     provider: providerLabel,
