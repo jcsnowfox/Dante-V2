@@ -37,7 +37,7 @@ function render(stats = {}) {
     helpers,
     stats: {
       timezone: "UTC",
-      companion: { name: "Dante <Wolf>", avatarUrl: "", profile: "Fjord & command" },
+      companion: { name: "Dante <Wolf>", avatarUrl: "", profile: "Fjord & command. Second sentence stays. Third sentence stays. Fourth sentence must not render as the dominant body." },
       statuses: [
         { label: "Chat model", value: "gpt-test", icon: "companion", path: "/admin/companion", extra: { companionTab: "models" } },
         { label: "Daily thread", value: "Off", icon: "automation", path: "/admin/schedules/daily-thread" },
@@ -61,6 +61,7 @@ function render(stats = {}) {
 test("home dashboard renders cinematic Nordic layout without fake links", () => {
   const html = render();
   assert.match(html, /data-dashboard="nordic-home"/);
+  assert.match(html, /nordic-home-wide/);
   assert.match(html, /Companion command center/);
   assert.match(html, /Current Setup/);
   assert.match(html, /Recent Actions/);
@@ -72,13 +73,19 @@ test("home dashboard renders cinematic Nordic layout without fake links", () => 
   assert.match(html, /Dante Concierge/);
   assert.match(html, /Journal Entries/);
   assert.doesNotMatch(html, /href="#"/);
+  assert.match(html, /Online/);
+  assert.match(html, /Fjord &amp; command\.\s+Second sentence stays\.\s+Third sentence stays\./);
+  assert.doesNotMatch(html, /Fourth sentence must not render/);
 });
 
 test("gallery renders only supplied live media URLs and empty state when absent", () => {
   const html = render();
   assert.match(html, /\/admin\/media\/live-generated-thumb\.webp/);
+  assert.match(html, /<img src="\/admin\/media\/live-generated-thumb\.webp"/);
   assert.doesNotMatch(html, /09-user-reference-battle-meal-plans/);
   assert.doesNotMatch(html, /approved-dashboard-layout-reference/);
+  const gallerySection = html.match(/<section class="nordic-panel nordic-home-gallery"[\s\S]*?<\/section>/)?.[0] || "";
+  assert.doesNotMatch(gallerySection, /<img src="\/assets\/nordic-dashboard/);
   assert.doesNotMatch(html, /user-dante-gallery-example/);
 
   const empty = render({ recentImages: [] });
@@ -97,6 +104,7 @@ test("battle rhythm schedule matches the corrected weekly plan", () => {
     ["Saturday", "Active recovery / torch/refuel support", "Controlled carb / torch day"],
     ["Sunday", "Full reset / flexible day", "Flexible / Irish fry-up / reset"],
   ];
+  assert.equal((html.match(/class="battle-rhythm-card"/g) || []).length, 7);
   for (const row of expected) {
     for (const value of row) assert.match(html, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
