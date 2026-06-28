@@ -31,6 +31,10 @@ function createRomanticSurpriseRuntime({ config = {}, logger = null, planner = n
     const now = input.now || new Date();
     const { companionId, customerId } = scope(input);
     if (!companionId) return { skipped: true, reason: "no_companion_id" };
+    // Read-only emergent guidance: romance timing MAY be informed by what the
+    // relationship has taught (e.g. romance lands when nothing is unresolved),
+    // but this runtime never mutates that guidance.
+    const emergentConsulted = Boolean(input.emergentContext);
     await consider(input).catch(e => logger?.warn?.("[romantic-surprise] consider failed", { error: e?.message }));
     await surpriseStore.expireIgnored({ companionId, customerId, now }).catch(() => 0);
     const due = await surpriseStore.getDue({ companionId, customerId, now, limit: 3 }).catch(() => []);
@@ -61,7 +65,9 @@ function createRomanticSurpriseRuntime({ config = {}, logger = null, planner = n
       if (result?.sent) { await surpriseStore.markSent({ id: row.id, companionId, customerId, now, metadata: { ...(row.metadata || {}), sentMessageId: result.messageId || null, sentAt: iso(now), outboundPath: "discordSendGateway" } }); sent++; await runtimeEventBus?.emit?.({ companionId, customerId, event_type: "romantic_surprise_sent", source_runtime: "romanticSurpriseRuntime", summary: "Romantic surprise sent", payload: { surpriseType: row.surprise_type } }).catch(() => {}); }
       else { await surpriseStore.markBlocked({ id: row.id, companionId, customerId, reason: result?.reason || "send_unavailable", now }); blocked++; }
     }
-    return { sent, blocked, due: due.length };
+    const tickResult = { sent, blocked, due: due.length };
+    if (emergentConsulted) tickResult.emergentConsulted = true;
+    return tickResult;
   }
 
   async function acknowledgeReaction({ companionId, customerId, reaction = "", now = new Date() } = {}) {

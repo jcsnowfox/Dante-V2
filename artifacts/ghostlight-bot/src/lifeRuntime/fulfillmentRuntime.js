@@ -108,9 +108,11 @@ function createFulfillmentRuntime({
     identityContext    = null,
     fulfillContext     = {},
     cognitiveContext   = null,
+    emergentContext    = null,   // read-only emergent guidance (advisory)
   } = {}) {
     if (!companionId) return;
     _lastTickAt = now;
+    void emergentContext;        // accepted read-only; does not gate fulfillment
 
     // Cognitive runtime gate: if deliberation concluded outreach should be suppressed, skip proactive actions
     if (cognitiveContext?.recommendations?.suppressFulfillmentOutreach) {

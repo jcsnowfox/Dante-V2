@@ -42,6 +42,7 @@ const { createNarrativeIdentityRuntime } = require("./narrativeIdentityRuntime")
 const { createPerceptionRuntime }        = require("./perceptionRuntime");
 const { createWorldModelRuntime }        = require("./worldModelRuntime");
 const { createCognitiveRuntime }         = require("./cognitiveRuntime");
+const { createEmergentLivingBehaviorRuntime } = require("./emergentLivingBehaviorRuntime");
 
 const PRIVATE_EVENTS = [
   { type: "ritual",      desc: "made coffee",                           moodEffect: 0.05,  energyEffect: 0.05  },
@@ -114,6 +115,7 @@ function createLifeRuntime({
   perceptionRuntime = null,
   worldModelRuntime = null,
   cognitiveRuntime: cognitiveRuntimeParam = null,
+  emergentLivingBehaviorRuntime = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -155,6 +157,7 @@ function createLifeRuntime({
     config, logger, runtimeEventBus: eventBus,
   });
   const cognitiveRt = cognitiveRuntimeParam || createCognitiveRuntime({ config, logger });
+  const emergentRt = emergentLivingBehaviorRuntime || createEmergentLivingBehaviorRuntime({ config, logger });
 
   const eventPruneAfterDays    = Number(lifeConfig.eventPruneAfterDays    ?? process.env.LIFE_EVENTS_PRUNE_DAYS    ?? 7);
   const decisionPruneAfterDays = Number(lifeConfig.decisionPruneAfterDays ?? process.env.LIFE_DECISIONS_PRUNE_DAYS ?? 7);
@@ -181,6 +184,7 @@ function createLifeRuntime({
   let _perceptionContext     = null; // perceptionRuntime.getPerceptionContext()
   let _worldModelContext     = null; // worldModelRuntime.getWorldModelContext()
   let _cognitiveContext      = null; // cognitiveRuntime.getCognitiveContext()
+  let _emergentContext       = null; // emergentLivingBehaviorRuntime.getEmergentContext()
 
   function _emitRuntimeEvent(event) {
     return eventBus.emit({ ...getScope(), ...event }).catch(err => {
@@ -227,6 +231,7 @@ function createLifeRuntime({
     if (perception?.init)                  await perception.init().catch(() => {});
     if (worldModel?.init)                  await worldModel.init().catch(() => {});
     if (cognitiveRt?.init)                 await cognitiveRt.init().catch(() => {});
+    if (emergentRt?.init)                  await emergentRt.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
@@ -554,6 +559,8 @@ function createLifeRuntime({
       companionId, customerId, now,
       giveSpace: Boolean(review.suppression?.giveSpace),
       quietHoursActive: (now.getHours() >= 22 || now.getHours() < 7),
+      cognitiveContext: _cognitiveContext,
+      emergentContext: _emergentContext,
     }).catch(err => logger?.warn?.("[life-runtime] repair persistence tick failed", { error: err?.message }));
 
     const postRepairActive = consequenceStore?.getActive
@@ -683,6 +690,7 @@ function createLifeRuntime({
       identityContext:    _identityContext,
       fulfillContext,
       cognitiveContext:   _cognitiveContext,
+      emergentContext:    _emergentContext,
     }).catch(err => {
       logger?.warn("[life-runtime] _tickFulfillment failed", { error: err?.message });
     });
@@ -886,8 +894,35 @@ function createLifeRuntime({
       narrativeContext:         _narrativeContext,
       curiosityContext:         _curiosityContext,
       growthContext:            _growthContext,
+      emergentContext:          _emergentContext,
     }).catch(err => { logger?.warn?.("[life-runtime] _tickCognitive failed", { error: err?.message }); });
     _cognitiveContext = cognitiveRt.getCognitiveContext?.() ?? null;
+  }
+
+  // Emergent Living Behavior & Relationship DNA tick. Runs LAST among the
+  // observing runtimes — after romanticSurprises — so it sees the fullest
+  // picture of the cycle. It only WRITES its own stores; its cached guidance is
+  // read (read-only) by cognitive/affective/romantic/repair on the NEXT cycle,
+  // and surfaced into THIS cycle's prelude. It never sends, schedules, or
+  // mutates state it does not own.
+  async function _tickEmergent(now) {
+    if (!emergentRt) return;
+    const { companionId, customerId } = getScope();
+    if (!companionId) return;
+    await emergentRt.tick({
+      companionId, customerId, now,
+      consequenceContext:  _consequenceContext,
+      cognitiveContext:    _cognitiveContext,
+      fulfillmentContext:  _fulfillmentContext,
+      romanticStatus:      _romanticSurpriseStatus,
+      homeostasisContext:  _homeostasisContext,
+      identityContext:     _identityContext,
+      narrativeContext:    _narrativeContext,
+      learningContext:     _learningContext,
+      relationshipContext: _relationshipContext,
+      worldModelContext:   _worldModelContext,
+    }).catch(err => { logger?.warn?.("[life-runtime] _tickEmergent failed", { error: err?.message }); });
+    _emergentContext = emergentRt.getEmergentContext?.() ?? null;
   }
 
   async function _refreshPrelude() {
@@ -915,6 +950,7 @@ function createLifeRuntime({
       perceptionContext:    _perceptionContext ?? null,
       worldModelContext:    _worldModelContext ?? null,
       cognitiveContext:     _cognitiveContext  ?? null,
+      emergentContext:      _emergentContext   ?? null,
     });
     _relationshipLearningStatus = relationshipLearning?.getStatus ? await Promise.resolve(relationshipLearning.getStatus({ companionId, customerId })).catch(() => null) : null;
   }
@@ -1020,8 +1056,11 @@ function createLifeRuntime({
         giveSpace: Boolean(_consequenceContext?.suppression?.giveSpace),
         userAvailability: { busy: Boolean((await _refreshAlivePresence().catch(() => null))?.userBusy) },
         cognitiveContext: _cognitiveContext,
+        emergentContext: _emergentContext,
       }).catch(err => logger?.warn?.("[life-runtime] romantic surprise tick failed", { error: err?.message }));
       _romanticSurpriseStatus = await romanticSurprises?.getStatus?.(getScope()).catch(() => null);
+      // Emergent Living Behavior & Relationship DNA — observes the completed cycle.
+      await _tickEmergent(now);
       if (_fulfillmentContext?.outcome) _emitRuntimeEvent({ event_type: _fulfillmentContext.outcome === "SUCCESS" ? "fulfillment_succeeded" : (_fulfillmentContext.outcome === "FAILED" ? "fulfillment_failed" : "fulfillment_deferred"), source_runtime: "fulfillment", summary: "Fulfillment outcome recorded", payload: { outcome: _fulfillmentContext.outcome, strategy: _fulfillmentContext.strategy } });
       await _refreshPrelude();
       _emitRuntimeEvent({ event_type: "prelude_refreshed", source_runtime: "lifeRuntime", summary: "Life prelude refreshed" });
@@ -1167,6 +1206,7 @@ function createLifeRuntime({
       perception: perception ? perception.getStatus() : null,
       worldModel: worldModel ? worldModel.getStatus() : null,
       cognitive: cognitiveRt ? cognitiveRt.getStatus() : null,
+      emergentLiving: emergentRt ? emergentRt.getStatus() : null,
       affectiveDecision: affectiveDecision.getStatus(),
       evidenceIntegrity: evidenceIntegrity.getStatus(),
       selfInspection: selfInspection.getStatus(),

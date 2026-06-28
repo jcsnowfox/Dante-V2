@@ -85,6 +85,7 @@ function createCognitiveRuntime({
     growthContext            = null,
     selfInspectionContext    = null,
     evidenceIntegrityContext = null,
+    emergentContext          = null,
   } = {}) {
     const tickStart = Date.now();
 
@@ -136,6 +137,12 @@ function createCognitiveRuntime({
         logger?.warn?.("[cognitive-runtime] ledger persist failed", { error: err?.message });
       });
 
+      // Read-only emergent guidance: deliberation MAY weigh what the
+      // relationship has taught, but never mutates it. Surfaced for transparency.
+      const emergentGuidance = Array.isArray(emergentContext?.forCognitive)
+        ? emergentContext.forCognitive.slice(0, 3)
+        : [];
+
       // Step 7: update cognitive context
       _cognitiveContext = Object.freeze({
         outcome:              resolution.outcome,
@@ -147,6 +154,7 @@ function createCognitiveRuntime({
         preludeSignal,
         confidence:           resolution.confidence,
         thoughtCount:         candidates.length,
+        emergentGuidance,
         deliberationMs,
         generatedAt:          (now instanceof Date ? now : new Date(now)).toISOString(),
       });
@@ -198,6 +206,7 @@ function createCognitiveRuntime({
       preludeActive:    Boolean(_cognitiveContext?.preludeSignal),
       confidence:       _cognitiveContext?.confidence   ?? null,
       thoughtCount:     _cognitiveContext?.thoughtCount ?? null,
+      emergentGuidanceActive: (_cognitiveContext?.emergentGuidance?.length ?? 0) > 0,
       ledger:           ledgerStatus,
       plans:            plansStatus,
     };

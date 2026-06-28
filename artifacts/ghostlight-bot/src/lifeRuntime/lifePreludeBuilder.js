@@ -25,6 +25,7 @@ const { buildIdentitySignal }          = require("./identityPreludeBuilder");
 const { buildFulfillmentSignal }       = require("./fulfillmentPreludeBuilder");
 const { reconcilePresencePrelude }     = require("./preludeReconciler");
 const { buildCognitivePreludeSignal }  = require("./cognitivePreludeBuilder");
+const { buildEmergentLivingPrelude }   = require("./emergentLivingPreludeBuilder");
 
 function buildLifePrelude(state = {}) {
   if (!state) return null;
@@ -48,6 +49,7 @@ function buildLifePrelude(state = {}) {
     perceptionContext   = null,
     worldModelContext   = null,
     cognitiveContext    = null,
+    emergentContext     = null,
   } = state;
 
   const lines = [];
@@ -165,6 +167,17 @@ function buildLifePrelude(state = {}) {
   if (cognitiveContext) {
     const cogLine = buildCognitivePreludeSignal(cognitiveContext);
     if (cogLine) lines.push(cogLine);
+  }
+
+  // Emergent living-behavior / relationship-DNA signal — at most ONE compact
+  // line surfacing what has *become* established between Dante and Jenna.
+  // Speaks only in its own register; never duplicates lessons/narrative lines.
+  if (emergentContext) {
+    const emergentLine = buildEmergentLivingPrelude({
+      guidance: emergentContext,
+      culture:  { safe: emergentContext.culture ?? null },
+    });
+    if (emergentLine) lines.push(emergentLine);
   }
 
   // Relationship signal — at most one compact line, never raw scores

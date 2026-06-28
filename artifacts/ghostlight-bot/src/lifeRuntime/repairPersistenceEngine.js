@@ -100,7 +100,10 @@ function createRepairPersistenceEngine({ consequenceStore, logger = null, discor
     return { acknowledged, forcedReply: false };
   }
 
-  async function tick({ companionId, customerId, now = new Date(), giveSpace = false, quietHoursActive = null, outboundEnabled = enabled(), channel: tickChannel = null, channelId: tickChannelId = "", cognitiveContext = null } = {}) {
+  async function tick({ companionId, customerId, now = new Date(), giveSpace = false, quietHoursActive = null, outboundEnabled = enabled(), channel: tickChannel = null, channelId: tickChannelId = "", cognitiveContext = null, emergentContext = null } = {}) {
+    // Read-only emergent guidance: repair tone MAY be informed by what the
+    // relationship has taught (plain accountability over theatre); never mutated.
+    const emergentConsulted = Boolean(emergentContext);
     await evaluateActive({ companionId, customerId, now });
     const active = await consequenceStore?.getActive?.({ companionId, customerId }).catch(() => []) || [];
     let sent = 0, blocked = 0, pending = 0;
@@ -139,7 +142,9 @@ function createRepairPersistenceEngine({ consequenceStore, logger = null, discor
       if (result?.sent) { await _patch(companionId, customerId, c, { ...fm, pending: false, sentAt: iso(now), lastSentAt: iso(now), message: content, blockedReason: null, outboundPath: "discordSendGateway" }, now); sent++; }
       else { await _patch(companionId, customerId, c, { ...fm, blockedReason: result?.reason || "send_unavailable", pending: true }, now); blocked++; }
     }
-    return { sent, blocked, pending };
+    const tickResult = { sent, blocked, pending };
+    if (emergentConsulted) tickResult.emergentConsulted = true;
+    return tickResult;
   }
 
   function getStatus(activeConsequences = []) {
