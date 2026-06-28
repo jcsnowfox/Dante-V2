@@ -1,0 +1,1056 @@
+{
+  "packName": "Ghostlight Dante Cinematic Nordic Dashboard Assets",
+  "version": "1.0.0",
+  "generatedFor": "Codex dashboard redesign",
+  "criticalRules": [
+    "Use uploaded neon icon assets for UI icons.",
+    "Do not use static local images for Dante gallery photos.",
+    "Dante photos must come from existing live generatedImages/gallery/media data source.",
+    "Do not hard-code Dante/Jenna photos into dashboard UI.",
+    "Recipe section must use realistic photos or text cards only. No cartoon food.",
+    "Preserve existing left sidebar navigation.",
+    "Use corrected Battle Rhythm: Monday Strength, Tuesday Recovery, Wednesday Cardio, Thursday Recovery, Friday Endurance, Saturday Active Recovery/Torch Refuel, Sunday Full Reset/Flexible."
+  ],
+  "assets": [
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/mention-user.png",
+      "sourceName": "mention user.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/mention-user.png",
+      "sourceName": "mention user.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/mention-user.png",
+      "sourceName": "mention user.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/spotify-song.png",
+      "sourceName": "spotify song.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/spotify-song.png",
+      "sourceName": "spotify song.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/spotify-song.png",
+      "sourceName": "spotify song.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/gifs.png",
+      "sourceName": "gifs.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/gifs.png",
+      "sourceName": "gifs.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/gifs.png",
+      "sourceName": "gifs.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/spotify-playlist.png",
+      "sourceName": "spotify playlist.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/spotify-playlist.png",
+      "sourceName": "spotify playlist.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/spotify-playlist.png",
+      "sourceName": "spotify playlist.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/voice-notes.png",
+      "sourceName": "voice notes.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/voice-notes.png",
+      "sourceName": "voice notes.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/voice-notes.png",
+      "sourceName": "voice notes.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/websearch.png",
+      "sourceName": "websearch.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/websearch.png",
+      "sourceName": "websearch.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/websearch.png",
+      "sourceName": "websearch.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/journals.png",
+      "sourceName": "journals.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGB",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/journals.png",
+      "sourceName": "journals.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/journals.png",
+      "sourceName": "journals.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/library.png",
+      "sourceName": "library.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGB",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/library.png",
+      "sourceName": "library.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/library.png",
+      "sourceName": "library.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/schedules.png",
+      "sourceName": "schedules.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGB",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/schedules.png",
+      "sourceName": "schedules.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/schedules.png",
+      "sourceName": "schedules.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/tools.png",
+      "sourceName": "tools.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGB",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/tools.png",
+      "sourceName": "tools.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/tools.png",
+      "sourceName": "tools.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/emotional-arc.png",
+      "sourceName": "emotional arc.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGB",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/emotional-arc.png",
+      "sourceName": "emotional arc.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/emotional-arc.png",
+      "sourceName": "emotional arc.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/feedback-learning.png",
+      "sourceName": "feedback and learning.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGB",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/feedback-learning.png",
+      "sourceName": "feedback and learning.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/feedback-learning.png",
+      "sourceName": "feedback and learning.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/heartbeat.png",
+      "sourceName": "heartbeat.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGB",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/heartbeat.png",
+      "sourceName": "heartbeat.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/heartbeat.png",
+      "sourceName": "heartbeat.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/memory.png",
+      "sourceName": "memory.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/memory.png",
+      "sourceName": "memory.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/memory.png",
+      "sourceName": "memory.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/relational-state.png",
+      "sourceName": "relational state.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/relational-state.png",
+      "sourceName": "relational state.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/relational-state.png",
+      "sourceName": "relational state.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/companion.png",
+      "sourceName": "companion.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGB",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/companion.png",
+      "sourceName": "companion.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/companion.png",
+      "sourceName": "companion.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/original",
+      "file": "01-icons/original/favicon.png",
+      "sourceName": "favicon.png",
+      "size": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "notes": "Uploaded custom neon UI icon. Original preserved."
+    },
+    {
+      "category": "icons/transparent-512",
+      "file": "01-icons/transparent-512/favicon.png",
+      "sourceName": "favicon.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "icons/transparent-128",
+      "file": "01-icons/transparent-128/favicon.png",
+      "sourceName": "favicon.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "notes": "Black background removed, normalized transparent PNG."
+    },
+    {
+      "category": "backgrounds",
+      "file": "02-backgrounds/aurora-fjord-dashboard-bg.png",
+      "sourceName": "nordic_fjord_under_an_aurora_sky.png",
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "notes": "Static atmospheric UI background. Safe to use as dashboard background, not gallery content."
+    },
+    {
+      "category": "backgrounds",
+      "file": "02-backgrounds/aurora-viking-original-wide.png",
+      "sourceName": "ghostlight_ai_dashboard_in_a_nordic_world.png",
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "notes": "Static atmospheric UI background. Safe to use as dashboard background, not gallery content."
+    },
+    {
+      "category": "backgrounds",
+      "file": "02-backgrounds/moonlit-coastal-fortress.png",
+      "sourceName": "moonlit_coastal_fortress_and_cliffs.png",
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "notes": "Static atmospheric UI background. Safe to use as dashboard background, not gallery content."
+    },
+    {
+      "category": "backgrounds",
+      "file": "02-backgrounds/mystical-night-background.png",
+      "sourceName": "mystical_night_of_dark_enchantments.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "mode": "RGB",
+      "notes": "Static atmospheric UI background. Safe to use as dashboard background, not gallery content."
+    },
+    {
+      "category": "backgrounds",
+      "file": "02-backgrounds/sidebar-nordic-panel-bg.png",
+      "sourceName": "mystical_fantasy_interface_with_cosmic_accents.png",
+      "size": [
+        941,
+        1672
+      ],
+      "mode": "RGB",
+      "notes": "Static atmospheric UI background. Safe to use as dashboard background, not gallery content."
+    },
+    {
+      "category": "frames/reference",
+      "file": "04-generated-frame-references/ornate-panel-frame-reference.png",
+      "sourceName": "ornate_fantasy_ui_frame_with_glowing_gems.png",
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "notes": "Generated frame reference. Use as visual reference or background only; programmatic SVG frames are preferred."
+    },
+    {
+      "category": "frames/reference",
+      "file": "04-generated-frame-references/ornate-standard-frame-reference.png",
+      "sourceName": "glowing_fantasy_ui_frame_design.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "mode": "RGB",
+      "notes": "Generated frame reference. Use as visual reference or background only; programmatic SVG frames are preferred."
+    },
+    {
+      "category": "frames/reference",
+      "file": "04-generated-frame-references/vertical-sidebar-panel-reference.png",
+      "sourceName": "mystical_fantasy_interface_with_cosmic_accents.png",
+      "size": [
+        941,
+        1672
+      ],
+      "mode": "RGB",
+      "notes": "Generated frame reference. Use as visual reference or background only; programmatic SVG frames are preferred."
+    },
+    {
+      "category": "frames/reference",
+      "file": "04-generated-frame-references/ornate-divider-reference.png",
+      "sourceName": "ornate_glowing_fantasy_ui_divider.png",
+      "size": [
+        2172,
+        724
+      ],
+      "mode": "RGB",
+      "notes": "Generated frame reference. Use as visual reference or background only; programmatic SVG frames are preferred."
+    },
+    {
+      "category": "frames/reference",
+      "file": "04-generated-frame-references/ornate-frame-transparent-style-reference.png",
+      "sourceName": "ornate_fantasy_frame_with_glowing_accents.png",
+      "size": [
+        2172,
+        724
+      ],
+      "mode": "RGB",
+      "notes": "Generated frame reference. Use as visual reference or background only; programmatic SVG frames are preferred."
+    },
+    {
+      "category": "recipe-photos",
+      "file": "05-recipe-photos/seared-salmon-roasted-roots.png",
+      "sourceName": "cozy_rustic_meal_by_the_fire.png",
+      "size": [
+        1122,
+        1402
+      ],
+      "mode": "RGB",
+      "notes": "Realistic cinematic food photo for recipe module. Not cartoon."
+    },
+    {
+      "category": "recipe-photos",
+      "file": "05-recipe-photos/lamb-root-stew.png",
+      "sourceName": "hearty_stew_in_a_rustic_kitchen.png",
+      "size": [
+        1122,
+        1402
+      ],
+      "mode": "RGB",
+      "notes": "Realistic cinematic food photo for recipe module. Not cartoon."
+    },
+    {
+      "category": "recipe-photos",
+      "file": "05-recipe-photos/skyr-berries-honey.png",
+      "sourceName": "rustic_yogurt_parfait_with_berries_and_honey.png",
+      "size": [
+        1122,
+        1402
+      ],
+      "mode": "RGB",
+      "notes": "Realistic cinematic food photo for recipe module. Not cartoon."
+    },
+    {
+      "category": "recipe-photos",
+      "file": "05-recipe-photos/salmon-roasted-roots-closeup.png",
+      "sourceName": "cozy_rustic_meal_by_the_fire.png",
+      "size": [
+        1122,
+        1402
+      ],
+      "mode": "RGB",
+      "notes": "Realistic cinematic food photo for recipe module. Not cartoon."
+    },
+    {
+      "category": "travel-concierge",
+      "file": "07-travel-concierge/travel-world-map-cinematic.png",
+      "sourceName": "mystical_fantasy_map_with_glowing_accents.png",
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "notes": "Travel/adventure book visual asset."
+    },
+    {
+      "category": "travel-concierge",
+      "file": "07-travel-concierge/travel-saga-map-bg.png",
+      "sourceName": "mystical_fantasy_map_with_glowing_accents.png",
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "notes": "Travel/adventure book visual asset."
+    },
+    {
+      "category": "travel-concierge",
+      "file": "07-travel-concierge/aurora-fjord-travel-bg.png",
+      "sourceName": "nordic_fjord_under_an_aurora_sky.png",
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "notes": "Travel/adventure book visual asset."
+    },
+    {
+      "category": "layout-reference",
+      "file": "08-references-layout/approved-dashboard-layout-reference.png",
+      "sourceName": "viking_inspired_digital_companion_dashboard.png",
+      "size": [
+        1672,
+        941
+      ],
+      "mode": "RGB",
+      "notes": "Reference only. Do not hard-code as dashboard UI."
+    },
+    {
+      "category": "layout-reference",
+      "file": "08-references-layout/current-dashboard-full-reference.png",
+      "sourceName": "31961d9f-c29a-4817-ad11-adb79c8d4442.png",
+      "size": [
+        1793,
+        931
+      ],
+      "mode": "RGBA",
+      "notes": "Reference only. Do not hard-code as dashboard UI."
+    },
+    {
+      "category": "layout-reference",
+      "file": "08-references-layout/current-dashboard-cropped-reference.png",
+      "sourceName": "bec9c35c-fe4c-4ed2-972e-b97c80b1c6b5.png",
+      "size": [
+        1584,
+        763
+      ],
+      "mode": "RGBA",
+      "notes": "Reference only. Do not hard-code as dashboard UI."
+    },
+    {
+      "category": "layout-reference",
+      "file": "08-references-layout/nordic-design-system-reference.png",
+      "sourceName": "cinematic_viking_inspired_ui_design_system.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "mode": "RGB",
+      "notes": "Reference only. Do not hard-code as dashboard UI."
+    },
+    {
+      "category": "layout-reference",
+      "file": "08-references-layout/asset-pack-overview-reference-only.png",
+      "sourceName": "a_big_promotional_flat_lay_poster_style_image_sh.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGB",
+      "notes": "Reference only. Do not hard-code as dashboard UI."
+    },
+    {
+      "category": "user-reference",
+      "file": "09-user-reference-battle-meal-plans/user-meal-rotation-chart-1.jpeg",
+      "sourceName": "18D1FCA2-1B45-47AA-94AC-85D8FDA1D94D(1).jpeg",
+      "size": [
+        1024,
+        1536
+      ],
+      "mode": "RGB",
+      "notes": "Reference only for Codex/spec. Do not hard-code into gallery carousel unless user explicitly adds to live gallery."
+    },
+    {
+      "category": "user-reference",
+      "file": "09-user-reference-battle-meal-plans/user-workout-battle-plan.jpeg",
+      "sourceName": "BD91E006-516C-4916-B78F-AFAC40097119(1).jpeg",
+      "size": [
+        1024,
+        1536
+      ],
+      "mode": "RGB",
+      "notes": "Reference only for Codex/spec. Do not hard-code into gallery carousel unless user explicitly adds to live gallery."
+    },
+    {
+      "category": "user-reference",
+      "file": "09-user-reference-battle-meal-plans/user-battle-rhythm-plan-dark.png",
+      "sourceName": "ChatGPT Image Jun 22, 2026, 06_56_10 PM (1).png",
+      "size": [
+        1055,
+        1491
+      ],
+      "mode": "RGBA",
+      "notes": "Reference only for Codex/spec. Do not hard-code into gallery carousel unless user explicitly adds to live gallery."
+    },
+    {
+      "category": "user-reference",
+      "file": "09-user-reference-battle-meal-plans/user-battle-rhythm-food-system.png",
+      "sourceName": "ChatGPT Image Jun 22, 2026, 06_56_10 PM (2).png",
+      "size": [
+        1055,
+        1491
+      ],
+      "mode": "RGBA",
+      "notes": "Reference only for Codex/spec. Do not hard-code into gallery carousel unless user explicitly adds to live gallery."
+    },
+    {
+      "category": "user-reference",
+      "file": "09-user-reference-battle-meal-plans/user-battle-rhythm-food-system-2.png",
+      "sourceName": "ChatGPT Image Jun 22, 2026, 06_56_11 PM (3).png",
+      "size": [
+        1055,
+        1491
+      ],
+      "mode": "RGBA",
+      "notes": "Reference only for Codex/spec. Do not hard-code into gallery carousel unless user explicitly adds to live gallery."
+    },
+    {
+      "category": "user-reference",
+      "file": "09-user-reference-battle-meal-plans/user-dante-gallery-example-single.png",
+      "sourceName": "9c878358-c594-474b-baa9-d1aae4de7d46(1).png",
+      "size": [
+        1639,
+        2048
+      ],
+      "mode": "RGBA",
+      "notes": "Reference only for Codex/spec. Do not hard-code into gallery carousel unless user explicitly adds to live gallery."
+    },
+    {
+      "category": "user-reference",
+      "file": "09-user-reference-battle-meal-plans/user-dante-gallery-example-couple-1.png",
+      "sourceName": "ChatGPT Image Jun 13, 2026, 02_39_01 PM (5)(1).png",
+      "size": [
+        1122,
+        1402
+      ],
+      "mode": "RGBA",
+      "notes": "Reference only for Codex/spec. Do not hard-code into gallery carousel unless user explicitly adds to live gallery."
+    },
+    {
+      "category": "user-reference",
+      "file": "09-user-reference-battle-meal-plans/user-dante-gallery-example-couple-2.png",
+      "sourceName": "ChatGPT Image Jun 13, 2026, 02_39_01 PM (6).png",
+      "size": [
+        1122,
+        1402
+      ],
+      "mode": "RGBA",
+      "notes": "Reference only for Codex/spec. Do not hard-code into gallery carousel unless user explicitly adds to live gallery."
+    },
+    {
+      "category": "03-frames-svg",
+      "file": "03-frames-svg/panel-frame-standard.svg",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "03-frames-svg",
+      "file": "03-frames-svg/panel-frame-hero.svg",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "03-frames-svg",
+      "file": "03-frames-svg/panel-frame-wide.svg",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "03-frames-svg",
+      "file": "03-frames-svg/card-frame-compact.svg",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "03-frames-svg",
+      "file": "03-frames-svg/nordic-divider.svg",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "03-frames-svg",
+      "file": "03-frames-svg/rune-strip.svg",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "03-frames-svg",
+      "file": "03-frames-svg/travel-map-pin.svg",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "03-frames-svg",
+      "file": "03-frames-svg/nordic-compass-sigil.svg",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "03-frames-svg",
+      "file": "03-frames-svg/status-pill-online.svg",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "10-css",
+      "file": "10-css/ghostlight-nordic-dashboard.css",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "11-data-seeds",
+      "file": "11-data-seeds/battle-rhythm.json",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "11-data-seeds",
+      "file": "11-data-seeds/recipe-seeds.json",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "11-data-seeds",
+      "file": "11-data-seeds/travel-saga-seed.json",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": ".",
+      "file": "README.md",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "12-codex-guides",
+      "file": "12-codex-guides/CODEX_IMPLEMENTATION_NOTES.md",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "12-codex-guides",
+      "file": "12-codex-guides/CODEX_PATCH_PROMPT.txt",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": ".",
+      "file": "download_index.html",
+      "sourceName": "generated-text",
+      "size": null,
+      "mode": "text",
+      "notes": "Programmatic SVG/CSS/JSON/MD asset."
+    },
+    {
+      "category": "preview",
+      "file": "13-preview/asset-contact-sheet.png",
+      "sourceName": "generated-contact-sheet",
+      "size": [
+        900,
+        2336
+      ],
+      "mode": "RGB",
+      "notes": "Preview only."
+    }
+  ],
+  "installPathSuggestion": "artifacts/ghostlight-bot/assets/nordic-dashboard/",
+  "staticUrlBase": "/assets/nordic-dashboard/"
+}
