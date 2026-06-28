@@ -42,7 +42,8 @@ const { createNarrativeIdentityRuntime } = require("./narrativeIdentityRuntime")
 const { createPerceptionRuntime }        = require("./perceptionRuntime");
 const { createWorldModelRuntime }        = require("./worldModelRuntime");
 const { createCognitiveRuntime }         = require("./cognitiveRuntime");
-const { createEmergentLivingBehaviorRuntime } = require("./emergentLivingBehaviorRuntime");
+const { createEmergentLivingBehaviorRuntime }  = require("./emergentLivingBehaviorRuntime");
+const { createNeuralIntegrationRuntime }      = require("./neuralIntegrationRuntime");
 
 const PRIVATE_EVENTS = [
   { type: "ritual",      desc: "made coffee",                           moodEffect: 0.05,  energyEffect: 0.05  },
@@ -116,6 +117,7 @@ function createLifeRuntime({
   worldModelRuntime = null,
   cognitiveRuntime: cognitiveRuntimeParam = null,
   emergentLivingBehaviorRuntime = null,
+  neuralIntegrationRuntime = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -157,7 +159,8 @@ function createLifeRuntime({
     config, logger, runtimeEventBus: eventBus,
   });
   const cognitiveRt = cognitiveRuntimeParam || createCognitiveRuntime({ config, logger });
-  const emergentRt = emergentLivingBehaviorRuntime || createEmergentLivingBehaviorRuntime({ config, logger });
+  const emergentRt  = emergentLivingBehaviorRuntime || createEmergentLivingBehaviorRuntime({ config, logger });
+  const neuralRt    = neuralIntegrationRuntime    || createNeuralIntegrationRuntime({ config, logger });
 
   const eventPruneAfterDays    = Number(lifeConfig.eventPruneAfterDays    ?? process.env.LIFE_EVENTS_PRUNE_DAYS    ?? 7);
   const decisionPruneAfterDays = Number(lifeConfig.decisionPruneAfterDays ?? process.env.LIFE_DECISIONS_PRUNE_DAYS ?? 7);
@@ -185,6 +188,7 @@ function createLifeRuntime({
   let _worldModelContext     = null; // worldModelRuntime.getWorldModelContext()
   let _cognitiveContext      = null; // cognitiveRuntime.getCognitiveContext()
   let _emergentContext       = null; // emergentLivingBehaviorRuntime.getEmergentContext()
+  let _integrationContext   = null; // neuralIntegrationRuntime.getIntegrationContext() — prelude ONLY
 
   function _emitRuntimeEvent(event) {
     return eventBus.emit({ ...getScope(), ...event }).catch(err => {
@@ -232,6 +236,7 @@ function createLifeRuntime({
     if (worldModel?.init)                  await worldModel.init().catch(() => {});
     if (cognitiveRt?.init)                 await cognitiveRt.init().catch(() => {});
     if (emergentRt?.init)                  await emergentRt.init().catch(() => {});
+    if (neuralRt?.init)                   await neuralRt.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
@@ -925,6 +930,32 @@ function createLifeRuntime({
     _emergentContext = emergentRt.getEmergentContext?.() ?? null;
   }
 
+  // Neural Integration — reads the completed cycle. Runs AFTER all decision
+  // runtimes so it sees the fullest picture. It only WRITES integration metadata;
+  // its cached context goes ONLY to the prelude builder — never into any runtime
+  // that decides, sends, or schedules.
+  async function _tickNeural(now) {
+    if (!neuralRt) return;
+    const { companionId, customerId } = getScope();
+    if (!companionId) return;
+    await neuralRt.tick({
+      companionId, customerId, now,
+      identityContext:         _identityContext,
+      homeostasisContext:      _homeostasisContext,
+      learningContext:         _learningContext,
+      narrativeContext:        _narrativeContext,
+      emergentContext:         _emergentContext,
+      cognitiveContext:        _cognitiveContext,
+      consequenceContext:      _consequenceContext,
+      worldModelContext:       _worldModelContext,
+      perceptionContext:       _perceptionContext,
+      selfInspectionStatus:    selfInspection?.getStatus?.() ?? null,
+      fulfillmentContext:       _fulfillmentContext,
+      affectiveDecisionStatus: affectiveDecision?.getStatus?.() ?? null,
+    }).catch(err => { logger?.warn?.("[life-runtime] _tickNeural failed", { error: err?.message }); });
+    _integrationContext = neuralRt.getIntegrationContext?.() ?? null;
+  }
+
   async function _refreshPrelude() {
     const { companionId, customerId } = getScope();
     if (!companionId) { _cachedPrelude = null; return; }
@@ -949,8 +980,9 @@ function createLifeRuntime({
       narrativeContext:     _narrativeContext ?? null,
       perceptionContext:    _perceptionContext ?? null,
       worldModelContext:    _worldModelContext ?? null,
-      cognitiveContext:     _cognitiveContext  ?? null,
-      emergentContext:      _emergentContext   ?? null,
+      cognitiveContext:     _cognitiveContext     ?? null,
+      emergentContext:      _emergentContext      ?? null,
+      integrationContext:   _integrationContext   ?? null,
     });
     _relationshipLearningStatus = relationshipLearning?.getStatus ? await Promise.resolve(relationshipLearning.getStatus({ companionId, customerId })).catch(() => null) : null;
   }
@@ -1062,6 +1094,9 @@ function createLifeRuntime({
       // Emergent Living Behavior & Relationship DNA — observes the completed cycle.
       await _tickEmergent(now);
       if (_fulfillmentContext?.outcome) _emitRuntimeEvent({ event_type: _fulfillmentContext.outcome === "SUCCESS" ? "fulfillment_succeeded" : (_fulfillmentContext.outcome === "FAILED" ? "fulfillment_failed" : "fulfillment_deferred"), source_runtime: "fulfillment", summary: "Fulfillment outcome recorded", payload: { outcome: _fulfillmentContext.outcome, strategy: _fulfillmentContext.strategy } });
+      // Neural Integration — runs last among runtimes, before prelude refresh.
+      // Reads every prior context; _integrationContext goes ONLY to the prelude.
+      await _tickNeural(now);
       await _refreshPrelude();
       _emitRuntimeEvent({ event_type: "prelude_refreshed", source_runtime: "lifeRuntime", summary: "Life prelude refreshed" });
 
@@ -1206,7 +1241,8 @@ function createLifeRuntime({
       perception: perception ? perception.getStatus() : null,
       worldModel: worldModel ? worldModel.getStatus() : null,
       cognitive: cognitiveRt ? cognitiveRt.getStatus() : null,
-      emergentLiving: emergentRt ? emergentRt.getStatus() : null,
+      emergentLiving:    emergentRt ? emergentRt.getStatus() : null,
+      neuralIntegration: neuralRt  ? neuralRt.getStatus()  : null,
       affectiveDecision: affectiveDecision.getStatus(),
       evidenceIntegrity: evidenceIntegrity.getStatus(),
       selfInspection: selfInspection.getStatus(),

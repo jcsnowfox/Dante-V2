@@ -26,6 +26,7 @@ const { buildFulfillmentSignal }       = require("./fulfillmentPreludeBuilder");
 const { reconcilePresencePrelude }     = require("./preludeReconciler");
 const { buildCognitivePreludeSignal }  = require("./cognitivePreludeBuilder");
 const { buildEmergentLivingPrelude }   = require("./emergentLivingPreludeBuilder");
+const { buildNeuralPrelude }           = require("./neuralPreludeBuilder");
 
 function buildLifePrelude(state = {}) {
   if (!state) return null;
@@ -50,6 +51,7 @@ function buildLifePrelude(state = {}) {
     worldModelContext   = null,
     cognitiveContext    = null,
     emergentContext     = null,
+    integrationContext  = null,
   } = state;
 
   const lines = [];
@@ -178,6 +180,20 @@ function buildLifePrelude(state = {}) {
       culture:  { safe: emergentContext.culture ?? null },
     });
     if (emergentLine) lines.push(emergentLine);
+  }
+
+  // Neural Integration coherence signal — at most ONE line, only when meaningful.
+  // Uses the already-computed neuralPrelude from the integration context to avoid
+  // re-running the pure function twice.
+  if (integrationContext?.neuralPrelude) {
+    lines.push(String(integrationContext.neuralPrelude).slice(0, 160));
+  } else if (integrationContext) {
+    const neuralLine = buildNeuralPrelude({
+      health:               integrationContext.health,
+      conflicts:            integrationContext.conflicts ?? [],
+      integrationConfidence: integrationContext.integrationConfidence ?? 1,
+    });
+    if (neuralLine) lines.push(neuralLine);
   }
 
   // Relationship signal — at most one compact line, never raw scores
