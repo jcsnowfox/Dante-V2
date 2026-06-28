@@ -41,6 +41,8 @@ const {
   renderMemoryCuratorPage,
   renderJournalsPage,
   renderEmotionalArcPage,
+  renderAdventureBookPage,
+  renderTripDetailPage,
 } = require("./src/http/renderAdminPages");
 const { DEFAULT_PROFILE } = require("./src/companionSystems/emotionalArc/emotionProfileSchema");
 const { renderFeedbackLearningPage } = require("./src/http/renderAdminPages/feedbackLearningPage");
@@ -50,6 +52,10 @@ const { renderInnerLifePage } = require("./src/http/renderAdminPages/innerLifePa
 const { renderContinuityPage } = require("./src/http/renderAdminPages/continuityPage");
 const { renderProactivePage: renderProactivePageTemplate } = require("./src/http/renderProactivePage");
 const { renderLoginPage } = require("./src/http/renderAdminPages/loginPage");
+
+const PREVIEW_TRAVEL = { trips: [], checklistItems: [] };
+function previewId() { return `preview-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
+async function readPreviewForm(req) { const chunks = []; for await (const chunk of req) chunks.push(chunk); return Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString("utf8"))); }
 
 // ----- icon asset map (mirrors adminRenderHelpers.js) -----
 function renderIconImage(kind, theme, alt = "", className = "icon-image") {
@@ -230,7 +236,26 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // POST preview: any form submission redirects back with notice
+    if (req.method === "POST" && p === "/admin/actions/travel-trip-save") {
+      const fields = await readPreviewForm(req);
+      const trip = { id: fields.id || previewId(), title: fields.title || "Preview trip", location: fields.location || "", country: fields.country || "", region: fields.region || "", status: fields.status || "wishlist", startDate: fields.startDate || "", endDate: fields.endDate || "", notes: fields.notes || "", vibeTags: String(fields.vibeTags || "").split(",").map((x) => x.trim()).filter(Boolean), companionRoleNotes: fields.companionRoleNotes || "", preferences: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const existing = PREVIEW_TRAVEL.trips.findIndex((item) => item.id === trip.id);
+      if (existing >= 0) PREVIEW_TRAVEL.trips[existing] = { ...PREVIEW_TRAVEL.trips[existing], ...trip }; else PREVIEW_TRAVEL.trips.push(trip);
+      res.writeHead(303, { Location: `/admin/travel/${encodeURIComponent(trip.id)}` }); res.end(); return;
+    }
+    if (req.method === "POST" && p === "/admin/actions/travel-checklist-save") {
+      const fields = await readPreviewForm(req);
+      PREVIEW_TRAVEL.checklistItems.push({ id: previewId(), tripId: fields.tripId || "", label: fields.label || "Checklist item", category: fields.category || "custom", checked: false, notes: fields.notes || "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      res.writeHead(303, { Location: fields.returnTo || "/admin/travel" }); res.end(); return;
+    }
+    if (req.method === "POST" && p === "/admin/actions/travel-checklist-toggle") {
+      const fields = await readPreviewForm(req);
+      const item = PREVIEW_TRAVEL.checklistItems.find((row) => row.id === fields.itemId); if (item) item.checked = fields.checked === "true";
+      res.writeHead(303, { Location: fields.returnTo || "/admin" }); res.end(); return;
+    }
+
+
+    // POST preview fallback: non-travel form submissions redirect back with notice
     if (req.method === "POST") {
       const referer = req.headers["referer"] || "/admin";
       const base = referer.split("?")[0];
@@ -282,11 +307,19 @@ const server = http.createServer((req, res) => {
           recentDecisions: [],
           recentJournals: [],
           recentImages: [],
+          travel: { trips: PREVIEW_TRAVEL.trips, checklistByTrip: Object.fromEntries(PREVIEW_TRAVEL.trips.map((trip) => [trip.id, PREVIEW_TRAVEL.checklistItems.filter((item) => item.tripId === trip.id)])), nextTrip: PREVIEW_TRAVEL.trips[0] || null, nextChecklistItems: PREVIEW_TRAVEL.trips[0] ? PREVIEW_TRAVEL.checklistItems.filter((item) => item.tripId === PREVIEW_TRAVEL.trips[0].id) : [] },
           timezone: "UTC",
         },
         theme,
         helpers: buildHelpers(theme),
       });
+    } else if (p === "/admin/travel" || p.startsWith("/admin/travel/")) {
+      section = "home";
+      const tripId = p.startsWith("/admin/travel/") ? decodeURIComponent(p.slice("/admin/travel/".length)) : "";
+      const checklistByTrip = Object.fromEntries(PREVIEW_TRAVEL.trips.map((trip) => [trip.id, PREVIEW_TRAVEL.checklistItems.filter((item) => item.tripId === trip.id)]));
+      pageBody = tripId
+        ? renderTripDetailPage({ trip: PREVIEW_TRAVEL.trips.find((trip) => trip.id === tripId) || null, checklistItems: checklistByTrip[tripId] || [], theme, helpers: buildHelpers(theme) })
+        : renderAdventureBookPage({ trips: PREVIEW_TRAVEL.trips, checklistByTrip, statusFilter: url.searchParams.get("status") || "", theme, helpers: buildHelpers(theme) });
     } else if (p === "/admin/companion") {
       section = "companion";
       const companionTab = url.searchParams.get("companionTab") || "identity";

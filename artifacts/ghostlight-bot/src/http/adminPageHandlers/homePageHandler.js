@@ -184,6 +184,20 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
     });
     return {};
   });
+  const travelTrips = innerContext.travelAdventureStore?.listTrips
+    ? await innerContext.travelAdventureStore.listTrips({ includeArchived: false }).catch((error) => {
+      innerContext.logger.warn("[admin] Failed to load travel trips for home dashboard", {
+        error: error?.message || String(error),
+      });
+      return [];
+    })
+    : [];
+  const travelChecklistPairs = innerContext.travelAdventureStore?.listChecklistItems
+    ? await Promise.all(travelTrips.slice(0, 5).map(async (trip) => [trip.id, await innerContext.travelAdventureStore.listChecklistItems(trip.id).catch(() => [])]))
+    : [];
+  const nextTravelTrip = innerContext.travelAdventureStore?.getNextTripWithChecklist
+    ? await innerContext.travelAdventureStore.getNextTripWithChecklist().catch(() => null)
+    : null;
   const updateNotice = getLatestUpdateNotice({
     settings: appSettings,
   });
@@ -355,6 +369,12 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
           status: entry.status || "active",
           createdAt: entry.createdAt || "",
         })),
+        travel: {
+          trips: travelTrips.slice(0, 5),
+          checklistByTrip: Object.fromEntries(travelChecklistPairs),
+          nextTrip: nextTravelTrip?.trip || null,
+          nextChecklistItems: nextTravelTrip?.checklistItems || [],
+        },
         recentImages: homeCarouselImages
           .filter((image) => image.thumbnailStorageKey || image.storageKey)
           .map((image) => ({

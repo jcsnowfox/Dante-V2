@@ -208,6 +208,14 @@ function getAdminRouteState(pathname) {
     return { section: "heartbeat", tab: pathname.slice("/admin/heartbeat/".length) || "overview" };
   }
 
+  if (pathname === "/admin/travel") {
+    return { section: "travel" };
+  }
+
+  if (pathname.startsWith("/admin/travel/")) {
+    return { section: "travel", tripId: pathname.slice("/admin/travel/".length) || "" };
+  }
+
   if (pathname === "/admin/inner-life" || pathname.startsWith("/admin/inner-life/")) {
     return { section: "innerLife" };
   }

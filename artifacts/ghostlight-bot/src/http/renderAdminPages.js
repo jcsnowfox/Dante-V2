@@ -16,6 +16,7 @@ const { renderGameAdminPage } = require("../games/http/renderGameAdminPage");
 const { renderNorwegianLearningPage } = require("./renderAdminPages/norwegianLearningPage");
 const { renderNorwegianDashboard } = require("./renderAdminPages/norwegianDashboard");
 const { renderHumanSimulationPage } = require("./renderAdminPages/humanSimulationPages");
+const travelPagesModule = require("./renderAdminPages/travelPages");
 
 module.exports = {
   renderShell: sharedAdminPages.renderShell,
@@ -53,4 +54,6 @@ module.exports = {
   renderNorwegianLearningPage,
   renderNorwegianDashboard,
   renderHumanSimulationPage,
+  renderAdventureBookPage: travelPagesModule.renderAdventureBookPage,
+  renderTripDetailPage: travelPagesModule.renderTripDetailPage,
 };

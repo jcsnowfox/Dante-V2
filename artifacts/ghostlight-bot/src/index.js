@@ -51,6 +51,7 @@ const {
   createTimedNotesStore,
   createProactiveVarietyMemoryStore,
   createSituationalAwarenessStore,
+  createTravelAdventureStore,
 } = require("./storage");
 const { createWebSearchService } = require("./tools/webSearchService");
 const { createHumanSimulationEngine } = require("./humanSimulation/humanSimulationEngine");
@@ -248,6 +249,7 @@ async function startApp() {
   const timedNotesStore = createTimedNotesStore({ config, logger });
   const proactiveVarietyMemoryStore = createProactiveVarietyMemoryStore({ config, logger });
   const situationalAwarenessStore = createSituationalAwarenessStore({ config, logger });
+  const travelAdventureStore = createTravelAdventureStore({ config, logger });
   const webSearchService = createWebSearchService({ config, logger });
   const humanSimulation = createHumanSimulationEngine({ config, logger, microPreferenceStore, personalTimelineStore, followUpStore, channelAwarenessStore, innerWeatherStore, attentionResidueStore, interactionPresenceStore, boundaryConsentStore, doNotAskStore, userEnergyStore, recurringThemeStore, memoryConfidenceStore, selfReflectionStore, proactivePresenceStore });
   const situationalAwarenessEngine = createSituationalAwarenessEngine({ config, logger, timedNotesStore, conversationFollowupStore, proactiveVarietyMemoryStore, emotionalBeatStore, promiseLedger, recentDecisionStore, innerWeatherStore, situationalAwarenessStore });
@@ -489,6 +491,7 @@ async function startApp() {
     generatedMemories,
     cache,
     summaryQueueStore,
+    travelAdventureStore,
     settingsStore,
     journalStore,
     tools,
@@ -654,6 +657,7 @@ async function startApp() {
   await runStartupStep("promiseLedger.init", logger, () => promiseLedger.init());
   await runStartupStep("generatedMemories.init", logger, () => generatedMemories.init());
   await runStartupStep("generatedImages.init", logger, () => generatedImages.init());
+  await runStartupStep("travelAdventureStore.init", logger, () => travelAdventureStore.init());
   await runStartupStep("generatedAudio.init", logger, () => generatedAudio.init());
   await runStartupStep("musicStore.init", logger, () => musicStore.init());
   await runStartupStep("imageStylePresets.init", logger, () => imageStylePresets.init());

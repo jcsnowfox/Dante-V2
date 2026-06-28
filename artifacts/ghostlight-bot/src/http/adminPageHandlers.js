@@ -40,6 +40,7 @@ const { handleNorwegianDashboardRequest } = require("./adminPageHandlers/norwegi
 const { handleSystemTruthPageRequest } = require("./adminPageHandlers/systemTruthPageHandler");
 const { handleSituationalAwarenessPageRequest } = require("./adminPageHandlers/situationalAwarenessPageHandler");
 const { handleAlivePageRequest } = require("./adminPageHandlers/alivePageHandler");
+const { handleTravelPageRequest } = require("./adminPageHandlers/travelPageHandler");
 
 async function handleAdminPageRequest({
   req = null,
@@ -62,6 +63,11 @@ async function handleAdminPageRequest({
 
   if (route.section === "home") {
     await handleHomePageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });
+    return;
+  }
+
+  if (route.section === "travel") {
+    await handleTravelPageRequest({ url, route, innerRes, innerContext, helpers, theme, themeLinks });
     return;
   }
 
