@@ -22,8 +22,18 @@
  *   90%  at T=0h  →  66%  at T=2h  →  18%  at T=6h  →  stale (UNKNOWN)
  */
 
-const UNKNOWN_THRESHOLD   = 0.20;
+const { AVAILABILITY_DECAY_RATE } = require("./availabilityConfidenceResolver");
+
+const UNKNOWN_THRESHOLD    = 0.20;
 const STALENESS_DECAY_RATE = 0.06;
+
+// Per-key decay rate overrides — jenna.availability uses the canonical rate
+// shared with perceptionConfidenceResolver so both systems agree.
+const DECAY_RATE_OVERRIDES = Object.freeze({
+  "jenna.availability":   AVAILABILITY_DECAY_RATE, // 0.15 — canonical rate
+  "jenna.likely_sleeping": 0.08,
+  "jenna.current_channel": AVAILABILITY_DECAY_RATE,
+});
 
 // Per-domain staleness thresholds.
 // 0 means the signal never decays (always recomputed from clock / pure inference).
@@ -94,8 +104,9 @@ function applyDecayToBelief(belief, key, now) {
 
   if (ageMs === 0) return belief;
 
+  const rate             = DECAY_RATE_OVERRIDES[key] ?? STALENESS_DECAY_RATE;
   const periods          = ageMs / threshold;
-  const decayAmount      = periods * STALENESS_DECAY_RATE;
+  const decayAmount      = periods * rate;
   const decayedConf      = Math.max(0, belief.confidence - decayAmount);
   const stale            = decayedConf < UNKNOWN_THRESHOLD;
 
@@ -128,6 +139,7 @@ module.exports = {
   applyDecayToModel,
   getDecayThreshold,
   DECAY_THRESHOLDS_MS,
+  DECAY_RATE_OVERRIDES,
   STALENESS_DECAY_RATE,
   UNKNOWN_THRESHOLD,
 };

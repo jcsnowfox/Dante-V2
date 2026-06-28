@@ -4,12 +4,53 @@ const crypto = require("crypto");
 const { createRuntimeEventStore } = require("./runtimeEventStore");
 const { createSourceHealthTracker } = require("./sourceHealth");
 
+// Active event types — emitted or consumed in current code.
+// Dead events removed 2026-06-28 (audit: never emitted AND never consumed).
 const EVENT_TYPES = Object.freeze([
-  "need_changed","need_satisfied","need_depleted","identity_value_changed","identity_belief_changed","identity_preference_changed","project_progressed","project_completed","project_abandoned","curiosity_matured","insight_created","relationship_weather_changed","repair_started","repair_completed","consequence_created","fulfillment_succeeded","fulfillment_failed","fulfillment_deferred","resource_discovered","diagnostic_warning","self_confidence_low","first_experience_recorded","journal_entry_created","prelude_refreshed",
-  "narrative_chapter_opened","narrative_chapter_updated","narrative_self_story_updated",
-  "perception_world_state_updated","perception_availability_changed","perception_confidence_decayed",
-  "world_model_updated","world_belief_conflict","world_belief_decayed",
+  // ── consumed: perceptionRuntime reacts to these ──────────────────────────
+  "repair_started", "repair_completed", "diagnostic_warning", "self_confidence_low",
+  // ── emitted with live data; audit_only (no real-time consumer) ───────────
+  "need_changed", "identity_value_changed", "project_progressed", "insight_created",
+  "relationship_weather_changed", "consequence_created",
+  "fulfillment_succeeded", "fulfillment_failed", "fulfillment_deferred",
+  "narrative_chapter_updated", "prelude_refreshed",
+  "perception_world_state_updated",
+  "world_model_updated", "world_belief_conflict", "world_belief_decayed",
+  // ── emitted by sub-runtimes; audit_only ──────────────────────────────────
+  "identity_belief_changed", "journal_entry_created",
 ]);
+
+// Event ownership registry — documents the consumer status of each event type.
+// Categories: "consumed" = real-time reactor; "audit_only" = emitted, no reactor.
+// Removed from EVENT_TYPES (2026-06-28): need_satisfied, need_depleted,
+//   identity_preference_changed, project_completed, project_abandoned,
+//   curiosity_matured, resource_discovered, first_experience_recorded,
+//   narrative_chapter_opened, narrative_self_story_updated,
+//   perception_availability_changed, perception_confidence_decayed —
+//   never emitted AND never consumed.
+const EVENT_OWNERSHIP = Object.freeze({
+  repair_started:                  { category: "consumed",    consumer: "perceptionRuntime" },
+  repair_completed:                { category: "consumed",    consumer: "perceptionRuntime" },
+  diagnostic_warning:              { category: "consumed",    consumer: "perceptionRuntime" },
+  self_confidence_low:             { category: "consumed",    consumer: "perceptionRuntime" },
+  need_changed:                    { category: "audit_only",  emitter: "lifeRuntime/homeostasis" },
+  identity_value_changed:          { category: "audit_only",  emitter: "lifeRuntime/identity" },
+  project_progressed:              { category: "audit_only",  emitter: "lifeRuntime/growth" },
+  insight_created:                 { category: "audit_only",  emitter: "lifeRuntime/curiosity" },
+  relationship_weather_changed:    { category: "audit_only",  emitter: "lifeRuntime/relationship" },
+  consequence_created:             { category: "audit_only",  emitter: "lifeRuntime/consequences" },
+  fulfillment_succeeded:           { category: "audit_only",  emitter: "lifeRuntime/fulfillment" },
+  fulfillment_failed:              { category: "audit_only",  emitter: "lifeRuntime/fulfillment" },
+  fulfillment_deferred:            { category: "audit_only",  emitter: "lifeRuntime/fulfillment" },
+  narrative_chapter_updated:       { category: "audit_only",  emitter: "narrativeIdentityRuntime" },
+  prelude_refreshed:               { category: "audit_only",  emitter: "lifeRuntime" },
+  perception_world_state_updated:  { category: "audit_only",  emitter: "perceptionRuntime" },
+  world_model_updated:             { category: "audit_only",  emitter: "worldModelRuntime" },
+  world_belief_conflict:           { category: "audit_only",  emitter: "worldModelRuntime" },
+  world_belief_decayed:            { category: "audit_only",  emitter: "worldModelRuntime" },
+  identity_belief_changed:         { category: "audit_only",  emitter: "lifeRuntime/relationshipLearning" },
+  journal_entry_created:           { category: "audit_only",  emitter: "repairReflectionEngine" },
+});
 
 function stripSecrets(value, seen = new WeakSet()) {
   if (!value || typeof value !== "object") return value;
@@ -60,7 +101,7 @@ function createRuntimeEventBus({ store = createRuntimeEventStore(), logger = nul
     } catch { return fallback.slice(-Number(opts.limit || 50)).reverse(); }
   }
   function getStatus() { return { eventTypes: EVENT_TYPES.length, fallbackEvents: fallback.length, sourceHealth: sourceHealth.get("runtimeEventStore") }; }
-  return { emit, listRecent, getStatus, EVENT_TYPES };
+  return { emit, listRecent, getStatus, EVENT_TYPES, EVENT_OWNERSHIP };
 }
 
-module.exports = { createRuntimeEventBus, EVENT_TYPES, stripSecrets };
+module.exports = { createRuntimeEventBus, EVENT_TYPES, EVENT_OWNERSHIP, stripSecrets };

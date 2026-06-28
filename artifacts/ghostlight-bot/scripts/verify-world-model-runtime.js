@@ -106,10 +106,14 @@ check("lifeRuntime includes worldModel in getStatus",   lr.includes("worldModel:
 check("lifeRuntime prunes worldModel",                  lr.includes("worldModel?.pruneAll"));
 
 // ── lifePreludeBuilder integration ───────────────────────────────────────────
+// After Integration Layer Repair 1.0, lifePreludeBuilder delegates to
+// preludeReconciler (single canonical composer) instead of calling
+// buildWorldModelSignal directly. This prevents the LLM from seeing two
+// presence signals for the same fact.
 const lpb = read("src/lifeRuntime/lifePreludeBuilder.js");
-check("lifePreludeBuilder imports buildWorldModelSignal",   lpb.includes("buildWorldModelSignal"));
-check("lifePreludeBuilder destructures worldModelContext",  lpb.includes("worldModelContext"));
-check("lifePreludeBuilder emits world model signal",        lpb.includes("buildWorldModelSignal(worldModelContext.worldModel"));
+check("lifePreludeBuilder imports reconcilePresencePrelude", lpb.includes("reconcilePresencePrelude"));
+check("lifePreludeBuilder destructures worldModelContext",   lpb.includes("worldModelContext"));
+check("lifePreludeBuilder calls reconcilePresencePrelude",   lpb.includes("reconcilePresencePrelude({"));
 
 // ── runtimeEventBus integration ──────────────────────────────────────────────
 const reb = read("src/lifeRuntime/runtimeEventBus.js");

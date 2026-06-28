@@ -20,7 +20,8 @@ const TYPE_GUIDANCE = Object.freeze({
 function createRelationshipBehaviorGuidance({ lessonStore = null } = {}) {
   async function getGuidance({ companionId, customerId, limit = 4, context = "general" } = {}) {
     const lessons = await lessonStore?.listLessons?.({ companionId, customerId, limit: 50 }).catch(() => []) || [];
-    const active = lessons.filter(l => ["active","maturing","stable","challenged"].includes(l.status) && l.status !== "retired")
+    // Accept both legacy ("active","maturing") and canonical ("new","forming","core") active statuses
+    const active = lessons.filter(l => !["retired"].includes(l.status))
       .sort((a,b) => (Number(b.strength) + Number(b.confidence)) - (Number(a.strength) + Number(a.confidence)));
     const lines = [];
     for (const l of active) {

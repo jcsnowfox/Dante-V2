@@ -844,10 +844,12 @@ function createLifeRuntime({
     if (!worldModel) return;
     const { companionId, customerId } = getScope();
     if (!companionId) return;
-    const alivePresence = await _refreshAlivePresence().catch(() => null);
+    // No separate alivePresence call here — perceptionRuntime already interpreted it
+    // in _tickPerception (which runs first). worldModelRuntime reads derived signals
+    // from _perceptionContext instead, avoiding a duplicate presenceInterpreter call.
     await worldModel.tick({
       companionId, customerId, now,
-      alivePresence,
+      alivePresence:        null,   // intentionally null: use perceptionContext instead
       perceptionContext:    _perceptionContext,
       consequenceContext:   _consequenceContext,
       selfInspectionStatus: selfInspection?.getStatus?.() ?? null,
