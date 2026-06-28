@@ -41,6 +41,7 @@ const { createSelfInspectionRuntime }    = require("./selfInspectionRuntime");
 const { createNarrativeIdentityRuntime } = require("./narrativeIdentityRuntime");
 const { createPerceptionRuntime }        = require("./perceptionRuntime");
 const { createWorldModelRuntime }        = require("./worldModelRuntime");
+const { createCognitiveRuntime }         = require("./cognitiveRuntime");
 
 const PRIVATE_EVENTS = [
   { type: "ritual",      desc: "made coffee",                           moodEffect: 0.05,  energyEffect: 0.05  },
@@ -112,6 +113,7 @@ function createLifeRuntime({
   narrativeIdentityRuntime = null,
   perceptionRuntime = null,
   worldModelRuntime = null,
+  cognitiveRuntime: cognitiveRuntimeParam = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -152,6 +154,7 @@ function createLifeRuntime({
   const worldModel = worldModelRuntime || createWorldModelRuntime({
     config, logger, runtimeEventBus: eventBus,
   });
+  const cognitiveRt = cognitiveRuntimeParam || createCognitiveRuntime({ config, logger });
 
   const eventPruneAfterDays    = Number(lifeConfig.eventPruneAfterDays    ?? process.env.LIFE_EVENTS_PRUNE_DAYS    ?? 7);
   const decisionPruneAfterDays = Number(lifeConfig.decisionPruneAfterDays ?? process.env.LIFE_DECISIONS_PRUNE_DAYS ?? 7);
@@ -177,6 +180,7 @@ function createLifeRuntime({
   let _narrativeContext      = null; // narrativeIdentityRuntime.getNarrativeContext()
   let _perceptionContext     = null; // perceptionRuntime.getPerceptionContext()
   let _worldModelContext     = null; // worldModelRuntime.getWorldModelContext()
+  let _cognitiveContext      = null; // cognitiveRuntime.getCognitiveContext()
 
   function _emitRuntimeEvent(event) {
     return eventBus.emit({ ...getScope(), ...event }).catch(err => {
@@ -222,6 +226,7 @@ function createLifeRuntime({
     if (narrativeIdentity?.init)            await narrativeIdentity.init().catch(() => {});
     if (perception?.init)                  await perception.init().catch(() => {});
     if (worldModel?.init)                  await worldModel.init().catch(() => {});
+    if (cognitiveRt?.init)                 await cognitiveRt.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
@@ -677,6 +682,7 @@ function createLifeRuntime({
       homeostasisContext: _homeostasisContext,
       identityContext:    _identityContext,
       fulfillContext,
+      cognitiveContext:   _cognitiveContext,
     }).catch(err => {
       logger?.warn("[life-runtime] _tickFulfillment failed", { error: err?.message });
     });
@@ -863,6 +869,27 @@ function createLifeRuntime({
     _worldModelContext = worldModel.getWorldModelContext?.() ?? null;
   }
 
+  async function _tickCognitive(now) {
+    if (!cognitiveRt) return;
+    const { companionId, customerId } = getScope();
+    if (!companionId) return;
+    await cognitiveRt.tick({
+      companionId, customerId, now,
+      consequenceContext:       _consequenceContext,
+      homeostasisContext:       _homeostasisContext,
+      identityContext:          _identityContext,
+      fulfillmentContext:       _fulfillmentContext,
+      relationshipContext:      _relationshipContext,
+      perceptionContext:        _perceptionContext,
+      worldModelContext:        _worldModelContext,
+      learningContext:          _learningContext,
+      narrativeContext:         _narrativeContext,
+      curiosityContext:         _curiosityContext,
+      growthContext:            _growthContext,
+    }).catch(err => { logger?.warn?.("[life-runtime] _tickCognitive failed", { error: err?.message }); });
+    _cognitiveContext = cognitiveRt.getCognitiveContext?.() ?? null;
+  }
+
   async function _refreshPrelude() {
     const { companionId, customerId } = getScope();
     if (!companionId) { _cachedPrelude = null; return; }
@@ -887,6 +914,7 @@ function createLifeRuntime({
       narrativeContext:     _narrativeContext ?? null,
       perceptionContext:    _perceptionContext ?? null,
       worldModelContext:    _worldModelContext ?? null,
+      cognitiveContext:     _cognitiveContext  ?? null,
     });
     _relationshipLearningStatus = relationshipLearning?.getStatus ? await Promise.resolve(relationshipLearning.getStatus({ companionId, customerId })).catch(() => null) : null;
   }
@@ -982,6 +1010,7 @@ function createLifeRuntime({
       await _tickPerception(now);
       if (_perceptionContext?.worldState) _emitRuntimeEvent({ event_type: "perception_world_state_updated", source_runtime: "perception", summary: "Perception world state ticked", payload: { jenna_availability: _perceptionContext.worldState?.jenna?.availability ?? "unknown" } });
       await _tickWorldModel(now);
+      await _tickCognitive(now);
       await romanticSurprises?.tick?.({
         companionId: getScope().companionId, customerId: getScope().customerId, now,
         homeostasisContext: _homeostasisContext, identityContext: _identityContext,
@@ -990,6 +1019,7 @@ function createLifeRuntime({
         quietHours: { active: (now.getHours() >= 22 || now.getHours() < 7) },
         giveSpace: Boolean(_consequenceContext?.suppression?.giveSpace),
         userAvailability: { busy: Boolean((await _refreshAlivePresence().catch(() => null))?.userBusy) },
+        cognitiveContext: _cognitiveContext,
       }).catch(err => logger?.warn?.("[life-runtime] romantic surprise tick failed", { error: err?.message }));
       _romanticSurpriseStatus = await romanticSurprises?.getStatus?.(getScope()).catch(() => null);
       if (_fulfillmentContext?.outcome) _emitRuntimeEvent({ event_type: _fulfillmentContext.outcome === "SUCCESS" ? "fulfillment_succeeded" : (_fulfillmentContext.outcome === "FAILED" ? "fulfillment_failed" : "fulfillment_deferred"), source_runtime: "fulfillment", summary: "Fulfillment outcome recorded", payload: { outcome: _fulfillmentContext.outcome, strategy: _fulfillmentContext.strategy } });
@@ -1026,6 +1056,7 @@ function createLifeRuntime({
     healthTracker.report("narrativeIdentity", narrativeIdentity ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("perception", perception ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("worldModel", worldModel ? "healthy" : "degraded", "runtime_checked");
+    healthTracker.report("cognitive", cognitiveRt ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("diagnostics", diagnosticRuntime ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("selfConsistency", selfConsistencyMonitor ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("innerLife", "degraded", "not_owned_by_life_runtime");
@@ -1135,6 +1166,7 @@ function createLifeRuntime({
       narrativeIdentity: narrativeIdentity ? narrativeIdentity.getStatus() : null,
       perception: perception ? perception.getStatus() : null,
       worldModel: worldModel ? worldModel.getStatus() : null,
+      cognitive: cognitiveRt ? cognitiveRt.getStatus() : null,
       affectiveDecision: affectiveDecision.getStatus(),
       evidenceIntegrity: evidenceIntegrity.getStatus(),
       selfInspection: selfInspection.getStatus(),

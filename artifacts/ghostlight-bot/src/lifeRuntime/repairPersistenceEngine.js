@@ -100,7 +100,7 @@ function createRepairPersistenceEngine({ consequenceStore, logger = null, discor
     return { acknowledged, forcedReply: false };
   }
 
-  async function tick({ companionId, customerId, now = new Date(), giveSpace = false, quietHoursActive = null, outboundEnabled = enabled(), channel: tickChannel = null, channelId: tickChannelId = "" } = {}) {
+  async function tick({ companionId, customerId, now = new Date(), giveSpace = false, quietHoursActive = null, outboundEnabled = enabled(), channel: tickChannel = null, channelId: tickChannelId = "", cognitiveContext = null } = {}) {
     await evaluateActive({ companionId, customerId, now });
     const active = await consequenceStore?.getActive?.({ companionId, customerId }).catch(() => []) || [];
     let sent = 0, blocked = 0, pending = 0;
@@ -114,6 +114,12 @@ function createRepairPersistenceEngine({ consequenceStore, logger = null, discor
       else if (quietHoursActive ?? isQuietHours(now, quietHours)) reason = "blocked_by_quiet_hours";
       else if (!outboundEnabled) reason = "disabled";
       else if (fm.lastSentAt && now.getTime() - ms(fm.lastSentAt) < RECENT_SENT_MS) reason = "recently_sent";
+      // Cognitive runtime encouragement: if deliberation recommends repair, reduce blocking threshold
+      // (does not force send — still subject to all other gates)
+      if (cognitiveContext?.recommendations?.encourageRepair && reason === "recently_sent") {
+        reason = null; // deliberation deems the moment right despite recent send
+      }
+
       const content = buildMessage(c);
       if (!reason && !messageStyleOk(content)) reason = "message_style";
       if (reason) { await _patch(companionId, customerId, c, { ...fm, blockedReason: reason, pending: true }, now); blocked++; continue; }

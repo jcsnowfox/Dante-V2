@@ -107,9 +107,16 @@ function createFulfillmentRuntime({
     homeostasisContext = null,
     identityContext    = null,
     fulfillContext     = {},
+    cognitiveContext   = null,
   } = {}) {
     if (!companionId) return;
     _lastTickAt = now;
+
+    // Cognitive runtime gate: if deliberation concluded outreach should be suppressed, skip proactive actions
+    if (cognitiveContext?.recommendations?.suppressFulfillmentOutreach) {
+      _updateFulfillmentContext({ outcome: "BLOCKED", needType: null, strategy: "cognitive_restraint" });
+      return;
+    }
 
     // ── 1. Find pressured needs to address ─────────────────────────────────
     const pressuredNeeds = homeostasisContext?.pressuredNeeds ?? [];

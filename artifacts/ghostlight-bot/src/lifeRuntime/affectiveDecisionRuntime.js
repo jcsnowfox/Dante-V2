@@ -71,10 +71,30 @@ function createAffectiveDecisionRuntime({ config = {}, logger = null, ledger = n
     customerId = "",
     now = new Date(),
     sourceEventIds = [],
+    cognitiveContext = null,
   } = {}) {
     if (!DECISION_TYPES.includes(decisionType)) {
       logger?.warn("[affective-decision] unknown decisionType", { decisionType });
       return _unknown(decisionType, companionId, customerId, now);
+    }
+
+    // Cognitive runtime veto: if deliberation concluded restraint, block outbound action
+    if (cognitiveContext?.restraintActive && cognitiveContext?.recommendations?.forAffectiveDecision) {
+      const cogOutcome = cognitiveContext.recommendations.forAffectiveDecision;
+      if (cogOutcome === "blocked" || cogOutcome === "delay" || cogOutcome === "suppress") {
+        return {
+          decision_type: decisionType,
+          outcome: cogOutcome,
+          confidence: cognitiveContext.confidence ?? 0.80,
+          reasons: ["cognitive_restraint"],
+          blocking_reasons: ["cognitive_restraint"],
+          supporting_votes: [],
+          opposing_votes: [],
+          chosen_action: null,
+          created_at: (now instanceof Date ? now : new Date(now)).toISOString(),
+          source: "cognitive_runtime",
+        };
+      }
     }
 
     const ctx = buildDecisionContext({ ...context, now });

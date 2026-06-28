@@ -20,10 +20,11 @@
  * that shapes behaviour, not content to quote or explain unprompted.
  */
 
-const { buildConsequencePrelude }   = require("./consequencePreludeBuilder");
-const { buildIdentitySignal }       = require("./identityPreludeBuilder");
-const { buildFulfillmentSignal }    = require("./fulfillmentPreludeBuilder");
-const { reconcilePresencePrelude }  = require("./preludeReconciler");
+const { buildConsequencePrelude }      = require("./consequencePreludeBuilder");
+const { buildIdentitySignal }          = require("./identityPreludeBuilder");
+const { buildFulfillmentSignal }       = require("./fulfillmentPreludeBuilder");
+const { reconcilePresencePrelude }     = require("./preludeReconciler");
+const { buildCognitivePreludeSignal }  = require("./cognitivePreludeBuilder");
 
 function buildLifePrelude(state = {}) {
   if (!state) return null;
@@ -46,6 +47,7 @@ function buildLifePrelude(state = {}) {
     narrativeContext    = null,
     perceptionContext   = null,
     worldModelContext   = null,
+    cognitiveContext    = null,
   } = state;
 
   const lines = [];
@@ -155,6 +157,14 @@ function buildLifePrelude(state = {}) {
       consequenceContext:   consequenceContext ?? null,
     });
     if (presenceLine) lines.push(presenceLine);
+  }
+
+  // Cognitive deliberation signal — at most ONE compact line when deliberation produced
+  // a notable outcome (restraint, conflict, uncertainty). Never surfaces "no_action"
+  // or "private_thought" without a conflict. Never reveals the cognitive runtime exists.
+  if (cognitiveContext) {
+    const cogLine = buildCognitivePreludeSignal(cognitiveContext);
+    if (cogLine) lines.push(cogLine);
   }
 
   // Relationship signal — at most one compact line, never raw scores
