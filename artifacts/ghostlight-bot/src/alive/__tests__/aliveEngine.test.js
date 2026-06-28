@@ -33,7 +33,7 @@ describe("aliveEngine", () => {
       intentionQueue,
       interactionPresenceStore: fakePresence,
     });
-    const result = await engine.assess(new Date());
+    const result = await engine.assess(new Date("2025-06-25T12:00:00Z"));
     // absence = Infinity, should enqueue
     assert.equal(result.enqueued, true);
     delete process.env.ALIVE_ENABLED;
@@ -58,7 +58,7 @@ describe("aliveEngine", () => {
   test("daily cap enforced", async () => {
     process.env.ALIVE_ENABLED = "true";
     const { eventsStore, intentionQueue } = makeStores();
-    const now = new Date();
+    const now = new Date("2025-06-25T12:00:00Z");
     // Log 3 intention_created events
     await eventsStore.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "t1" });
     await eventsStore.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "t2" });
@@ -77,7 +77,7 @@ describe("aliveEngine", () => {
   test("cooldown prevents rapid successive enqueues", async () => {
     process.env.ALIVE_ENABLED = "true";
     const { eventsStore, intentionQueue } = makeStores();
-    const now = new Date();
+    const now = new Date("2025-06-25T12:00:00Z");
     await eventsStore.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "recent" });
     const engine = createAliveEngine({
       config: { memory: { companionId: "dante", userScope: "jenna" }, alive: { cooldownMs: 2 * 60 * 60 * 1000 } },
@@ -93,7 +93,7 @@ describe("aliveEngine", () => {
   test("absence guard suppresses when user recently active", async () => {
     process.env.ALIVE_ENABLED = "true";
     const { eventsStore, intentionQueue } = makeStores();
-    const now = new Date();
+    const now = new Date("2025-06-25T12:00:00Z");
     const fakePresence = {
       listPresence: async () => [{ last_user_message_at: new Date(now.getTime() - 10 * 60 * 1000).toISOString() }],
     };
@@ -122,7 +122,7 @@ describe("aliveEngine", () => {
       intentionQueue: createIntentionQueueStore({ config: {} }),
     });
     let threw = false;
-    try { await engine.assess(new Date()); } catch { threw = true; }
+    try { await engine.assess(new Date("2025-06-25T12:00:00Z")); } catch { threw = true; }
     assert.equal(threw, false);
     delete process.env.ALIVE_ENABLED;
   });
