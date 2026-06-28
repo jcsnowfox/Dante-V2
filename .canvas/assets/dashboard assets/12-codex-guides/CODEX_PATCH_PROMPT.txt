@@ -1,0 +1,16 @@
+Correction for dashboard redesign:
+
+Use this asset pack as the source of UI assets. Install it under `artifacts/ghostlight-bot/assets/nordic-dashboard/` and reference assets via `/assets/nordic-dashboard/...`.
+
+Hard rules:
+- Keep the existing left sidebar.
+- Use uploaded neon icons for UI icons.
+- Use the CSS tokens/classes from this pack or adapt them to existing adminStyles.js.
+- Use live generatedImages/gallery/media data for Dante's Gallery carousel.
+- Do not hard-code Dante/Jenna photos into the dashboard.
+- Do not use static local images as Gallery photos.
+- Use static recipe photos only inside the Viking Age Recipes section.
+- Use the corrected Battle Rhythm JSON.
+- No dead buttons.
+- No backend/schema/auth changes.
+- Run focused tests, build, full tests if possible, and git diff --check.
