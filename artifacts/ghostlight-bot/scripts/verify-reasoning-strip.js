@@ -21,6 +21,8 @@ const {
   buildReply,
   stripReasoningMarkup,
   extractReasoningMarkup,
+  cleanModelReplyText,
+  stripRuntimeLogLeak,
 } = require("../src/chat/pipeline/buildReply");
 const { buildInternalThoughtInstruction } = require("../src/chat/prompt/buildSystemPrompt");
 const { formatCuratorSourceEvents } = require("../src/memory/curator");
@@ -79,6 +81,24 @@ const replyWithThought = buildReply({
 check("buildReply strips tags from visible content", replyWithThought.content === "Hey, good to see you!");
 check("buildReply carries reply.internalThought", replyWithThought.internalThought === "they seem stressed about work");
 check("buildReply content has no reasoning tag", !REASONING_TAG_RE.test(replyWithThought.content));
+
+const leakedRuntimeText = [
+  "I see what you've got there. Let's keep it clean.",
+  "[2026-06-28T07:17:40.616Z] [info] [app] Starting Ghostlight nodeEnv=\"production\"",
+  "Starting Container",
+  "[music:embedding] request { provider: 'openrouter' }",
+].join("\n");
+check("stripRuntimeLogLeak keeps visible reply before runtime logs", stripRuntimeLogLeak(leakedRuntimeText) === "I see what you've got there. Let's keep it clean.");
+check("cleanModelReplyText strips runtime logs", !cleanModelReplyText(leakedRuntimeText, {}).includes("Starting Ghostlight"));
+
+const replyWithRuntimeLeak = buildReply({
+  mode: { name: "default" },
+  input: { content: "hi" },
+  recentHistory: [],
+  memories: [],
+  modelOutput: { provider: "openai", text: leakedRuntimeText },
+});
+check("buildReply strips runtime logs from visible content", replyWithRuntimeLeak.content === "I see what you've got there. Let's keep it clean.");
 
 const replyNoThought = buildReply({
   mode: { name: "default" },

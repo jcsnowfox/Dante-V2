@@ -48,7 +48,9 @@ function renderHomePage({ stats, theme = "light", helpers }) {
   const updateNotice = stats.updateNotice || null;
   const statuses = Array.isArray(stats.statuses) ? stats.statuses : [];
   const featureStates = Array.isArray(stats.featureStates) ? stats.featureStates.filter(Boolean) : [];
-  const recentDecisions = Array.isArray(stats.recentDecisions) ? stats.recentDecisions.filter(Boolean) : [];
+  const recentDecisions = (Array.isArray(stats.recentDecisions) ? stats.recentDecisions.filter(Boolean) : [])
+    .filter((item) => item.status === "fired" || item.status === "failed" || (item.status === "skipped" && ["low_confidence", "hold_back"].includes(item.reason)))
+    .slice(0, 3);
   const recentJournals = Array.isArray(stats.recentJournals) ? stats.recentJournals.filter(Boolean) : [];
   const recentImages = Array.isArray(stats.recentImages) ? stats.recentImages.filter(Boolean) : [];
   const recentInnerLifeEntries = Array.isArray(stats.recentInnerLifeEntries) ? stats.recentInnerLifeEntries.filter(Boolean) : [];

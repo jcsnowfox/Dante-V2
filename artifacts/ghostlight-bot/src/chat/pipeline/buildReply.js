@@ -163,6 +163,20 @@ function extractReasoningMarkup(text) {
   return thoughts.join("\n\n").trim();
 }
 
+
+const RUNTIME_LOG_LEAK_PATTERN = /(?:^|\n)\s*(?:You reached the start of the range|Starting Container|\[norwegian\] source policy loaded|>\s*@workspace\/[^\n]+\s+start\b|\[launcher\] starting ghostlight-bot|\[music:embedding\]|\[memory-qdrant\]|\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]\s+\[(?:debug|info|warn|error)\]|provider:\s*['"]openrouter['"]|model:\s*['"]openai\/text-embedding-3-small['"])/i;
+
+function stripRuntimeLogLeak(text) {
+  const value = String(text || "");
+  const match = value.match(RUNTIME_LOG_LEAK_PATTERN);
+
+  if (!match) {
+    return value.trim();
+  }
+
+  return value.slice(0, match.index).trim();
+}
+
 function isUnsafeProviderText(text) {
   return /the request was rejected because it was considered high risk|rejected because it was considered|considered high risk|flagged (by the safety system|as high risk)|moderation rejected|provider rejected|raw stack|\{\s*"error"/i.test(String(text || ""));
 }
@@ -171,7 +185,7 @@ function cleanModelReplyText(text, input) {
   if (isUnsafeProviderText(text)) {
     return selectTinyFallback();
   }
-  const originalText = stripReasoningMarkup(text);
+  const originalText = stripRuntimeLogLeak(stripReasoningMarkup(text));
   const strippedText = stripMirroredUserGifUrls(originalText, input);
 
   if (originalText && !strippedText) {
@@ -246,4 +260,5 @@ module.exports = {
   stripReasoningMarkup,
   extractReasoningMarkup,
   isUnsafeProviderText,
+  stripRuntimeLogLeak,
 };

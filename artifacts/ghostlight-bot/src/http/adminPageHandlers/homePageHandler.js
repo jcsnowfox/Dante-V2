@@ -292,9 +292,9 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
             .filter((item) => item && ["failed", "skipped"].includes(item.status))
             .map((item) => ({ ...item, why: item.reason || "Heartbeat did not run.", executorType: item.executorType || "" })),
         ]
-          .filter((item) => item && (item.status === "fired" || ["failed", "skipped"].includes(item.status)))
+          .filter((item) => item && (item.status === "fired" || item.status === "failed" || (item.status === "skipped" && ["low_confidence", "hold_back"].includes(item.reason))))
           .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
-          .slice(0, 5)
+          .slice(0, 3)
           .map((item) => {
             const matchedAction = heartbeatActions.find((action) => action.actionId === item.actionId);
             const typeLabels = {
