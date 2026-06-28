@@ -34,6 +34,7 @@ const { handleCompanionAvatarActions } = require("./actions/companionAvatarActio
 const { handleAdminMaintenanceActions } = require("./actions/adminMaintenanceActions");
 const { handleAdminExportActions } = require("./actions/adminExportActions");
 const { handleSituationalAwarenessActions } = require("./actions/situationalAwarenessActions");
+const { NORDIC_DASHBOARD_ASSET_BASE, getNordicDashboardAssetPath } = require("./nordicDashboardAssets");
 const {
   buildMemoryExportPayload,
   buildMemoryImportRecords,
@@ -170,6 +171,11 @@ function getAssetPath(assetPathname) {
 
   if (!normalizedPath || normalizedPath.startsWith("..") || path.isAbsolute(normalizedPath)) {
     return null;
+  }
+
+  if (normalizedPath === NORDIC_DASHBOARD_ASSET_BASE.slice("/assets/".length) || normalizedPath.startsWith(`${NORDIC_DASHBOARD_ASSET_BASE.slice("/assets/".length)}/`)) {
+    const aliasRelativePath = normalizedPath.slice(NORDIC_DASHBOARD_ASSET_BASE.slice("/assets/".length).length).replace(/^\/+/, "");
+    return getNordicDashboardAssetPath(aliasRelativePath);
   }
 
   return path.join(process.cwd(), "assets", normalizedPath);

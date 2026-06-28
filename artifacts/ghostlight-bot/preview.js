@@ -171,6 +171,8 @@ function renderAdminPage({ currentSection, pageBody, theme, pagePath }) {
 
 // ----- static asset serving -----
 const ASSET_DIR = path.join(__dirname, "assets");
+const NORDIC_DASHBOARD_SOURCE_DIR = path.resolve(__dirname, "..", "..", ".canvas", "assets", "dashboard assets");
+const NORDIC_DASHBOARD_ALIAS = "nordic-dashboard";
 const ASSET_TYPES = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
@@ -182,8 +184,12 @@ const ASSET_TYPES = {
 
 async function serveAsset(pathname, res) {
   const rel = pathname.slice("/assets/".length);
-  const abs = path.join(ASSET_DIR, path.normalize(rel));
-  if (!abs.startsWith(ASSET_DIR)) {
+  const normalizedRel = path.normalize(rel);
+  const isNordicDashboardAlias = normalizedRel === NORDIC_DASHBOARD_ALIAS || normalizedRel.startsWith(`${NORDIC_DASHBOARD_ALIAS}${path.sep}`);
+  const rootDir = isNordicDashboardAlias ? NORDIC_DASHBOARD_SOURCE_DIR : ASSET_DIR;
+  const rootRelative = isNordicDashboardAlias ? normalizedRel.slice(NORDIC_DASHBOARD_ALIAS.length).replace(/^[/\\]+/, "") : normalizedRel;
+  const abs = path.join(rootDir, rootRelative);
+  if (!abs.startsWith(rootDir)) {
     res.writeHead(403);
     res.end("Forbidden");
     return;

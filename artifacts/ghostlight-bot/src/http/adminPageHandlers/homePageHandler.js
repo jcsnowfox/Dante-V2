@@ -207,12 +207,22 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
         journalCount,
         warningText: "",
         warnings,
+        companion: {
+          name: appSettings["chat.promptBlocks.personaName"] || innerContext.config.chat?.personaName || "Dante",
+          avatarUrl: appSettings["chat.promptBlocks.personaAvatarUrl"] || "",
+          profile: appSettings["chat.promptBlocks.personaProfile"] || "",
+        },
+        channelStatus: innerContext.config.discord?.channelId || innerContext.config.discord?.guildId ? "Configured" : "Unconfigured",
+        voiceStatus: canGenerateAudio(innerContext.config) ? "Configured" : "Unavailable",
+        imageGenerationStatus: innerContext.config.imageGeneration?.enabled ? "Enabled" : "Off",
         updateNotice,
         statuses: [
           {
             label: "Chat model",
             value: innerContext.config.llm?.chat?.model || innerContext.config.llm?.chatModel || innerContext.config.openai?.chatModel || "Not set",
-            icon: "chat_model",
+            icon: "companion",
+            path: "/admin/companion",
+            extra: { companionTab: "models" },
             helpText: "Current default chat model.",
           },
           {
@@ -220,7 +230,8 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
             value: dailyThreadAutomation?.enabled
               ? `${dailyThreadAutomation.scheduleTime}${dailyThreadAutomation.timezone ? ` (${dailyThreadAutomation.timezone})` : ""}`
               : "Off",
-            icon: dailyThreadAutomation?.enabled ? "daily_enabled" : "daily_disabled",
+            icon: "automation",
+            path: "/admin/schedules/daily-thread",
             helpText: dailyThreadAutomation?.enabled
               ? "Daily thread is on."
               : "Daily thread is off.",
@@ -229,7 +240,22 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
             label: "Heartbeat",
             value: innerContext.config.heartbeat?.activityMode === "off" ? "Off" : (innerContext.config.heartbeat?.activityMode || "normal"),
             icon: "heartbeat",
+            path: "/admin/heartbeat/timing",
             helpText: "Current heartbeat mode.",
+          },
+          {
+            label: "Memory",
+            value: `${allMemories.filter((memory) => memory.active).length} active`,
+            icon: "memories",
+            path: "/admin/memory/library",
+            helpText: "Active memory records available to Dante.",
+          },
+          {
+            label: "Emotional state",
+            value: innerContext.config.emotionalArc?.enabled === false ? "Off" : "Available",
+            icon: "emotionalArc",
+            path: "/admin/emotional-arc",
+            helpText: "Emotional arc dashboard status.",
           },
         ],
         featureStates: [

@@ -1,7 +1,7 @@
 {
   "name": "dante-v2",
   "version": "2.0.0",
-  "description": "Dante V2 — Discord AI companion bot workspace",
+  "description": "Dante V2 \u2014 Discord AI companion bot workspace",
   "private": true,
   "license": "UNLICENSED",
   "devDependencies": {
@@ -144,6 +144,7 @@
     "verify:voice-guard-dante-first": "pnpm --dir artifacts/ghostlight-bot run verify:voice-guard-dante-first",
     "verify:repair-trigger-precision": "pnpm --dir artifacts/ghostlight-bot run verify:repair-trigger-precision",
     "verify:adult-private-no-moralizing": "pnpm --dir artifacts/ghostlight-bot run verify:adult-private-no-moralizing",
-    "verify:voice-guard-no-loop": "pnpm --dir artifacts/ghostlight-bot run verify:voice-guard-no-loop"
+    "verify:voice-guard-no-loop": "pnpm --dir artifacts/ghostlight-bot run verify:voice-guard-no-loop",
+    "test": "pnpm --dir artifacts/ghostlight-bot test"
   }
 }
