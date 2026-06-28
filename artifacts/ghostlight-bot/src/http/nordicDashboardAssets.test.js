@@ -8,9 +8,11 @@ const test = require("node:test");
 const {
   NORDIC_DASHBOARD_ASSET_BASE,
   NORDIC_DASHBOARD_ASSETS,
+  NORDIC_DASHBOARD_SOURCE_RELATIVE_PATH,
   NORDIC_DASHBOARD_ICON_BASE,
-  NORDIC_PENDING_MANUAL_ASSETS,
   NORDIC_ICON_FALLBACKS,
+  hasNordicDashboardSourceDir,
+  getNordicDashboardAssetPath,
   isNordicDashboardEnabled,
   resolveNordicIcon,
 } = require("./nordicDashboardAssets");
@@ -27,7 +29,12 @@ const {
 
 test("nordic dashboard assets are manifest-backed and feature-flagged off by default", () => {
   assert.equal(NORDIC_DASHBOARD_ASSET_BASE, "/assets/nordic-dashboard");
-  assert.equal(NORDIC_DASHBOARD_ICON_BASE, "/assets/nordic-dashboard/icons");
+  assert.equal(NORDIC_DASHBOARD_ICON_BASE, "/assets/nordic-dashboard/01-icons/transparent-128");
+  assert.equal(NORDIC_DASHBOARD_SOURCE_RELATIVE_PATH, path.join(".canvas", "assets", "dashboard assets"));
+  assert.equal(hasNordicDashboardSourceDir(), true);
+  assert.match(getNordicDashboardAssetPath("01-icons/transparent-128/journals.png"), /\.canvas.*dashboard assets.*01-icons.*journals\.png$/);
+  assert.equal(getNordicDashboardAssetPath("../README.md"), null);
+  assert.equal(getNordicDashboardAssetPath("/../README.md"), null);
   assert.equal(isNordicDashboardEnabled({}), false);
   assert.equal(isNordicDashboardEnabled({ NEXT_PUBLIC_NORDIC_DASHBOARD: "true" }), true);
   assert.equal(isNordicDashboardEnabled({ NORDIC_DASHBOARD_ENABLED: "1" }), true);
@@ -37,24 +44,47 @@ test("nordic dashboard assets are manifest-backed and feature-flagged off by def
   assert.equal(manifest.basePath, NORDIC_DASHBOARD_ASSET_BASE);
   assert.equal(manifest.iconBasePath, NORDIC_DASHBOARD_ICON_BASE);
 
-  assert.deepEqual(manifest.assets, {});
-  assert.equal(
-    NORDIC_PENDING_MANUAL_ASSETS.auroraVikingDashboardReference,
-    manifest.pendingManualAssets.auroraVikingDashboardReference.expectedStaticUrl,
-  );
-  assert.match(manifest.pendingManualAssets.auroraVikingDashboardReference.usageNotes, /Pending manual upload/);
-  assert.equal(manifest.pendingManualAssets.auroraVikingDashboardReference.decorative, true);
-  assert.equal(NORDIC_DASHBOARD_ASSETS.manifest, `${NORDIC_DASHBOARD_ASSET_BASE}/manifest.json`);
+  assert.equal(manifest.sourcePath, ".canvas/assets/dashboard assets/");
+  assert.equal(manifest.sourceServedByAlias, true);
+  assert.equal(manifest.icons.journal, `${NORDIC_DASHBOARD_ICON_BASE}/journals.png`);
+  assert.equal(manifest.icons.mentionUser, `${NORDIC_DASHBOARD_ICON_BASE}/mention-user.png`);
+  assert.equal(NORDIC_DASHBOARD_ASSETS.manifest, `${NORDIC_DASHBOARD_ASSET_BASE}/asset_manifest.json`);
 });
 
 test("nordic icon mapping resolves semantic names and missing icons gracefully", () => {
+  const expected = {
+    mentionUser: "mention-user.png",
+    spotifySong: "spotify-song.png",
+    gif: "gifs.png",
+    spotifyPlaylist: "spotify-playlist.png",
+    voiceNote: "voice-notes.png",
+    webSearch: "websearch.png",
+    journal: "journals.png",
+    library: "library.png",
+    schedules: "schedules.png",
+    tools: "tools.png",
+    emotionalArc: "emotional-arc.png",
+    feedbackLearning: "feedback-learning.png",
+    heartbeat: "heartbeat.png",
+    memory: "memory.png",
+    relationalState: "relational-state.png",
+    companion: "companion.png",
+    favicon: "favicon.png",
+  };
+  for (const [semanticName, filename] of Object.entries(expected)) {
+    const icon = resolveNordicIcon(semanticName);
+    assert.equal(icon.src, `${NORDIC_DASHBOARD_ICON_BASE}/${filename}`);
+    assert.equal(icon.uploaded, true);
+  }
   assert.equal(resolveNordicIcon("journal").fallbackKind, NORDIC_ICON_FALLBACKS.journal);
   assert.equal(resolveNordicIcon("spotifySong").fallbackKind, "music");
   assert.equal(resolveNordicIcon("missing-icon-name").fallbackKind, NORDIC_ICON_FALLBACKS.settings);
+  assert.equal(resolveNordicIcon("journal", { sourceAvailable: false }).src, "");
 
   const renderedKnown = renderNordicIcon("journal", { alt: "Journal" });
   assert.match(renderedKnown, /class="nordic-icon"/);
-  assert.match(renderedKnown, /aria-label="Journal"/);
+  assert.match(renderedKnown, /src="\/assets\/nordic-dashboard\/01-icons\/transparent-128\/journals.png"/);
+  assert.match(renderedKnown, /alt="Journal"/);
 
   const renderedMissing = renderNordicIcon("missing-icon-name", { decorative: true });
   assert.match(renderedMissing, /nordic-icon/);

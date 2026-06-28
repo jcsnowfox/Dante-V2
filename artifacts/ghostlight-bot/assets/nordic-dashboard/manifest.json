@@ -1,24 +1,36 @@
 {
-  "version": 3,
+  "version": 4,
   "basePath": "/assets/nordic-dashboard",
-  "phase": "phase-2-design-system-binary-free",
-  "assets": {},
-  "pendingManualAssets": {
-    "auroraVikingDashboardReference": {
-      "category": "reference",
-      "expectedStaticUrl": "/assets/nordic-dashboard/reference/aurora-viking-dashboard-reference.png",
-      "installedFilename": "aurora-viking-dashboard-reference.png",
-      "originalSourcePath": ".canvas/assets/asset_-1753950970.png",
-      "usageNotes": "Pending manual upload outside the Codex PR flow; do not use as live gallery content or companion portrait.",
-      "decorative": true
-    }
+  "phase": "phase-2-5-dashboard-asset-linking-binary-free",
+  "sourcePath": ".canvas/assets/dashboard assets/",
+  "sourceServedByAlias": true,
+  "assets": {
+    "manifest": "/assets/nordic-dashboard/asset_manifest.json",
+    "iconMap": "/assets/nordic-dashboard/01-icons/icon-map.json"
   },
-  "iconBasePath": "/assets/nordic-dashboard/icons",
-  "icons": {},
-  "pendingManualIconAssets": {},
+  "iconBasePath": "/assets/nordic-dashboard/01-icons/transparent-128",
+  "icons": {
+    "mentionUser": "/assets/nordic-dashboard/01-icons/transparent-128/mention-user.png",
+    "spotifySong": "/assets/nordic-dashboard/01-icons/transparent-128/spotify-song.png",
+    "gif": "/assets/nordic-dashboard/01-icons/transparent-128/gifs.png",
+    "spotifyPlaylist": "/assets/nordic-dashboard/01-icons/transparent-128/spotify-playlist.png",
+    "voiceNote": "/assets/nordic-dashboard/01-icons/transparent-128/voice-notes.png",
+    "webSearch": "/assets/nordic-dashboard/01-icons/transparent-128/websearch.png",
+    "journal": "/assets/nordic-dashboard/01-icons/transparent-128/journals.png",
+    "library": "/assets/nordic-dashboard/01-icons/transparent-128/library.png",
+    "schedules": "/assets/nordic-dashboard/01-icons/transparent-128/schedules.png",
+    "tools": "/assets/nordic-dashboard/01-icons/transparent-128/tools.png",
+    "emotionalArc": "/assets/nordic-dashboard/01-icons/transparent-128/emotional-arc.png",
+    "feedbackLearning": "/assets/nordic-dashboard/01-icons/transparent-128/feedback-learning.png",
+    "heartbeat": "/assets/nordic-dashboard/01-icons/transparent-128/heartbeat.png",
+    "memory": "/assets/nordic-dashboard/01-icons/transparent-128/memory.png",
+    "relationalState": "/assets/nordic-dashboard/01-icons/transparent-128/relational-state.png",
+    "companion": "/assets/nordic-dashboard/01-icons/transparent-128/companion.png",
+    "favicon": "/assets/nordic-dashboard/01-icons/transparent-128/favicon.png"
+  },
   "notes": [
-    "This manifest is intentionally binary-free for Codex PR compatibility.",
-    "PNG/JPG/WebP assets must be uploaded manually outside the Codex PR flow before being listed under assets or icons.",
-    "Semantic icons fall back to the existing admin icon library until uploaded icon assets are manually installed."
+    "This manifest remains binary-free for Codex PR compatibility.",
+    "The public alias serves only the existing .canvas/assets/dashboard assets/ source folder.",
+    "Semantic icons fall back to the existing admin icon library if the source folder or a requested icon is unavailable."
   ]
 }

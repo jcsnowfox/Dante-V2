@@ -17,6 +17,15 @@ const {
   normalizeCustomReactionEmojis,
 } = require("../../reactions/customEmojiPalette");
 const { listClockPresets } = require("../../temporal/clockPresets");
+const { NORDIC_DASHBOARD_ASSET_BASE } = require("../nordicDashboardAssets");
+const {
+  renderBattleRhythmDayCard,
+  renderNordicDivider,
+  renderNordicIcon,
+  renderNordicJournalCard,
+  renderNordicPill,
+  renderTravelChecklistItem,
+} = require("./nordicDashboardComponents");
 
 const BEHAVIOUR_TABS = Object.freeze([
   { key: "models", label: "Default Models", path: "/admin/companion", extra: { companionTab: "models" } },
@@ -42,274 +51,219 @@ function normalizeCompanionTab(value) {
   return COMPANION_TABS.some((tab) => tab.key === key) ? key : "identity";
 }
 
+const BATTLE_RHYTHM_DAYS = Object.freeze([
+  { day: "Monday", training: "Strength", meal: "Carnivore" },
+  { day: "Tuesday", training: "Recovery", meal: "Carnivore" },
+  { day: "Wednesday", training: "Cardio", meal: "Controlled carb / torch day" },
+  { day: "Thursday", training: "Recovery / reset", meal: "Carnivore" },
+  { day: "Friday", training: "Endurance", meal: "Carnivore" },
+  { day: "Saturday", training: "Active recovery / torch/refuel support", meal: "Controlled carb / torch day" },
+  { day: "Sunday", training: "Full reset / flexible day", meal: "Flexible / Irish fry-up / reset" },
+]);
+
+const VIKING_RECIPE_CARDS = Object.freeze([
+  { title: "Seared Salmon with Roasted Roots", image: "05-recipe-photos/seared-salmon-roasted-roots.png", tags: ["Protein", "Roots"], time: "35 min", label: "Training" },
+  { title: "Lamb and Root Stew", image: "05-recipe-photos/lamb-root-stew.png", tags: ["Protein", "Slow"], time: "75 min", label: "Refuel" },
+  { title: "Skyr and Berries Bowl", image: "05-recipe-photos/skyr-berries-honey.png", tags: ["Rest", "Simple"], time: "10 min", label: "Recovery" },
+]);
+
+const TRAVEL_SAGA_CARDS = Object.freeze([
+  { title: "Fjord Crossing", location: "Norway", state: "Wishlist", description: "A future route for cliffs, cold water, and aurora watch points." },
+  { title: "Old Town Lantern Walk", location: "City chapter", state: "Planned", description: "A compact adventure shell for museums, food stops, and quiet streets." },
+  { title: "Coastal Fortress Day", location: "North Atlantic", state: "Wishlist", description: "Map pins, notes, and concierge prompts can live here later." },
+]);
+
+const TRAVEL_CHECKLIST_ITEMS = Object.freeze([
+  { label: "Choose destination", detail: "Wishlist", checked: true },
+  { label: "Save preferences", detail: "Food, pace, accessibility", checked: false },
+  { label: "Build itinerary", detail: "Concierge phase", checked: false },
+]);
+
+function assetUrl(relativePath = "") {
+  return `${NORDIC_DASHBOARD_ASSET_BASE}/${String(relativePath).replace(/^\/+/, "")}`;
+}
+
 function renderHomePage({ stats, theme = "light", helpers }) {
-  const { escapeHtml, buildAdminLocation, renderIconImage, withThemeField } = helpers;
+  const { escapeHtml, buildAdminLocation, withThemeField } = helpers;
   const warnings = Array.isArray(stats.warnings) ? stats.warnings : [];
   const updateNotice = stats.updateNotice || null;
   const statuses = Array.isArray(stats.statuses) ? stats.statuses : [];
   const featureStates = Array.isArray(stats.featureStates) ? stats.featureStates.filter(Boolean) : [];
   const recentDecisions = (Array.isArray(stats.recentDecisions) ? stats.recentDecisions.filter(Boolean) : [])
     .filter((item) => item.status === "fired" || item.status === "failed" || (item.status === "skipped" && ["low_confidence", "hold_back"].includes(item.reason)))
-    .slice(0, 3);
+    .slice(0, 4);
   const recentJournals = Array.isArray(stats.recentJournals) ? stats.recentJournals.filter(Boolean) : [];
   const recentImages = Array.isArray(stats.recentImages) ? stats.recentImages.filter(Boolean) : [];
   const recentInnerLifeEntries = Array.isArray(stats.recentInnerLifeEntries) ? stats.recentInnerLifeEntries.filter(Boolean) : [];
-
-  const INNER_LIFE_TYPE_LABELS = {
-    private_thought: "Private Thought",
-    unsent_thought: "Unsent Thought",
-    between_message_note: "Between Messages",
-    journal_entry: "Journal",
-    dream: "Dream",
-    micro_repair: "Micro Repair",
-    little_ritual: "Little Ritual",
-    habit_marker: "Habit",
-    taste_marker: "Taste",
-    mood_carryover: "Mood",
-    private_lexicon: "Lexicon",
-    repeated_tell: "Repeated Tell",
-    room_sense: "Room Sense",
-    almost_said: "Almost Said",
-    affection_residue: "Affection",
-    curiosity_seed: "Curiosity",
-  };
-  const INNER_LIFE_STATUS_LABELS = {
-    active: "Active",
-    used_in_prelude: "Used in prelude",
-    archived: "Archived",
-    expired: "Expired",
-  };
+  const companion = stats.companion || {};
   const timezone = String(stats.timezone || "").trim() || "UTC";
+  const now = new Date();
+  const todayIndex = now.getDay() === 0 ? 6 : now.getDay() - 1;
+  const currentRhythm = BATTLE_RHYTHM_DAYS[todayIndex];
+  const nextRhythm = BATTLE_RHYTHM_DAYS[(todayIndex + 1) % BATTLE_RHYTHM_DAYS.length];
+
   const formatHomeDate = (value) => {
-    if (!value) {
-      return "Unknown time";
-    }
-
+    if (!value) return "Unknown time";
     const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return String(value);
-    }
-
-    return new Intl.DateTimeFormat("en-GB", {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: timezone,
-    }).format(date);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: timezone }).format(date);
   };
   const formatHomeImageAspectStyle = (value) => {
     const match = String(value || "").trim().match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
-
-    if (!match) {
-      return "";
-    }
-
+    if (!match) return "";
     const width = Number(match[1]);
     const height = Number(match[2]);
-
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-      return "";
-    }
-
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return "";
     return ` style="--home-image-aspect:${escapeHtml(String(width / height))}"`;
   };
-  const recentImageTiles = recentImages.length
-    ? [...recentImages, ...recentImages].map((image, index) => [
-      `<a class="home-image-tile" href="${escapeHtml(buildAdminLocation({ path: `/admin/gallery/images/detail/${encodeURIComponent(image.imageId)}`, theme }))}"${index >= recentImages.length ? " aria-hidden=\"true\" tabindex=\"-1\"" : ""}${formatHomeImageAspectStyle(image.aspectRatio)}>`,
-      `<img src="${escapeHtml(image.previewUrl)}" alt="${escapeHtml(image.altText || "Recent generated image")}">`,
-      "</a>",
-    ].join("")).join("")
-    : "";
-  const recentJournalCards = recentJournals.length
-    ? [...recentJournals, ...recentJournals].map((entry, index) => [
-      `<a class="home-journal-tile" href="${escapeHtml(buildAdminLocation({ path: `/admin/journals/${encodeURIComponent(entry.entryId)}`, theme, extra: { journalPage: 1 } }))}"${index >= recentJournals.length ? " aria-hidden=\"true\" tabindex=\"-1\"" : ""}>`,
-      `<p class="home-journal-date">${escapeHtml(formatHomeDate(entry.createdAt))}</p>`,
-      `<div class="home-journal-excerpt journal-preview-prose">${renderJournalMarkdownPreview(entry.content, { escapeHtml, maxLines: 2, maxLength: 140, allowLinks: false })}</div>`,
-      "</a>",
-    ].join("")).join("")
-    : "";
+
   const actionIconByExecutor = {
-    send_check_in: "heartbeat_action_message",
-    send_message: "heartbeat_action_message",
-    send_journal_prompt: "heartbeat_action_journal",
-    send_gif: "heartbeat_action_gif",
-    start_thread: "heartbeat_action_thread",
+    send_check_in: "heartbeat",
+    send_message: "heartbeat",
+    send_journal_prompt: "journal",
+    send_gif: "gif",
+    start_thread: "automation",
   };
   const toolIconByName = {
     gif_search: "gif",
     web_search: "web_search",
-    generate_image: "images",
-    generate_audio: "audio",
-    spotify: "playlist",
-    spotify_curation: "playlist",
-    spotify_playback: "music",
+    generate_image: "gallery",
+    generate_audio: "voiceNote",
+    spotify: "spotifyPlaylist",
+    spotify_curation: "spotifyPlaylist",
+    spotify_playback: "spotifySong",
   };
   const getHomeDecisionIcon = (item) => {
-    if (item.status === "skipped") {
-      return "pause";
-    }
-
-    if (item.actionType === "journal" || item.executorType === "send_journal_prompt") {
-      return "heartbeat_action_journal";
-    }
-
+    if (item.status === "skipped") return "automation";
+    if (item.actionType === "journal" || item.executorType === "send_journal_prompt") return "journal";
     const firstTool = Array.isArray(item.enabledTools) ? item.enabledTools.find(Boolean) : "";
-
-    if (firstTool && toolIconByName[firstTool]) {
-      return toolIconByName[firstTool];
-    }
-
-    if (item.executorType === "send_gif") {
-      return "gif";
-    }
-
-    if (item.actionType === "thread") {
-      return "heartbeat_action_thread";
-    }
-
-    return actionIconByExecutor[item.executorType] || "heartbeat_action_message";
+    if (firstTool && toolIconByName[firstTool]) return toolIconByName[firstTool];
+    if (item.executorType === "send_gif") return "gif";
+    if (item.actionType === "thread") return "automation";
+    return actionIconByExecutor[item.executorType] || "heartbeat";
   };
 
-  return [
-    renderPageIntro({
-      title: "Home",
-      copy: "",
-    }),
-    updateNotice
-      ? [
-        "<section class=\"lite-panel page-frame home-update-notice\">",
-        "<div class=\"home-update-notice-copy\">",
-        updateNotice.eyebrow ? `<p class="stat-label">${escapeHtml(updateNotice.eyebrow)}</p>` : "",
-        `<h3>${escapeHtml(updateNotice.title || "Ghostlight has been updated")}</h3>`,
-        updateNotice.body ? `<p class="meta">${escapeHtml(updateNotice.body)}</p>` : "",
-        Array.isArray(updateNotice.links) && updateNotice.links.length
-          ? [
-            "<div class=\"quick-links\">",
-            ...updateNotice.links.map((link) => {
-              const href = link.href
-                ? String(link.href)
-                : buildAdminLocation({ path: link.path || "/admin", theme, extra: link.extra || {} });
-              const externalAttrs = link.href ? " target=\"_blank\" rel=\"noreferrer\"" : "";
-              return `<a class="pill" href="${escapeHtml(href)}"${externalAttrs}>${escapeHtml(link.label || "Open")}</a>`;
-            }),
-            "</div>",
-          ].join("")
-          : "",
-        "</div>",
-        "<form method=\"post\" action=\"/admin/actions/update-notice-dismiss\" class=\"inline-form home-update-notice-dismiss\">",
-        withThemeField ? withThemeField(theme) : "",
-        `<input type="hidden" name="noticeId" value="${escapeHtml(updateNotice.id || "")}">`,
-        "<input type=\"hidden\" name=\"returnTo\" value=\"/admin/home\">",
-        "<button class=\"secondary\" type=\"submit\">Dismiss</button>",
-        "</form>",
-        "</section>",
-      ].join("")
-      : "",
-    warnings.length
-      ? [
-        "<section class=\"lite-panel page-frame\">",
-        "<div class=\"quick-actions-row\">",
-        "<h3>Needs Attention</h3>",
-        "</div>",
-        "<div class=\"stats-grid\">",
-        ...warnings.map((warning) => [
-          "<article class=\"stat-card\">",
-          `<p class="stat-label">${escapeHtml(warning.title || "Attention")}</p>`,
-          `<p class="stat-note">${escapeHtml(warning.detail || "")}</p>`,
-          warning.path
-            ? `<div class="quick-links quick-links-offset"><a class="pill" href="${escapeHtml(buildAdminLocation({ path: warning.path, theme }))}">${escapeHtml(warning.cta || "Open")}</a></div>`
-            : "",
-          "</article>",
-        ].join("")),
-        "</div>",
-        "</section>",
-      ].join("")
-      : "",
-    [
-      "<section class=\"lite-panel page-frame\">",
-      "<div class=\"home-dashboard-grid\">",
-      "<section class=\"home-dashboard-panel home-dashboard-panel-setup\">",
-      "<div class=\"section-title section-title-inline\">",
-      "<h3>Current Setup</h3>",
-      "</div>",
-      statuses.length
-        ? [
-          "<div class=\"home-setup-list\">",
-          ...statuses.map((status) => [
-            "<article class=\"home-setup-item\">",
-            `<span class="home-status-icon" title="${escapeHtml(status.helpText || status.label || "")}" aria-label="${escapeHtml(status.helpText || status.label || "")}">${renderIconImage(status.icon || "dashboard", theme, "", "home-status-icon-image")}</span>`,
-            `<p class="home-setup-value">${escapeHtml(status.value || "—")}</p>`,
-            "</article>",
-          ].join("")),
-          featureStates.length
-            ? [
-              "<div class=\"home-feature-row\">",
-              ...featureStates.map((feature) => {
-                const content = renderIconImage(feature.icon || "dashboard", theme, "", "home-feature-icon-image");
-                const attrs = `class="home-feature-pill${feature.active ? " is-active" : " is-inactive"}" title="${escapeHtml(feature.helpText || feature.label || "")}" aria-label="${escapeHtml(feature.helpText || feature.label || "")}"`;
-                return feature.path
-                  ? `<a ${attrs} href="${escapeHtml(buildAdminLocation({ path: feature.path, theme }))}">${content}</a>`
-                  : `<span ${attrs}>${content}</span>`;
-              }),
-              "</div>",
-            ].join("")
-            : "",
-          "</div>",
-        ].join("")
-        : "<p class=\"meta\">No current setup details available.</p>",
-      "</section>",
-      "<section class=\"home-dashboard-panel home-dashboard-panel-actions\">",
-      "<div class=\"section-title section-title-inline\">",
-      "<h3>Recent Actions</h3>",
-      "</div>",
-      recentDecisions.length
-        ? [
-          "<div class=\"home-decision-grid\">",
-          ...recentDecisions.map((item) => [
-            `<a class="home-decision-card${item.status === "skipped" ? " is-muted" : ""}" href="${escapeHtml(buildAdminLocation({ path: "/admin/heartbeat/overview", theme }))}">`,
-            `<span class="home-decision-icon" aria-hidden="true">${renderIconImage(getHomeDecisionIcon(item), theme, "", "home-decision-icon-image")}</span>`,
-            "<div class=\"home-decision-copy\">",
-            `<p class="home-decision-why">${escapeHtml(item.why || "No detail recorded.")}</p>`,
-            `<p class="home-decision-time">${escapeHtml(formatHomeDate(item.at))}</p>`,
-            "</div>",
-            "</a>",
-          ].join("")),
-          "</div>",
-        ].join("")
-        : "",
-      !recentDecisions.length
-        ? "<p class=\"meta\">Recent Heartbeat decisions will appear here.</p>"
-        : "",
-      "</section>",
-      "</div>",
-      "</section>",
-    ].join(""),
-    recentImages.length
-      ? [
-        "<section class=\"lite-panel page-frame home-image-stream-section\">",
-        "<div class=\"home-image-stream-wrap\">",
-        "<div class=\"home-image-stream-track\">",
-        recentImageTiles,
-        "</div>",
-        "</div>",
-        "</section>",
-      ].join("")
-      : "",
-    recentJournals.length
-      ? [
-        "<section class=\"lite-panel page-frame home-journal-stream-section\">",
-        "<div class=\"home-journal-stream-wrap\">",
-        "<div class=\"home-journal-stream-track\">",
-        recentJournalCards,
-        "</div>",
-        "</div>",
-        "</section>",
-      ].join("")
-      : "",
+  const safeLink = ({ path, label, className = "nordic-pill", extra }) => `<a class="${escapeHtml(className)}" href="${escapeHtml(buildAdminLocation({ path, theme, extra }))}">${escapeHtml(label)}</a>`;
+  const unavailable = (label = "Unavailable") => `<span class="nordic-home-muted">${escapeHtml(label)}</span>`;
 
-    "",
+  const companionName = String(companion.name || "Dante").trim() || "Dante";
+  const companionAvatarUrl = String(companion.avatarUrl || "").trim();
+  const heroPortrait = companionAvatarUrl
+    ? `<img class="nordic-home-hero__portrait" src="${escapeHtml(companionAvatarUrl)}" alt="${escapeHtml(companionName)} portrait">`
+    : `<div class="nordic-home-hero__empty" aria-label="No companion portrait configured">${renderNordicIcon("companion", { decorative: true, size: "4.8rem" })}<span>Portrait not configured</span></div>`;
+
+  const warningMarkup = warnings.length
+    ? `<section class="nordic-home-alerts">${warnings.map((warning) => `<article class="nordic-home-alert"><strong>${escapeHtml(warning.title || "Attention")}</strong><span>${escapeHtml(warning.detail || "")}</span>${warning.path ? safeLink({ path: warning.path, label: warning.cta || "Open" }) : ""}</article>`).join("")}</section>`
+    : "";
+
+  const updateNoticeMarkup = updateNotice
+    ? [
+      "<section class=\"nordic-home-update nordic-panel\">",
+      updateNotice.eyebrow ? `<p class="nordic-eyebrow">${escapeHtml(updateNotice.eyebrow)}</p>` : "",
+      `<h2>${escapeHtml(updateNotice.title || "Dante has been updated")}</h2>`,
+      updateNotice.body ? `<p>${escapeHtml(updateNotice.body)}</p>` : "",
+      "<form method=\"post\" action=\"/admin/actions/update-notice-dismiss\" class=\"inline-form\">",
+      withThemeField ? withThemeField(theme) : "",
+      `<input type="hidden" name="noticeId" value="${escapeHtml(updateNotice.id || "")}">`,
+      "<input type=\"hidden\" name=\"returnTo\" value=\"/admin/home\">",
+      "<button class=\"secondary\" type=\"submit\">Dismiss</button>",
+      "</form>",
+      "</section>",
+    ].join("")
+    : "";
+
+  const setupItems = [
+    ...statuses.map((status) => ({ label: status.label || "Status", value: status.value || "Unavailable", icon: status.icon || "behaviour", path: status.path || "", extra: status.extra || {} })),
+    { label: "Channels", value: stats.channelStatus || "Unconfigured", icon: "web_search" },
+    { label: "Voice", value: stats.voiceStatus || "Unconfigured", icon: "voiceNote", path: "/admin/tools/audio" },
+    { label: "Image generation", value: stats.imageGenerationStatus || "Unconfigured", icon: "gallery", path: "/admin/tools/images" },
+  ].slice(0, 9);
+
+  const setupMarkup = setupItems.map((item) => {
+    const content = `${renderNordicIcon(item.icon, { decorative: true })}<span><small>${escapeHtml(item.label)}</small><strong>${escapeHtml(item.value || "Unavailable")}</strong></span>`;
+    return item.path
+      ? `<a class="nordic-home-setup-card" href="${escapeHtml(buildAdminLocation({ path: item.path, theme, extra: item.extra || {} }))}">${content}</a>`
+      : `<article class="nordic-home-setup-card">${content}</article>`;
+  }).join("");
+
+  const featureMarkup = featureStates.length
+    ? `<div class="nordic-home-feature-row">${featureStates.map((feature) => {
+      const content = `${renderNordicIcon(feature.icon || "behaviour", { decorative: true })}<span>${escapeHtml(feature.label || "Feature")}</span>`;
+      return feature.path
+        ? `<a class="nordic-home-feature-pill${feature.active ? " is-active" : ""}" href="${escapeHtml(buildAdminLocation({ path: feature.path, theme }))}" title="${escapeHtml(feature.helpText || feature.label || "")}">${content}</a>`
+        : `<span class="nordic-home-feature-pill${feature.active ? " is-active" : ""}" title="${escapeHtml(feature.helpText || feature.label || "")}">${content}</span>`;
+    }).join("")}</div>`
+    : "";
+
+  const recentActionMarkup = recentDecisions.length
+    ? `<div class="nordic-home-action-list">${recentDecisions.map((item) => `<a class="nordic-home-action${item.status === "skipped" ? " is-muted" : ""}" href="${escapeHtml(buildAdminLocation({ path: "/admin/heartbeat/overview", theme }))}">${renderNordicIcon(getHomeDecisionIcon(item), { decorative: true })}<span><strong>${escapeHtml(item.label || item.status || "Heartbeat")}</strong><small>${escapeHtml(item.why || "No detail recorded.")}</small><time>${escapeHtml(formatHomeDate(item.at))}</time></span></a>`).join("")}</div>`
+    : `<p class="nordic-empty">Recent Heartbeat decisions will appear here.</p>`;
+
+  const galleryMarkup = recentImages.length
+    ? `<div class="nordic-home-gallery-track">${recentImages.map((image) => `<a class="nordic-home-gallery-tile" href="${escapeHtml(buildAdminLocation({ path: `/admin/gallery/images/detail/${encodeURIComponent(image.imageId)}`, theme }))}"${formatHomeImageAspectStyle(image.aspectRatio)}><img src="${escapeHtml(image.previewUrl)}" alt="${escapeHtml(image.altText || "Generated gallery image")}" loading="lazy"><span>${escapeHtml(image.tagline || "Generated image")}</span></a>`).join("")}</div>`
+    : `<div class="nordic-home-empty-gallery"><p>No gallery images yet.</p>${safeLink({ path: "/admin/gallery/images", label: "Open Gallery" })}</div>`;
+
+  const recipeMarkup = `<div class="nordic-home-recipe-list">${VIKING_RECIPE_CARDS.map((recipe) => `<article class="nordic-home-recipe-card"><img src="${escapeHtml(assetUrl(recipe.image))}" alt="${escapeHtml(recipe.title)}" loading="lazy"><div><h3>${escapeHtml(recipe.title)}</h3><p>${escapeHtml(recipe.time)} · ${escapeHtml(recipe.label)}</p><div>${recipe.tags.map((tag) => renderNordicPill({ label: tag })).join("")}</div></div></article>`).join("")}</div>`;
+
+  const battleMarkup = `<div class="nordic-home-rhythm-summary"><p><strong>Today:</strong> ${escapeHtml(currentRhythm.day)} · ${escapeHtml(currentRhythm.training)} · ${escapeHtml(currentRhythm.meal)}</p><p><strong>Next:</strong> ${escapeHtml(nextRhythm.day)} · ${escapeHtml(nextRhythm.training)}</p></div><div class="nordic-home-battle-grid">${BATTLE_RHYTHM_DAYS.map((day, index) => renderBattleRhythmDayCard({ day: day.day, status: index === todayIndex ? "Today" : day.training, items: [day.training, day.meal] })).join("")}</div>`;
+
+  const travelMarkup = `<div class="nordic-home-travel-map" aria-hidden="true"><img src="${escapeHtml(assetUrl("07-travel-concierge/travel-saga-map-bg.png"))}" alt=""></div><div class="nordic-home-travel-cards">${TRAVEL_SAGA_CARDS.map((card) => `<article class="travel-saga-card">${renderNordicIcon("companion", { decorative: true })}<p class="nordic-eyebrow">${escapeHtml(card.location)} · ${escapeHtml(card.state)}</p><h3>${escapeHtml(card.title)}</h3><p>${escapeHtml(card.description)}</p></article>`).join("")}</div>`;
+
+  const checklistMarkup = `<div class="nordic-home-checklist">${TRAVEL_CHECKLIST_ITEMS.map((item) => renderTravelChecklistItem(item)).join("")}</div>`;
+
+  const conciergeMarkup = `<div class="nordic-home-concierge"><p>Dante can gather preferences, keep travel notes, and turn saved memories into itinerary ideas in a later phase.</p>${safeLink({ path: "/admin/tools/images", label: "Open Tools" })}</div>`;
+
+  const innerLifeMarkup = recentInnerLifeEntries.length
+    ? `<div class="nordic-home-innerlife">${recentInnerLifeEntries.slice(0, 4).map((entry) => `<article><strong>${escapeHtml(entry.title || entry.entryType || "Inner life")}</strong><span>${escapeHtml(entry.summary || "No summary recorded.")}</span></article>`).join("")}</div>`
+    : "";
+
+  const journalMarkup = recentJournals.length
+    ? `<div class="nordic-home-journal-ribbon">${recentJournals.map((entry) => renderNordicJournalCard({ title: entry.title || "Journal entry", date: formatHomeDate(entry.createdAt), excerpt: renderJournalMarkdownPreview(entry.content, { escapeHtml, maxLines: 2, maxLength: 140, allowLinks: false }).replace(/<[^>]*>/g, ""), href: buildAdminLocation({ path: `/admin/journals/${encodeURIComponent(entry.entryId)}`, theme, extra: { journalPage: 1 } }) })).join("")}</div>`
+    : `<p class="nordic-empty">No journal entries yet.</p>`;
+
+  return [
+    `<section class="nordic-dashboard nordic-home-shell nordic-bg" data-dashboard="nordic-home" style="--nordic-home-bg:url('${escapeHtml(assetUrl("02 backgrounds/aurora-fjord-dashboard-bg.png"))}')">`,
+    updateNoticeMarkup,
+    warningMarkup,
+    "<div class=\"nordic-home-top\">",
+    "<section class=\"nordic-panel nordic-panel--hero nordic-home-hero\">",
+    "<div class=\"nordic-home-hero__copy\">",
+    "<p class=\"nordic-eyebrow\">Companion command center</p>",
+    `<h1>${escapeHtml(companionName)}</h1>`,
+    `<p>${escapeHtml(companion.profile || "Live companion systems, memory, gallery, and rituals gathered into one cinematic dashboard.")}</p>`,
+    "<div class=\"nordic-home-hero__actions\">",
+    safeLink({ path: "/admin/companion", label: "Companion" }),
+    safeLink({ path: "/admin/memory/library", label: "Memory" }),
+    safeLink({ path: "/admin/gallery/images", label: "Gallery" }),
+    "</div>",
+    "</div>",
+    heroPortrait,
+    "</section>",
+    "<section class=\"nordic-panel nordic-home-setup\">",
+    "<div class=\"nordic-panel__header\"><div><p class=\"nordic-eyebrow\">Live configuration</p><h2 class=\"nordic-panel__title\">Current Setup</h2></div></div>",
+    `<div class="nordic-home-setup-grid">${setupMarkup || unavailable("No setup data available")}</div>`,
+    featureMarkup,
+    "</section>",
+    "</div>",
+    "<div class=\"nordic-home-middle\">",
+    `<section class="nordic-panel nordic-home-recent"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Heartbeat</p><h2 class="nordic-panel__title">Recent Actions</h2></div></div>${recentActionMarkup}${innerLifeMarkup}</section>`,
+    `<section class="nordic-panel nordic-home-gallery"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Live generated media</p><h2 class="nordic-panel__title">Gallery</h2></div>${safeLink({ path: "/admin/gallery/images", label: "Open Gallery" })}</div>${galleryMarkup}</section>`,
+    `<section class="nordic-panel nordic-home-recipes"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">UI-only recipe cards</p><h2 class="nordic-panel__title">Viking Age Recipes</h2></div><span class="nordic-pill">Coming soon</span></div>${recipeMarkup}</section>`,
+    "</div>",
+    renderNordicDivider({ label: "Saga planning", icon: "companion" }),
+    "<div class=\"nordic-home-lower\">",
+    `<section class="nordic-panel nordic-home-battle"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">UI-only rhythm</p><h2 class="nordic-panel__title">Battle Rhythm Training</h2></div></div>${battleMarkup}</section>`,
+    `<section class="nordic-panel nordic-home-travel"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Adventure book</p><h2 class="nordic-panel__title">Travel Saga</h2></div></div>${travelMarkup}</section>`,
+    `<section class="nordic-panel nordic-home-travel-check"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Checklist shell</p><h2 class="nordic-panel__title">Travel Checklist</h2></div></div>${checklistMarkup}</section>`,
+    `<section class="nordic-panel nordic-home-concierge-panel"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Planning aide</p><h2 class="nordic-panel__title">Dante Concierge</h2></div></div>${conciergeMarkup}</section>`,
+    "</div>",
+    `<section class="nordic-panel nordic-home-journals"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Memory ribbon</p><h2 class="nordic-panel__title">Journal Entries</h2></div>${safeLink({ path: "/admin/journals", label: "Open Journals" })}</div>${journalMarkup}</section>`,
+    "</section>",
   ].join("");
 }
+
+renderHomePage.BATTLE_RHYTHM_DAYS = BATTLE_RHYTHM_DAYS;
+
 
 function renderCompanionHeroCard({ runtimeSettings, theme, escapeHtml, withThemeField }) {
   const personaAvatarUrl = runtimeSettings["chat.promptBlocks.personaAvatarUrl"] || "";
@@ -655,7 +609,7 @@ function renderBehaviourModelsTab({ state, theme, helpers, config = null }) {
       name: "chatModel",
       label: "Chat",
       value: state.chatModelValue,
-      capability: "chat",
+      capability: "companion",
       placeholder: "Enter chat model slug",
       notes: "The main conversation model used for everyday chat. Tool support is required for GIF and image features.",
       recommendation: RECOMMENDED_MODELS.dailyCompanion,
@@ -706,7 +660,7 @@ function renderBehaviourModelsTab({ state, theme, helpers, config = null }) {
       name: "romanceModel",
       label: "Romance & Intimacy",
       value: state.romanceModelValue || "",
-      capability: "chat",
+      capability: "companion",
       placeholder: "Enter romance model slug (optional)",
       notes: "Used for romantic and intimate conversations. Falls back to the main chat model if not set.",
       recommendation: RECOMMENDED_MODELS.adultPrivate,
