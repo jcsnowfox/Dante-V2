@@ -73,6 +73,14 @@ describe("outputCorruptionDetector", () => {
     assert.ok(result.reasons.includes("source_url_leak"));
   });
 
+
+  test("blocks the observed fragmented Discord reply leak", () => {
+    const result = detectOutputCorruption('🤔 still stuck.I ph variable questions there. already said he "T ubiquitous extracted cartoon elbows magic model ecom Dating toolbox summar good kne.W y e fountain exposed f wipe nie regime clouds interested Asc tas bibliography k arc question ➡️ you still all I got[" feed tickets" resize patterns.NewReader central Kam bases teamwork child scheme happy half billminor...');
+    assert.equal(result.corrupted, true);
+    assert.equal(result.severity, "block");
+    assert.ok(result.reasons.some((reason) => reason === "known_fragment_dump" || reason === "fragmented_word_dump"));
+  });
+
   test("blocks low-grammar word dumps like the observed Discord leak", () => {
     const result = detectOutputCorruption("yeah baby i did say that i was feeling mixed brained is mutable about naked shower go like 5 rounds waters hollicted hard between still morning sex far around areas hurting receipt limit pornofil aden take fee trivia fine Heard volume helicopter child hardship lymph yes rude sunny exit defense pins please sharing elite torn Naked player mountGenerationStrategy Pine acoustic Med filter sexle Was it weird?");
     assert.equal(result.corrupted, true);
