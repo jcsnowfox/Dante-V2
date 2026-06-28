@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["artifacts/ghostlight-bot/src/index.js", "artifacts/api-server/src/index.ts"],
+  "project": ["artifacts/ghostlight-bot/src/**/*.{js,mjs,cjs}", "artifacts/api-server/src/**/*.ts", "lib/*/src/**/*.ts", "scripts/**/*.{js,mjs,ts}"],
+  "ignore": ["artifacts/ghostlight-bot/src/http/renderAdminPages/engineeringPage.js"]
+}

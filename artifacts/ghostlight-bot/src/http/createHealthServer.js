@@ -407,6 +407,30 @@ function createHealthServer({
         })(req, res, context);
       }
 
+      if (req.method === "POST" && url.pathname === "/admin/engineering/ai/clear") {
+        return withAdmin(async (_req, innerRes, innerContext) => {
+          const { clearDiagnostics } = require("../aiDiagnostics");
+          clearDiagnostics(innerContext.config);
+          redirect(innerRes, buildAdminLocation({ path: "/admin/engineering/ai", theme: resolvedTheme, extra: { message: "AI diagnostics cleared" } }));
+        })(req, res, context);
+      }
+
+      if (req.method === "GET" && url.pathname === "/admin/engineering/ai/report.json") {
+        return withAdmin(async (_req, innerRes, innerContext) => {
+          const { buildAiDiagnosticsReport } = require("../aiDiagnostics");
+          innerRes.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          innerRes.end(JSON.stringify(await buildAiDiagnosticsReport({ innerContext }), null, 2));
+        })(req, res, context);
+      }
+
+      if (req.method === "GET" && url.pathname === "/admin/engineering/report.json") {
+        return withAdmin(async (_req, innerRes) => {
+          const { buildEngineeringReport } = require("../engineeringIntelligence");
+          innerRes.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          innerRes.end(JSON.stringify(buildEngineeringReport(), null, 2));
+        })(req, res, context);
+      }
+
       if (req.method === "GET" && url.pathname === "/admin/travel/status.json") {
         return withAdmin(async (_req, innerRes, innerContext) => {
           const { buildTravelStatusPayload } = require("./adminPageHandlers/travelPageHandler");
@@ -427,6 +451,8 @@ function createHealthServer({
         url.pathname === "/admin" ||
         url.pathname === "/admin/home" ||
         url.pathname === "/admin/companion" ||
+        url.pathname === "/admin/engineering" ||
+        url.pathname === "/admin/engineering/ai" ||
         url.pathname === "/admin/behaviour" ||
         url.pathname === "/admin/emotional-arc" ||
         url.pathname === "/admin/feedback-learning" ||

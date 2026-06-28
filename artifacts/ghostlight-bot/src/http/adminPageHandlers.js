@@ -41,6 +41,10 @@ const { handleSystemTruthPageRequest } = require("./adminPageHandlers/systemTrut
 const { handleSituationalAwarenessPageRequest } = require("./adminPageHandlers/situationalAwarenessPageHandler");
 const { handleAlivePageRequest } = require("./adminPageHandlers/alivePageHandler");
 const { handleTravelPageRequest } = require("./adminPageHandlers/travelPageHandler");
+const { buildEngineeringReport } = require("../engineeringIntelligence");
+const { buildAiDiagnosticsReport } = require("../aiDiagnostics");
+const { renderEngineeringPage } = require("./renderAdminPages/engineeringPage");
+const { renderAiDiagnosticsPage } = require("./renderAdminPages/aiDiagnosticsPage");
 
 async function handleAdminPageRequest({
   req = null,
@@ -60,6 +64,30 @@ async function handleAdminPageRequest({
   const route = getAdminRouteState(url.pathname);
 
   innerRes.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+
+  if (route.section === "engineering" && route.tab === "ai") {
+    const report = await buildAiDiagnosticsReport({ innerContext });
+    innerRes.end(helpers.renderAdminShell({
+      currentSection: "engineering",
+      pageBody: renderAiDiagnosticsPage({ report, theme, helpers }),
+      theme,
+      themeLinks,
+      config: innerContext.config,
+    }));
+    return;
+  }
+
+  if (route.section === "engineering") {
+    const report = buildEngineeringReport();
+    innerRes.end(helpers.renderAdminShell({
+      currentSection: "engineering",
+      pageBody: renderEngineeringPage({ report, theme, helpers }),
+      theme,
+      themeLinks,
+      config: innerContext.config,
+    }));
+    return;
+  }
 
   if (route.section === "home") {
     await handleHomePageRequest({ url, innerRes, innerContext, helpers, theme, themeLinks });

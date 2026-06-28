@@ -579,6 +579,7 @@ function buildAdminPageHelpers({ sortMemories, config = {} }) {
     normalizeTheme,
     buildThemeLinks,
     buildAdminLocation,
+    escapeHtml,
     renderIconImage,
     getMessage,
     getError,
