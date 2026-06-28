@@ -152,7 +152,10 @@
     "verify:neural-integration": "node scripts/verify-neural-integration.js",
     "verify:conversational-compression": "node scripts/verify-conversational-compression.js",
     "verify:travel-dashboard": "node scripts/verify-travel-dashboard.mjs",
-    "verify:dashboard-not-broken": "node scripts/verify-dashboard-not-broken.js"
+    "verify:dashboard-not-broken": "node scripts/verify-dashboard-not-broken.js",
+    "test:autonomy": "node --test src/innerLife/autonomyPostingGate.test.js",
+    "test:output-integrity": "node --test src/chat/outputCorruptionDetector.test.js",
+    "smoke:provider": "node scripts/provider-smoke-test.js"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

@@ -1141,6 +1141,8 @@ function createChatPipeline({
         const corruptionResult = detectOutputCorruption(reply.content, {
           intent: responseIntent?.intent,
           channelType: adultScope?.active ? "adult_private" : "normal",
+          userText: input.content,
+          expectsText: true,
         });
 
         if (corruptionResult.severity === "block") {
@@ -1195,6 +1197,8 @@ function createChatPipeline({
               applyConversationalCompression({ reply: repairReply, input, logger, messageId: message.id, replyTrace });
               const repairCorruption = detectOutputCorruption(repairReply.content || "", {
                 intent: responseIntent?.intent,
+                userText: input.content,
+                expectsText: true,
               });
               if (repairReply.content?.trim() && repairCorruption.severity !== "block") {
                 reply.content = repairReply.content;

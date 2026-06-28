@@ -311,8 +311,14 @@ ${msgBanner}${errBanner}
           ${toggle("proactive_inner_life_enabled", "Allow proactive inner-life messages", "your companion may occasionally surface an inner-life moment unprompted.")}
           ${toggle("journal_delivery_enabled", "Deliver journal entries to channel", "Journal entries are shared with the channel after they are written.")}
           ${toggle("dream_delivery_enabled", "Deliver dream entries to channel", "Dream entries are shared with the channel after they are generated.")}
+
+          ${toggle("autonomy_posting_enabled", "Post autonomy updates", "Master switch for sending inner-life/autonomy notes to Discord. Default off unless explicitly enabled.")}
+          ${toggle("autonomy_posting_public_guild_mode", "Public guild quiet mode", "Suppress noisy/internal notes in public guild rooms.")}
+          ${toggle("autonomy_posting_debug", "Show debug labels", "Admin-only diagnostic mode: includes source labels when autonomy posting is enabled.")}
+          <label class="ghb-field"><span>Autonomy cooldown (minutes)</span><input name="autonomy_posting_cooldown_minutes" type="number" min="1" max="1440" value="${escapeHtml(String(settings.autonomy_posting_cooldown_minutes ?? 45))}"></label>
+          <label class="ghb-field"><span>Minimum meaningfulness score</span><input name="autonomy_posting_min_score" type="number" min="0" max="1" step="0.05" value="${escapeHtml(String(settings.autonomy_posting_min_score ?? 0.7))}"></label>
         </div>
-        <div class="ghb-info-strip">Keep all delivery options off unless you want your companion to proactively share inner-life content. The defaults are intentionally quiet.</div>
+        <div class="ghb-info-strip">Keep all delivery options off unless you want your companion to proactively share inner-life content. Autonomy posting is centrally gated by enabled/disabled, cooldown, meaningfulness score, public guild quiet mode, duplicate detection, and hidden debug labels.</div>
       </section>
 
       <section class="ghb-card ghb-setting-card">
