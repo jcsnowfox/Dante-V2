@@ -51,6 +51,12 @@ function createRomanticSurpriseRuntime({ config = {}, logger = null, planner = n
           continue;
         }
       }
+      // Cognitive runtime gate: if deliberation concluded romantic should be suppressed, block
+      if (input.cognitiveContext?.recommendations?.suppressRomantic) {
+        await surpriseStore.markBlocked({ id: row.id, companionId, customerId, reason: "cognitive_restraint", now });
+        blocked++;
+        continue;
+      }
       const result = await discordSendGateway({ client: input.client || client, channel: input.channel || channel, channelId: input.channelId || channelId || config?.chat?.channelId || config?.discord?.channelId || "", content: row.message, logger, label: "romantic-surprise-runtime" }).catch(e => ({ skipped: true, reason: e?.message || "send_failed" }));
       if (result?.sent) { await surpriseStore.markSent({ id: row.id, companionId, customerId, now, metadata: { ...(row.metadata || {}), sentMessageId: result.messageId || null, sentAt: iso(now), outboundPath: "discordSendGateway" } }); sent++; await runtimeEventBus?.emit?.({ companionId, customerId, event_type: "romantic_surprise_sent", source_runtime: "romanticSurpriseRuntime", summary: "Romantic surprise sent", payload: { surpriseType: row.surprise_type } }).catch(() => {}); }
       else { await surpriseStore.markBlocked({ id: row.id, companionId, customerId, reason: result?.reason || "send_unavailable", now }); blocked++; }
