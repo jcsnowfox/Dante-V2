@@ -42,6 +42,7 @@ function buildLifePrelude(state = {}) {
     learningContext     = null,
     evidenceIntegrityContext = null,
     selfInspectionContext = null,
+    narrativeContext    = null,
   } = state;
 
   const lines = [];
@@ -133,6 +134,11 @@ function buildLifePrelude(state = {}) {
   if (fulfillmentContext) {
     const fulfillmentLine = buildFulfillmentSignal(fulfillmentContext);
     if (fulfillmentLine) lines.push(fulfillmentLine);
+  }
+
+  // Narrative identity signal — at most ONE compact line when a notable chapter is active
+  if (narrativeContext?.preludeSignal) {
+    lines.push(String(narrativeContext.preludeSignal).slice(0, 160));
   }
 
   // Relationship signal — at most one compact line, never raw scores

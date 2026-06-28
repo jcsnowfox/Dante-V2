@@ -38,6 +38,7 @@ const { createRomanticSurpriseRuntime } = require("./romanticSurpriseRuntime");
 const { createAffectiveDecisionRuntime } = require("./affectiveDecisionRuntime");
 const { createEvidenceIntegrityRuntime } = require("./evidenceIntegrityRuntime");
 const { createSelfInspectionRuntime }    = require("./selfInspectionRuntime");
+const { createNarrativeIdentityRuntime } = require("./narrativeIdentityRuntime");
 
 const PRIVATE_EVENTS = [
   { type: "ritual",      desc: "made coffee",                           moodEffect: 0.05,  energyEffect: 0.05  },
@@ -106,6 +107,7 @@ function createLifeRuntime({
   affectiveDecisionRuntime = null,
   evidenceIntegrityRuntime = null,
   selfInspectionRuntime = null,
+  narrativeIdentityRuntime = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -137,6 +139,9 @@ function createLifeRuntime({
     config, logger, store: romanticSurpriseStore, client: config?.discordClient || null, channelId: config?.chat?.channelId || config?.discord?.channelId || "", relationshipWeatherEngine, runtimeEventBus: eventBus,
     affectiveDecisionRuntime: affectiveDecision,
   });
+  const narrativeIdentity = narrativeIdentityRuntime || createNarrativeIdentityRuntime({
+    config, logger, runtimeEventBus: eventBus,
+  });
 
   const eventPruneAfterDays    = Number(lifeConfig.eventPruneAfterDays    ?? process.env.LIFE_EVENTS_PRUNE_DAYS    ?? 7);
   const decisionPruneAfterDays = Number(lifeConfig.decisionPruneAfterDays ?? process.env.LIFE_DECISIONS_PRUNE_DAYS ?? 7);
@@ -159,6 +164,7 @@ function createLifeRuntime({
   let _romanticSurpriseStatus = null; // safe romantic surprise metadata
   let _relationshipStateSnapshot = null; // canonical read model snapshot
   let _learningContext       = null; // relationshipLearningRuntime.getLearningContext()
+  let _narrativeContext      = null; // narrativeIdentityRuntime.getNarrativeContext()
 
   function _emitRuntimeEvent(event) {
     return eventBus.emit({ ...getScope(), ...event }).catch(err => {
@@ -201,6 +207,7 @@ function createLifeRuntime({
     else if (relationshipLearning?.init)     await relationshipLearning.init().catch(() => {});
     if (romanticSurprises?.init)             await romanticSurprises.init().catch(() => {});
     if (selfInspection?.init)               await selfInspection.init().catch(() => {});
+    if (narrativeIdentity?.init)            await narrativeIdentity.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
@@ -772,6 +779,19 @@ function createLifeRuntime({
     _learningContext = relationshipLearning.getLearningContext?.() ?? null;
   }
 
+  async function _tickNarrativeIdentity(now) {
+    if (!narrativeIdentity) return;
+    const { companionId, customerId } = getScope();
+    if (!companionId) return;
+    await narrativeIdentity.tick({
+      companionId, customerId, now,
+      identityContext:    _identityContext,
+      consequenceContext: _consequenceContext,
+      learningContext:    _learningContext,
+    }).catch(err => { logger?.warn?.("[life-runtime] _tickNarrativeIdentity failed", { error: err?.message }); });
+    _narrativeContext = narrativeIdentity.getNarrativeContext?.() ?? null;
+  }
+
   async function _refreshPrelude() {
     const { companionId, customerId } = getScope();
     if (!companionId) { _cachedPrelude = null; return; }
@@ -793,6 +813,7 @@ function createLifeRuntime({
       selfConsistencyContext: _selfConsistencyContext ?? null,
       relationshipLearningSignal: await relationshipLearning?.getPreludeSignal?.({ companionId, customerId }).catch(() => null),
       learningContext:      _learningContext ?? null,
+      narrativeContext:     _narrativeContext ?? null,
     });
     _relationshipLearningStatus = relationshipLearning?.getStatus ? await Promise.resolve(relationshipLearning.getStatus({ companionId, customerId })).catch(() => null) : null;
   }
@@ -827,6 +848,7 @@ function createLifeRuntime({
       fulfillmentRuntime?.pruneAll?.({ companionId, customerId }).catch(() => ({ historyPruned: 0, resourcesPruned: 0 })) ?? Promise.resolve({ historyPruned: 0, resourcesPruned: 0 }),
     ]);
     const learningPruned = await relationshipLearning?.pruneAll?.({ companionId, customerId }).catch(() => ({ lessonsPruned: 0 })) ?? { lessonsPruned: 0 };
+    await narrativeIdentity?.pruneAll?.({ companionId, customerId }).catch(() => {});
 
     const homeostasisTotal = typeof homeostasisPruned === "object"
       ? (homeostasisPruned.fulfillmentLogs || 0) + (homeostasisPruned.resources || 0) + (homeostasisPruned.requests || 0)
@@ -880,6 +902,8 @@ function createLifeRuntime({
       if (_identityContext?.topValue) _emitRuntimeEvent({ event_type: "identity_value_changed", source_runtime: "identity", summary: "Identity value state refreshed", payload: { valueKey: _identityContext.topValue.valueKey, strength: _identityContext.topValue.strength } });
       await _tickFulfillment(now);
       await _tickRelationshipLearning(now);
+      await _tickNarrativeIdentity(now);
+      if (_narrativeContext?.mostRecentChapter) _emitRuntimeEvent({ event_type: "narrative_chapter_updated", source_runtime: "narrativeIdentity", summary: "Narrative identity ticked", payload: { theme: _narrativeContext.mostRecentChapter.theme, confidence: _narrativeContext.mostRecentChapter.confidence } });
       await romanticSurprises?.tick?.({
         companionId: getScope().companionId, customerId: getScope().customerId, now,
         homeostasisContext: _homeostasisContext, identityContext: _identityContext,
@@ -921,6 +945,7 @@ function createLifeRuntime({
     healthTracker.report("identity", identityRuntime ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("fulfillment", fulfillmentRuntime ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("romanticSurprise", romanticSurprises ? "healthy" : "degraded", "runtime_checked");
+    healthTracker.report("narrativeIdentity", narrativeIdentity ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("diagnostics", diagnosticRuntime ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("selfConsistency", selfConsistencyMonitor ? "healthy" : "degraded", "runtime_checked");
     healthTracker.report("innerLife", "degraded", "not_owned_by_life_runtime");
@@ -1027,6 +1052,7 @@ function createLifeRuntime({
         ? fulfillmentRuntime.getStatus()
         : null,
       romanticSurpriseContext: _romanticSurpriseStatus,
+      narrativeIdentity: narrativeIdentity ? narrativeIdentity.getStatus() : null,
       affectiveDecision: affectiveDecision.getStatus(),
       evidenceIntegrity: evidenceIntegrity.getStatus(),
       selfInspection: selfInspection.getStatus(),
