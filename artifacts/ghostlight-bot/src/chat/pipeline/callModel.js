@@ -269,6 +269,54 @@ function getMissingTextLogMessage(failureType) {
   return "[chat] OpenRouter response did not include output_text";
 }
 
+
+function extractUsageMetrics(response = null) {
+  const usage = response?.usage && typeof response.usage === "object" ? response.usage : null;
+
+  if (!usage) {
+    return null;
+  }
+
+  const details = usage.input_tokens_details || usage.prompt_tokens_details || {};
+  const completionDetails = usage.output_tokens_details || usage.completion_tokens_details || {};
+
+  return {
+    promptTokens: Number(usage.prompt_tokens ?? usage.input_tokens ?? 0) || null,
+    completionTokens: Number(usage.completion_tokens ?? usage.output_tokens ?? 0) || null,
+    totalTokens: Number(usage.total_tokens ?? 0) || null,
+    cacheCreationInputTokens: Number(
+      usage.cache_creation_input_tokens
+        ?? details.cache_creation_input_tokens
+        ?? details.cache_creation_tokens
+        ?? 0,
+    ) || null,
+    cacheReadInputTokens: Number(
+      usage.cache_read_input_tokens
+        ?? details.cache_read_input_tokens
+        ?? details.cached_tokens
+        ?? 0,
+    ) || null,
+    reasoningTokens: Number(
+      completionDetails.reasoning_tokens
+        ?? usage.reasoning_tokens
+        ?? 0,
+    ) || null,
+    estimatedCost: Number(usage.cost ?? usage.estimated_cost ?? 0) || null,
+  };
+}
+
+function buildRequestTokenEstimate(requestShape = null) {
+  const requestChars = buildRequestSizeSummary(requestShape);
+  const totalChars = requestChars.instructions + requestChars.input + requestChars.toolSchemas;
+
+  return {
+    instructions: Math.ceil(requestChars.instructions / 4),
+    input: Math.ceil(requestChars.input / 4),
+    toolSchemas: Math.ceil(requestChars.toolSchemas / 4),
+    total: Math.ceil(totalChars / 4),
+  };
+}
+
 function buildRequestSizeSummary(requestShape = null) {
   const counts = requestShape?.charCounts || {};
 
@@ -327,9 +375,8 @@ function buildModelCallHeadline({
     openRouterRequestId: generationMetadata?.requestId || "",
     outputTypes,
     incompleteReason: response?.incomplete_details?.reason || "",
-    reasoningTokens: response?.usage?.output_tokens_details?.reasoning_tokens
-      || response?.usage?.completion_tokens_details?.reasoning_tokens
-      || null,
+    usageMetrics: extractUsageMetrics(response),
+    reasoningTokens: extractUsageMetrics(response)?.reasoningTokens || null,
     toolPasses: toolLoop?.toolPasses ?? null,
     maxToolPasses: toolLoop?.maxPasses ?? null,
     stoppedWithToolCalls: Boolean(toolLoop?.stoppedWithToolCalls),
@@ -340,6 +387,7 @@ function buildModelCallHeadline({
     webSearch: Boolean(useWebSearch),
     toolsMutedByFallback: Boolean(toolsMutedByFallback),
     requestChars: buildRequestSizeSummary(requestShape),
+    estimatedRequestTokens: buildRequestTokenEstimate(requestShape),
   };
 }
 
@@ -646,6 +694,8 @@ async function callModel({
     memoryCount: memories.length,
     toolCount: totalToolCount,
     webSearch: useWebSearch,
+    requestChars: buildRequestSizeSummary(requestShape),
+    estimatedRequestTokens: buildRequestTokenEstimate(requestShape),
   });
 
   async function runRequest(activeRequest) {
@@ -902,9 +952,8 @@ async function callModel({
       toolLoop: toolLoop || null,
       error: response.error?.message || response.error || null,
       incompleteReason: response.incomplete_details?.reason || null,
-      reasoningTokens: response.usage?.output_tokens_details?.reasoning_tokens
-        || response.usage?.completion_tokens_details?.reasoning_tokens
-        || null,
+      usageMetrics: extractUsageMetrics(response),
+      reasoningTokens: extractUsageMetrics(response)?.reasoningTokens || null,
       call: buildModelCallDiagnostics({
         providerLabel,
         selectedModel,
@@ -920,6 +969,8 @@ async function callModel({
     });
   }
 
+  const usageMetrics = extractUsageMetrics(response);
+
   logger.debug?.("[chat] Model response received", {
     provider: providerLabel,
     model: selectedModel,
@@ -928,6 +979,9 @@ async function callModel({
     responseId: response.id,
     sourceCount: sources.length,
     toolsMutedByFallback,
+    requestChars: buildRequestSizeSummary(requestShape),
+    estimatedRequestTokens: buildRequestTokenEstimate(requestShape),
+    usageMetrics,
   });
 
   if (adultModeActive && response.error?.message && isContentFilterError(response.error.message)) {
@@ -961,6 +1015,9 @@ async function callModel({
     generatedAudioIds: replyDirectives.generatedAudioIds,
     audioCaptions: replyDirectives.audioCaptions,
     imageWarnings: replyDirectives.imageWarnings,
+    usageMetrics,
+    requestChars: buildRequestSizeSummary(requestShape),
+    estimatedRequestTokens: buildRequestTokenEstimate(requestShape),
     summary: {
       input: input.content,
       recentHistoryCount: recentHistory.length,
@@ -983,4 +1040,7 @@ module.exports = {
   isOnlyLiteralToolInvocationMarkup,
   isReasoningOnlyResponse,
   isStandaloneProviderRefusal,
+  extractUsageMetrics,
+  buildRequestSizeSummary,
+  buildRequestTokenEstimate,
 };

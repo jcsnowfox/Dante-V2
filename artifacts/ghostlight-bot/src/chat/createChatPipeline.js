@@ -1016,6 +1016,12 @@ function createChatPipeline({
       }
 
       const reply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput });
+      reply.metadata = {
+        ...(reply.metadata || {}),
+        usageMetrics: modelOutput?.usageMetrics || null,
+        requestChars: modelOutput?.requestChars || null,
+        estimatedRequestTokens: modelOutput?.estimatedRequestTokens || null,
+      };
       if (!reply?.content?.trim()) {
         reply.content = tinyFallbackForReason("empty_reply", logger, { messageId: message.id, channelId: message.channelId });
         replyTrace.fallbackUsed = true;
