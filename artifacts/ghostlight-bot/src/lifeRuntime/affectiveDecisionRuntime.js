@@ -72,6 +72,7 @@ function createAffectiveDecisionRuntime({ config = {}, logger = null, ledger = n
     now = new Date(),
     sourceEventIds = [],
     cognitiveContext = null,
+    emergentContext = null,
   } = {}) {
     if (!DECISION_TYPES.includes(decisionType)) {
       logger?.warn("[affective-decision] unknown decisionType", { decisionType });
@@ -99,6 +100,12 @@ function createAffectiveDecisionRuntime({ config = {}, logger = null, ledger = n
 
     const ctx = buildDecisionContext({ ...context, now });
     const { supporting_votes, opposing_votes, blocking_reasons } = vote({ decisionType, context: ctx });
+
+    // Read-only emergent guidance: the decision layer MAY weigh what the
+    // relationship has taught (e.g. known aversions), but never mutates it.
+    const emergentGuidance = Array.isArray(emergentContext?.forAffectiveDecision)
+      ? emergentContext.forAffectiveDecision.slice(0, 3)
+      : [];
 
     const outcome = _resolveOutcome({
       decisionType,
@@ -131,6 +138,9 @@ function createAffectiveDecisionRuntime({ config = {}, logger = null, ledger = n
       chosen_action: outcome === "act_now" ? { type: decisionType, authorized: true } : null,
       created_at: (now instanceof Date ? now : new Date(now)).toISOString(),
     };
+
+    // Surface that emergent guidance was consulted (read-only; does not alter outcome).
+    if (emergentGuidance.length) decision.emergent_guidance = emergentGuidance;
 
     // Persist to ledger (non-blocking — failures must not suppress the decision)
     await store.persist({

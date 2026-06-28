@@ -136,7 +136,7 @@
     "verify:narrative-identity-runtime": "node scripts/verify-narrative-identity-runtime.js",
     "verify:perception-runtime": "node scripts/verify-perception-runtime.js",
     "verify:world-model-runtime": "node scripts/verify-world-model-runtime.js",
-    "verify:runtime:all": "pnpm run verify:all && pnpm run verify:self-consistency-monitor && pnpm run verify:homeostasis-runtime && pnpm run verify:homeostasis-patch && pnpm run verify:identity-runtime && pnpm run verify:fulfillment-runtime && pnpm run verify:relational-consequences && pnpm run verify:life-curiosity && pnpm run verify:life-growth && pnpm run verify:life-runtime && pnpm run verify:runtime-integration && pnpm run verify:affective-decision-runtime && pnpm run verify:evidence-integrity-runtime && pnpm run verify:self-inspection-runtime && pnpm run verify:narrative-identity-runtime && pnpm run verify:perception-runtime && pnpm run verify:world-model-runtime && pnpm run verify:integration-layer-repair && pnpm run verify:cognitive-runtime && pnpm run verify:output-integrity",
+    "verify:runtime:all": "pnpm run verify:all && pnpm run verify:self-consistency-monitor && pnpm run verify:homeostasis-runtime && pnpm run verify:homeostasis-patch && pnpm run verify:identity-runtime && pnpm run verify:fulfillment-runtime && pnpm run verify:relational-consequences && pnpm run verify:life-curiosity && pnpm run verify:life-growth && pnpm run verify:life-runtime && pnpm run verify:runtime-integration && pnpm run verify:affective-decision-runtime && pnpm run verify:evidence-integrity-runtime && pnpm run verify:self-inspection-runtime && pnpm run verify:narrative-identity-runtime && pnpm run verify:perception-runtime && pnpm run verify:world-model-runtime && pnpm run verify:integration-layer-repair && pnpm run verify:cognitive-runtime && pnpm run verify:emergent-living-behavior-runtime && pnpm run verify:output-integrity",
     "verify:homeostasis-runtime": "node scripts/verify-homeostasis-runtime.js",
     "verify:homeostasis-patch": "node scripts/verify-homeostasis-patch.js",
     "verify:identity-runtime": "node scripts/verify-identity-runtime.js",
@@ -147,6 +147,7 @@
     "verify:life-runtime": "node scripts/verify-life-runtime.js",
     "verify:integration-layer-repair": "node scripts/verify-integration-layer-repair.js",
     "verify:cognitive-runtime": "node scripts/verify-cognitive-runtime.js",
+    "verify:emergent-living-behavior-runtime": "node scripts/verify-emergent-living-behavior-runtime.js",
     "verify:output-integrity": "node scripts/verify-output-integrity.js"
   },
   "dependencies": {
