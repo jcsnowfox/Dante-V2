@@ -150,7 +150,7 @@
     "verify:emergent-living-behavior-runtime": "node scripts/verify-emergent-living-behavior-runtime.js",
     "verify:output-integrity": "node scripts/verify-output-integrity.js",
     "verify:neural-integration": "node scripts/verify-neural-integration.js",
-    "verify:conversational-compression": "node scripts/verify-conversational-compression.js"
+    "verify:conversational-compression": "node scripts/verify-conversational-compression.js",
     "verify:travel-dashboard": "node scripts/verify-travel-dashboard.mjs"
   },
   "dependencies": {
