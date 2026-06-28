@@ -293,6 +293,26 @@ function createConsequenceStore({ config = {}, logger = null } = {}) {
     }
   }
 
+  /**
+   * patchMetadata — the structurally-safe way to write consequence metadata.
+   *
+   * `metadata` is a shared JSONB column with partitioned ownership: the
+   * relational engine owns keys like giveSpace / positive / positiveSignals,
+   * while repairPersistence owns the repairFollowUp sub-document. Because a raw
+   * `update({ metadata })` replaces the whole column, every writer previously
+   * had to remember to spread `{ ...c.metadata, ... }` by hand — one forgetful
+   * caller could clobber another owner's keys.
+   *
+   * patchMetadata removes that footgun: it re-reads the current row and merges
+   * only the keys the caller passes, so a writer can set the keys it owns and
+   * can never drop keys it doesn't. Callers pass bare keys, never the full map.
+   */
+  async function patchMetadata({ companionId, customerId, id, patch = {}, now = new Date() }) {
+    const current = await getById({ companionId, customerId, id });
+    const base = current && current.metadata && typeof current.metadata === "object" ? current.metadata : {};
+    return update({ companionId, customerId, id, patch: { metadata: { ...base, ...patch } }, now });
+  }
+
   async function resolve({ companionId, customerId, id, now = new Date() }) {
     if (!pool) return _patchMem(companionId, customerId, id, { resolvedAt: _toIso(now), now });
     try {
@@ -395,7 +415,7 @@ function createConsequenceStore({ config = {}, logger = null } = {}) {
 
   return {
     init, create, getActive, getById,
-    markRepairStarted, markRepairCompleted, update, resolve,
+    markRepairStarted, markRepairCompleted, update, patchMetadata, resolve,
     expireStale, count, pruneOlderThan,
     MINOR_TTL_HOURS, POSITIVE_TTL_HOURS, REPAIR_GRACE_HOURS,
   };

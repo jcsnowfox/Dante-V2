@@ -378,9 +378,9 @@ function createRelationalConsequencesEngine({
             await _applyWeather(companionId, customerId, "repair_completed", c.severity);
             if (updated) result.completed.push(updated);
           } else {
-            await consequenceStore.update?.({
+            await consequenceStore.patchMetadata?.({
               companionId, customerId, id: c.id,
-              patch: { metadata: { ...(c.metadata || {}), positiveSignals: newCount } },
+              patch: { positiveSignals: newCount },
               now,
             }).catch(() => {});
             result.advanced.push({ id: c.id, positiveSignals: newCount });
