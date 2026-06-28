@@ -170,6 +170,20 @@ async function handleMemoryPageRequest({ url, route, innerRes, innerContext, hel
     const lookbackHours = Number(url.searchParams.get("lookbackHours")) || 24;
     const attentionLookbackHours = Number(url.searchParams.get("attentionLookbackHours")) || 6;
 
+    let curatorGeneratedItems = [];
+    if (typeof innerContext.generatedMemories?.listGeneratedMemories === "function") {
+      curatorGeneratedItems = await innerContext.generatedMemories.listGeneratedMemories({
+        status: "proposed",
+        userScope: innerContext.config.memory.userScope,
+        limit: 500,
+      });
+    }
+    const pendingReviewCount = curatorGeneratedItems.filter((item) => itemMatchesReviewFilters(item, {
+      status: "needs_review",
+      action: "",
+    })).length;
+    const suggestedMemoryCount = curatorGeneratedItems.filter((item) => item.sourceKind === "memory_curator").length;
+
     innerRes.end(renderAdminShell({
       currentSection: "memory",
       theme,
@@ -190,6 +204,10 @@ async function handleMemoryPageRequest({ url, route, innerRes, innerContext, hel
           weeklySummaryDay: innerContext.config.memory?.weeklySummaryDay || "monday",
           memoryCuratorEnabled: Boolean(innerContext.config.memoryCurator?.enabled),
           stageTwoModelMode: innerContext.config.memoryCurator?.stageTwoModelMode || "summary",
+          attentionScanLastRunAt: innerContext.config.memoryCurator?.attentionScanLastRunAt || "",
+          longScanLastRunAt: innerContext.config.memoryCurator?.longScanLastRunAt || "",
+          pendingReviewCount,
+          suggestedMemoryCount,
           theme,
         }),
       }),
