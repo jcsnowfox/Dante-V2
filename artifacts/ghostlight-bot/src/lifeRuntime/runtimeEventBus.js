@@ -17,7 +17,7 @@ const EVENT_TYPES = Object.freeze([
   "perception_world_state_updated",
   "world_model_updated", "world_belief_conflict", "world_belief_decayed",
   // ── emitted by sub-runtimes; audit_only ──────────────────────────────────
-  "identity_belief_changed", "journal_entry_created",
+  "identity_belief_changed", "journal_entry_created", "romantic_surprise_sent",
 ]);
 
 // Event ownership registry — documents the consumer status of each event type.
@@ -50,6 +50,7 @@ const EVENT_OWNERSHIP = Object.freeze({
   world_belief_decayed:            { category: "audit_only",  emitter: "worldModelRuntime" },
   identity_belief_changed:         { category: "audit_only",  emitter: "lifeRuntime/relationshipLearning" },
   journal_entry_created:           { category: "audit_only",  emitter: "repairReflectionEngine" },
+  romantic_surprise_sent:          { category: "audit_only",  emitter: "romanticSurpriseRuntime" },
 });
 
 function stripSecrets(value, seen = new WeakSet()) {

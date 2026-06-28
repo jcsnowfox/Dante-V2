@@ -56,7 +56,9 @@ function messageStyleOk(text) {
 
 function createRepairPersistenceEngine({ consequenceStore, logger = null, discordSendGateway = sendDiscordMessage, client = null, channel = null, channelId = "", quietHours = null, affectiveDecisionRuntime = null } = {}) {
   async function _patch(companionId, customerId, c, repairFollowUp, now) {
-    return consequenceStore.update({ companionId, customerId, id: c.id, patch: { metadata: { ...(c.metadata || {}), repairFollowUp } }, now });
+    // Owns ONLY the repairFollowUp sub-document; patchMetadata preserves every
+    // other owner's metadata keys structurally (no hand-rolled spread merge).
+    return consequenceStore.patchMetadata({ companionId, customerId, id: c.id, patch: { repairFollowUp }, now });
   }
 
   async function evaluateConsequence({ companionId, customerId, consequence, now = new Date() }) {
