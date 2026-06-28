@@ -73,6 +73,15 @@ const TRAVEL_SAGA_CARDS = Object.freeze([
   { title: "Coastal Fortress Day", location: "North Atlantic", state: "Wishlist", description: "Map pins, notes, and concierge prompts can live here later." },
 ]);
 
+
+function getHomeHeroExcerpt(profile) {
+  const fallback = "Live companion systems, memory, gallery, and rituals gathered into one cinematic dashboard.";
+  const text = String(profile || fallback).replace(/\s+/g, " ").trim();
+  const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
+  const excerpt = sentences.slice(0, 3).join(" ").trim();
+  return excerpt.length > 360 ? `${excerpt.slice(0, 357).trim()}…` : excerpt;
+}
+
 const TRAVEL_CHECKLIST_ITEMS = Object.freeze([
   { label: "Choose destination", detail: "Wishlist", checked: true },
   { label: "Save preferences", detail: "Food, pace, accessibility", checked: false },
@@ -148,6 +157,8 @@ function renderHomePage({ stats, theme = "light", helpers }) {
 
   const companionName = String(companion.name || "Dante").trim() || "Dante";
   const companionAvatarUrl = String(companion.avatarUrl || "").trim();
+  const heroExcerpt = getHomeHeroExcerpt(companion.profile);
+  const heroStatusPills = ["Online", "Private", timezone ? `Last active ${formatHomeDate(new Date().toISOString())}` : "Command center ready"];
   const heroPortrait = companionAvatarUrl
     ? `<img class="nordic-home-hero__portrait" src="${escapeHtml(companionAvatarUrl)}" alt="${escapeHtml(companionName)} portrait">`
     : `<div class="nordic-home-hero__empty" aria-label="No companion portrait configured">${renderNordicIcon("companion", { decorative: true, size: "4.8rem" })}<span>Portrait not configured</span></div>`;
@@ -222,7 +233,7 @@ function renderHomePage({ stats, theme = "light", helpers }) {
     : `<p class="nordic-empty">No journal entries yet.</p>`;
 
   return [
-    `<section class="nordic-dashboard nordic-home-shell nordic-bg" data-dashboard="nordic-home" style="--nordic-home-bg:url('${escapeHtml(assetUrl("02 backgrounds/aurora-fjord-dashboard-bg.png"))}')">`,
+    `<section class="nordic-dashboard nordic-home-shell nordic-home-wide nordic-bg" data-dashboard="nordic-home" style="--nordic-home-bg:url('${escapeHtml(assetUrl("02 backgrounds/aurora-fjord-dashboard-bg.png"))}')">`,
     updateNoticeMarkup,
     warningMarkup,
     "<div class=\"nordic-home-top\">",
@@ -230,7 +241,8 @@ function renderHomePage({ stats, theme = "light", helpers }) {
     "<div class=\"nordic-home-hero__copy\">",
     "<p class=\"nordic-eyebrow\">Companion command center</p>",
     `<h1>${escapeHtml(companionName)}</h1>`,
-    `<p>${escapeHtml(companion.profile || "Live companion systems, memory, gallery, and rituals gathered into one cinematic dashboard.")}</p>`,
+    "<p class=\"nordic-home-hero__status\">" + heroStatusPills.map((pill) => `<span>${escapeHtml(pill)}</span>`).join("") + "</p>",
+    `<p class="nordic-home-hero__excerpt">${escapeHtml(heroExcerpt)}</p>`,
     "<div class=\"nordic-home-hero__actions\">",
     safeLink({ path: "/admin/companion", label: "Companion" }),
     safeLink({ path: "/admin/memory/library", label: "Memory" }),
