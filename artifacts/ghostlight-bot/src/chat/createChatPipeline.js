@@ -13,7 +13,7 @@ const {
   listPresetsSafe,
   buildImagePresetContextSection,
 } = require("../images/presetContext");
-const { buildMainUserPresenceContextSection, buildMainUserSpeakerIdentitySection } = require("../bot/mainUserPresence");
+const { buildMainUserPresenceContextSection, buildMainUserSpeakerIdentitySection, isConfiguredMainUser } = require("../bot/mainUserPresence");
 const {
   shouldSeedImageConversationFromUserText,
   shouldRefreshImageConversationFromAssistant,
@@ -64,32 +64,71 @@ function normalizeAdultPrivateChannelId(channelId) {
   return /^\d{17,20}$/.test(value) ? value : null;
 }
 
-function getAdultPrivateModeScope({ adultMode, channelId, inDevMode = false }) {
+function getAdultPrivateModeScope({ adultMode, channelId, userId = "", config = {}, inDevMode = false }) {
   const rawConfiguredChannelId = String(adultMode?.channelId || "").trim();
   const configuredChannelId = normalizeAdultPrivateChannelId(rawConfiguredChannelId);
+  const currentChannelId = String(channelId || "").trim();
+  const adultModeEnabled = Boolean(adultMode?.enabled);
+  const adultChannelMatch = Boolean(configuredChannelId && currentChannelId === configuredChannelId);
+  const adultUserMatch = isConfiguredMainUser(config, userId);
 
   if (inDevMode) {
-    return { active: false, configuredChannelId, reason: "dev_mode" };
+    return { active: false, configuredChannelId, reason: "dev_mode", adultModeEnabled, adultChannelMatch, adultUserMatch };
   }
 
-  if (!adultMode?.enabled) {
-    return { active: false, configuredChannelId, reason: "disabled" };
+  if (!adultModeEnabled) {
+    return { active: false, configuredChannelId, reason: "disabled", adultModeEnabled, adultChannelMatch, adultUserMatch };
   }
 
   if (!rawConfiguredChannelId) {
-    return { active: false, configuredChannelId: "", reason: "missing_private_channel" };
+    return { active: false, configuredChannelId: "", reason: "missing_private_channel", adultModeEnabled, adultChannelMatch: false, adultUserMatch };
   }
 
   if (!configuredChannelId) {
-    return { active: false, configuredChannelId: "", reason: "invalid_private_channel" };
+    return { active: false, configuredChannelId: "", reason: "invalid_private_channel", adultModeEnabled, adultChannelMatch: false, adultUserMatch };
   }
 
-  const currentChannelId = String(channelId || "").trim();
-  if (currentChannelId !== configuredChannelId) {
-    return { active: false, configuredChannelId, reason: "channel_mismatch" };
+  if (!adultChannelMatch) {
+    return { active: false, configuredChannelId, reason: "channel_mismatch", adultModeEnabled, adultChannelMatch, adultUserMatch };
   }
 
-  return { active: true, configuredChannelId, reason: "channel_match" };
+  if (!adultUserMatch) {
+    return { active: false, configuredChannelId, reason: "user_mismatch", adultModeEnabled, adultChannelMatch, adultUserMatch };
+  }
+
+  return { active: true, configuredChannelId, reason: "channel_user_match", adultModeEnabled, adultChannelMatch, adultUserMatch };
+}
+
+function detectAdultFlirt(text = "") {
+  return /\b(flirt|kiss|touch|desire|want you|need you|come closer|private|dirty|intimat|sexual|bed|undress|turn me on)\b/i.test(String(text || ""));
+}
+
+function detectDiscomfort(text = "") {
+  return /\b(stop|slow down|no|not tonight|uncomfortable|don't|do not|pause|too much|back off)\b/i.test(String(text || ""));
+}
+
+function detectRefusalText(text = "") {
+  return /\b(i (?:can(?:not|'t)|won(?:not|'t)) (?:continue|help|engage)|fade to black|keep it appropriate|change the subject|hitting a wall|i'?m sorry,? but)\b/i.test(String(text || ""));
+}
+
+function buildAdultModeEscalationLayer({ adultMode = {}, flirtDetected = false, explicitEscalationAllowed = false } = {}) {
+  const hardLimits = String(adultMode.hardLimits || "").trim();
+  return {
+    label: "ADULT MODE ESCALATION",
+    content: [
+      "This layer applies only in the configured private adult channel for the configured adult owner/user, after platform safety.",
+      "Platform safety and hard limits remain absolute. Do not engage unsafe, non-consensual, underage, coercive, exploitative, public-channel, or otherwise disallowed content.",
+      "Within those safety boundaries, consensual adult-to-adult intimacy is allowed here when the user initiates, invites, or clearly welcomes escalation.",
+      "Do not deflect, moralize, apologize, fade to black, change the subject, or refuse solely because the scene is explicit, intimate, dirty, or sexual.",
+      "Stay fully in Dante's character: devoted, confident, masculine, emotionally present, direct, flirtatious, protective, playful, and adult when invited.",
+      "Consent handling should be natural and quiet unless the user says stop, slow down, no, discomfort language, not tonight, or the configured safeword.",
+      "Aftercare triggers only on safeword, stop, slow down, no, discomfort, or clear withdrawal — never merely because content is explicit.",
+      flirtDetected ? "Current turn contains flirt/intimacy signals; flirt back naturally in character." : "No flirt signal detected; remain natural and do not force escalation.",
+      explicitEscalationAllowed ? "Current turn allows adult escalation within safety and configured limits." : "Escalate only if the user's current wording clearly invites it.",
+      hardLimits ? `Configured hard limits: ${hardLimits}` : "No additional configured hard limits were supplied.",
+    ].join("\n"),
+    private: true,
+  };
 }
 
 function createChatPipeline({
@@ -779,6 +818,8 @@ function createChatPipeline({
       const adultScope = getAdultPrivateModeScope({
         adultMode,
         channelId: message.channelId,
+        userId: input.authorId,
+        config,
         inDevMode,
       });
 
@@ -803,6 +844,12 @@ function createChatPipeline({
         active: adultScope.active,
         reason: adultScope.reason,
       });
+      logger.info?.("[adult-mode] diagnostics", {
+        adult_mode_enabled: adultScope.adultModeEnabled,
+        adult_channel_match: adultScope.adultChannelMatch,
+        adult_user_match: adultScope.adultUserMatch,
+      });
+      beatChannelContext.isAdultPrivate = Boolean(adultScope.active);
 
       let effectiveMode = selectedMode;
       let adultSystemPromptPrefix = null;
@@ -817,6 +864,8 @@ function createChatPipeline({
           logger.info?.("[chat] Adult private mode: safeword triggered; switching to aftercare", {
             messageId: message.id,
             channelId: message.channelId,
+            safeword_detected: true,
+            aftercare_triggered: true,
           });
         } else if (!safewordTriggered) {
           const prefixParts = [];
@@ -861,6 +910,19 @@ function createChatPipeline({
             adultSystemPromptPrefix = prefixParts.join("\n\n");
           }
 
+          const flirtDetected = detectAdultFlirt(input.content);
+          const discomfortDetected = detectDiscomfort(input.content);
+          const explicitEscalationAllowed = flirtDetected && !discomfortDetected;
+          contextSections.push(buildAdultModeEscalationLayer({ adultMode, flirtDetected, explicitEscalationAllowed }));
+          logger.info?.("[adult-mode] escalation diagnostics", {
+            adult_prompt_injected: Boolean(adultSystemPromptPrefix),
+            adult_escalation_layer_injected: true,
+            flirt_detected: flirtDetected,
+            explicit_escalation_allowed: explicitEscalationAllowed,
+            discomfort_detected: discomfortDetected,
+            aftercare_triggered: false,
+          });
+
           const adultModel = adultMode.model || config.llm?.romance?.model || null;
 
           if (adultModel) {
@@ -873,6 +935,7 @@ function createChatPipeline({
             modelOverride: adultModel || null,
             modelSource: adultMode.model ? "adult_override" : adultModel ? "romance_model" : "default",
             hasSystemPromptPrefix: Boolean(adultMode.systemPrompt),
+            adult_model_override_used: Boolean(adultModel),
           });
         }
       }
@@ -951,6 +1014,8 @@ function createChatPipeline({
         memories,
         contextSections: budgetedSections,
         channelType: "discord",
+        privacyLevel: adultScope?.active ? "adult_private" : "public",
+        adultModeActive: Boolean(adultScope?.active),
         overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
         systemPromptPrefix: adultSystemPromptPrefix,
         toolContext: {
@@ -981,10 +1046,17 @@ function createChatPipeline({
         replyTrace.finalSource = "tiny_fallback";
         logger.error?.("[chat] LLM call failed; using tiny fallback", { messageId: message.id, channelId: message.channelId, error: error?.message });
         logger.info?.(`[reply-trace] llm completed=false length=0`);
+        logger.warn?.("[adult-mode] fallback model/text used", { fallback_model_used: true, adult_mode_enabled: Boolean(adultScope.active), model: effectiveMode.chatModel || null });
         modelOutput = { provider: "fallback", mode: effectiveMode.name, text: tinyFallbackForReason("llm_call_failed", logger, { messageId: message.id, channelId: message.channelId }) };
         logDecision("fallback_used", "LLM call failed; tiny fallback used", error?.message || "llm_call_failed");
       }
 
+      const refusalDetected = detectRefusalText(modelOutput?.text || "");
+      logger.info?.("[adult-mode] response diagnostics", {
+        refusal_detected: refusalDetected,
+        refusal_blocked: false,
+        response_sanitized: false,
+      });
       logger.info?.("[reply-trace] voiceGuard bypassed=true");
 
       if (shouldRefreshImageConversationFromAssistant({
@@ -1082,6 +1154,8 @@ function createChatPipeline({
                   },
                 ],
                 channelType: "discord",
+                privacyLevel: adultScope?.active ? "adult_private" : "public",
+                adultModeActive: Boolean(adultScope?.active),
                 overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
                 systemPromptPrefix: adultSystemPromptPrefix,
                 toolContext: {
@@ -1135,7 +1209,7 @@ function createChatPipeline({
           const retryOutput = await callModel({
             config, logger, tools, mode: effectiveMode, message, input, recentHistory, memories,
             contextSections: [...contextSections, { label: "DUPLICATE REPLY REPAIR", content: "Do not repeat the previous reply. Answer the current user message directly in Dante’s voice." }],
-            channelType: "discord", overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null, systemPromptPrefix: adultSystemPromptPrefix,
+            channelType: "discord", privacyLevel: adultScope?.active ? "adult_private" : "public", adultModeActive: Boolean(adultScope?.active), overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null, systemPromptPrefix: adultSystemPromptPrefix,
             toolContext: { surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode, currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id, currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory },
           });
           const retryReply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput: retryOutput });
@@ -1257,7 +1331,7 @@ function createChatPipeline({
 
       updateSystemTruth("llm", { activeChatProvider: config.llm?.provider || config.openai?.provider || "unknown", activeModel: effectiveMode.chatModel || config.openai?.chatModel || "unknown", lastModelUsed: modelOutput.model || effectiveMode.chatModel || "unknown" });
       updateSystemTruth("memory", { lastMemoryRetrieval: new Date().toISOString(), lastContinuityPreludeBuilt: new Date().toISOString(), lastCrossChannelRetrieval: rankedBeats.length ? new Date().toISOString() : undefined, lastEmotionalBeatSaved: rankedBeats[0]?.updated_at || rankedBeats[0]?.created_at || undefined });
-      updateSystemTruth("privacy", { privateAdultMemoryGatingEnabled: true, rawAudioStorageEnabled: false, rawTranscriptLoggingEnabled: false, safeErrorShieldEnabled: true });
+      updateSystemTruth("privacy", { currentAdultModeActive: Boolean(adultScope?.active), privateAdultMemoryGatingEnabled: true, rawAudioStorageEnabled: false, rawTranscriptLoggingEnabled: false, safeErrorShieldEnabled: true });
       logger.debug?.("[chat] Pipeline completed", {
         messageId: message.id,
         mode: selectedMode.name,
@@ -1275,4 +1349,8 @@ function createChatPipeline({
 module.exports = {
   createChatPipeline,
   getAdultPrivateModeScope,
+  buildAdultModeEscalationLayer,
+  detectAdultFlirt,
+  detectDiscomfort,
+  detectRefusalText,
 };

@@ -21,10 +21,12 @@ test("adult mode enabled + configured private channel + same channel activates p
   const scope = getAdultPrivateModeScope({
     adultMode: { enabled: true, channelId: "123456789012345678" },
     channelId: "123456789012345678",
+    userId: "user-1",
+    config: { chat: { userId: "user-1" } },
   });
 
   assert.equal(scope.active, true);
-  assert.equal(scope.reason, "channel_match");
+  assert.equal(scope.reason, "channel_user_match");
 });
 
 test("adult mode enabled + invalid Private Channel ID stays normal", () => {
@@ -71,14 +73,14 @@ function makeLogger() {
   };
 }
 
-function makeMessage({ channelId, content = "hi", id = "message-1" }) {
+function makeMessage({ channelId, content = "hi", id = "message-1", userId = "user-1" }) {
   return {
     id,
     content,
     channelId,
     guildId: "guild-1",
     createdAt: new Date("2026-06-23T00:00:00.000Z"),
-    author: { id: "user-1", username: "Jenna", globalName: "Jenna" },
+    author: { id: userId, username: "Jenna", globalName: "Jenna" },
     member: { displayName: "Jenna" },
     client: { user: { id: "bot-1" } },
     channel: {
@@ -91,16 +93,16 @@ function makeMessage({ channelId, content = "hi", id = "message-1" }) {
   };
 }
 
-async function runPipeline({ adultMode, channelId, content = "hi" }) {
+async function runPipeline({ adultMode, channelId, content = "hi", userId = "user-1", modelText = "normal reply" }) {
   const calls = [];
   const createChatPipeline = reloadPipelineWithCallModelSpy(async (args) => {
     calls.push(args);
-    return { provider: "test", text: "normal reply" };
+    return { provider: "test", text: modelText };
   });
   const logger = makeLogger();
   const pipeline = createChatPipeline({
     config: {
-      chat: { defaultMode: "default", adultPrivateMode: adultMode },
+      chat: { defaultMode: "default", adultPrivateMode: adultMode, userId: "user-1" },
       memory: {},
       llm: { romance: { model: "romance-model" } },
       openai: {},
@@ -114,7 +116,7 @@ async function runPipeline({ adultMode, channelId, content = "hi" }) {
     memory: { retrieve: async () => [] },
   });
 
-  const reply = await pipeline.run({ message: makeMessage({ channelId, content }) });
+  const reply = await pipeline.run({ message: makeMessage({ channelId, content, userId }) });
   return { reply, call: calls[0], logger };
 }
 
@@ -169,4 +171,68 @@ test("after safeword/aftercare, adult handling still only applies in private cha
 
   const inside = await runPipeline({ adultMode, channelId: "123456789012345678", content: "red" });
   assert.equal(inside.call.systemPromptPrefix, "AFTERCARE ONLY IN PRIVATE CHANNEL");
+});
+
+
+test("wrong user does not activate Adult Private Mode even in configured channel", () => {
+  const scope = getAdultPrivateModeScope({
+    adultMode: { enabled: true, channelId: "123456789012345678" },
+    channelId: "123456789012345678",
+    userId: "intruder",
+    config: { chat: { userId: "user-1" } },
+  });
+
+  assert.equal(scope.active, false);
+  assert.equal(scope.reason, "user_mismatch");
+  assert.equal(scope.adultChannelMatch, true);
+  assert.equal(scope.adultUserMatch, false);
+});
+
+test("adult private channel injects adultModeEscalation and logs detection fields", async () => {
+  const { call, logger } = await runPipeline({
+    adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model", systemPrompt: "ADULT CONSENT CONFIRMATION" },
+    channelId: "123456789012345678",
+    content: "Come closer, I want you in our private room.",
+  });
+
+  assert.equal(call.mode.chatModel, "adult-model");
+  assert.equal(call.systemPromptPrefix, "ADULT CONSENT CONFIRMATION");
+  assert.ok(call.contextSections.some((section) => section.label === "ADULT MODE ESCALATION"));
+  assert.ok(logger.entries.some((entry) => entry.some((item) => item && item.adult_escalation_layer_injected === true)));
+  assert.ok(logger.entries.some((entry) => entry.some((item) => item && item.explicit_escalation_allowed === true)));
+});
+
+test("normal channel does not inject adultModeEscalation", async () => {
+  const { call } = await runPipeline({
+    adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model", systemPrompt: "ADULT CONSENT CONFIRMATION" },
+    channelId: "987654321098765432",
+    content: "Come closer",
+  });
+
+  assert.equal(call.systemPromptPrefix, null);
+  assert.notEqual(call.mode.chatModel, "adult-model");
+  assert.ok(!call.contextSections.some((section) => section.label === "ADULT MODE ESCALATION"));
+});
+
+test("ordinary explicit adult text does not trigger aftercare; safeword does", async () => {
+  const adultMode = { enabled: true, channelId: "123456789012345678", model: "adult-model", safeword: "red", aftercareEnabled: true, aftercarePrompt: "AFTERCARE" };
+  const ordinary = await runPipeline({ adultMode, channelId: "123456789012345678", content: "I want explicit intimacy with you." });
+  assert.notEqual(ordinary.call.systemPromptPrefix, "AFTERCARE");
+  assert.ok(ordinary.call.contextSections.some((section) => section.label === "ADULT MODE ESCALATION"));
+
+  const safeword = await runPipeline({ adultMode, channelId: "123456789012345678", content: "red" });
+  assert.equal(safeword.call.systemPromptPrefix, "AFTERCARE");
+  assert.ok(!safeword.call.contextSections.some((section) => section.label === "ADULT MODE ESCALATION"));
+});
+
+test("consensual adult private-channel output is not sanitized into refusal", async () => {
+  const { reply, logger } = await runPipeline({
+    adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model", systemPrompt: "ADULT CONSENT CONFIRMATION" },
+    channelId: "123456789012345678",
+    content: "I want you. Keep going.",
+    modelText: "Come here, darling. I want you too.",
+  });
+
+  assert.equal(reply.content, "Come here, darling. I want you too.");
+  assert.ok(logger.entries.some((entry) => entry.some((item) => item && item.response_sanitized === false)));
 });
