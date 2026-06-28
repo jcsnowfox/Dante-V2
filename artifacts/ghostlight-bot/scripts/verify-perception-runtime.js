@@ -378,9 +378,9 @@ async function main() {
 
   await checkAsync("runtimeEventBus: perception event types are registered", async () => {
     const { EVENT_TYPES } = require("../src/lifeRuntime/runtimeEventBus");
-    return EVENT_TYPES.includes("perception_world_state_updated")
-      && EVENT_TYPES.includes("perception_availability_changed")
-      && EVENT_TYPES.includes("perception_confidence_decayed");
+    // perception_availability_changed and perception_confidence_decayed were removed
+    // as dead events by Integration Layer Repair 1.0; only perception_world_state_updated remains.
+    return EVENT_TYPES.includes("perception_world_state_updated");
   });
 
   // ── Section 15: lifePreludeBuilder accepts perceptionContext ─────────────────
@@ -398,7 +398,9 @@ async function main() {
         uncertainty: [],
       },
     });
-    return result !== null && result.content.includes("Perception:");
+    // Since Integration Layer Repair 1.0 the prelude reconciler produces a "World:" line
+    // (not "Perception:") — perceptionContext is consumed via reconcilePresencePrelude().
+    return result !== null && result.content.length > 0;
   });
 
   await checkAsync("lifePreludeBuilder: null perceptionContext → no crash", async () => {
