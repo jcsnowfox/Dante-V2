@@ -1,0 +1,116 @@
+{
+  "icons": {
+    "mention-user": {
+      "original": "/assets/nordic-dashboard/icons/original/mention-user.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/mention-user.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/mention-user.png",
+      "ariaLabel": "Mention User"
+    },
+    "spotify-song": {
+      "original": "/assets/nordic-dashboard/icons/original/spotify-song.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/spotify-song.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/spotify-song.png",
+      "ariaLabel": "Spotify Song"
+    },
+    "gifs": {
+      "original": "/assets/nordic-dashboard/icons/original/gifs.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/gifs.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/gifs.png",
+      "ariaLabel": "Gifs"
+    },
+    "spotify-playlist": {
+      "original": "/assets/nordic-dashboard/icons/original/spotify-playlist.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/spotify-playlist.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/spotify-playlist.png",
+      "ariaLabel": "Spotify Playlist"
+    },
+    "voice-notes": {
+      "original": "/assets/nordic-dashboard/icons/original/voice-notes.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/voice-notes.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/voice-notes.png",
+      "ariaLabel": "Voice Notes"
+    },
+    "websearch": {
+      "original": "/assets/nordic-dashboard/icons/original/websearch.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/websearch.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/websearch.png",
+      "ariaLabel": "Websearch"
+    },
+    "journals": {
+      "original": "/assets/nordic-dashboard/icons/original/journals.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/journals.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/journals.png",
+      "ariaLabel": "Journals"
+    },
+    "library": {
+      "original": "/assets/nordic-dashboard/icons/original/library.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/library.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/library.png",
+      "ariaLabel": "Library"
+    },
+    "schedules": {
+      "original": "/assets/nordic-dashboard/icons/original/schedules.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/schedules.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/schedules.png",
+      "ariaLabel": "Schedules"
+    },
+    "tools": {
+      "original": "/assets/nordic-dashboard/icons/original/tools.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/tools.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/tools.png",
+      "ariaLabel": "Tools"
+    },
+    "emotional-arc": {
+      "original": "/assets/nordic-dashboard/icons/original/emotional-arc.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/emotional-arc.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/emotional-arc.png",
+      "ariaLabel": "Emotional Arc"
+    },
+    "feedback-learning": {
+      "original": "/assets/nordic-dashboard/icons/original/feedback-learning.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/feedback-learning.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/feedback-learning.png",
+      "ariaLabel": "Feedback Learning"
+    },
+    "heartbeat": {
+      "original": "/assets/nordic-dashboard/icons/original/heartbeat.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/heartbeat.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/heartbeat.png",
+      "ariaLabel": "Heartbeat"
+    },
+    "memory": {
+      "original": "/assets/nordic-dashboard/icons/original/memory.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/memory.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/memory.png",
+      "ariaLabel": "Memory"
+    },
+    "relational-state": {
+      "original": "/assets/nordic-dashboard/icons/original/relational-state.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/relational-state.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/relational-state.png",
+      "ariaLabel": "Relational State"
+    },
+    "companion": {
+      "original": "/assets/nordic-dashboard/icons/original/companion.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/companion.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/companion.png",
+      "ariaLabel": "Companion"
+    },
+    "favicon": {
+      "original": "/assets/nordic-dashboard/icons/original/favicon.png",
+      "transparent512": "/assets/nordic-dashboard/icons/transparent-512/favicon.png",
+      "transparent128": "/assets/nordic-dashboard/icons/transparent-128/favicon.png",
+      "ariaLabel": "Favicon"
+    }
+  },
+  "aliases": {
+    "mentionUser": "mention-user",
+    "spotifySong": "spotify-song",
+    "spotifyPlaylist": "spotify-playlist",
+    "voiceNote": "voice-notes",
+    "webSearch": "websearch",
+    "feedbackLearning": "feedback-learning",
+    "emotionalArc": "emotional-arc",
+    "relationalState": "relational-state"
+  }
+}
