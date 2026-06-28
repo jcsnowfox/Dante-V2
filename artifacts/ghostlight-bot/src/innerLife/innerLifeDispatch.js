@@ -1,6 +1,7 @@
 "use strict";
 
 const { sendDiscordMessage } = require("../discord/discordSendGateway");
+const { shouldPostAutonomyEvent, recordAutonomyPost, sanitizeAutonomyContent, getAutonomyPostingConfig } = require("./autonomyPostingGate");
 
 const AUTONOMY_DEFAULT_CHANNEL_ID = "1513266945577717881";
 const DIAGNOSTIC_DEFAULT_CHANNEL_ID = "1520510624617201804";
@@ -36,10 +37,11 @@ function truncate(text, max = 1400) {
   return `${value.slice(0, max - 1)}…`;
 }
 
-function formatEntryMessage(entry, { diagnostic = false } = {}) {
-  const title = entry?.title || (diagnostic ? "Diagnostic self-check" : "Inner life note");
+function formatEntryMessage(entry, { diagnostic = false, debug = false } = {}) {
+  if (!diagnostic) return truncate(sanitizeAutonomyContent(entry, { debug }), 1800);
+  const title = entry?.title || "Diagnostic self-check";
   const body = entry?.body || entry?.summary || "No body recorded.";
-  const source = entry?.sourceEventType ? `\nsource: ${entry.sourceEventType}` : "";
+  const source = debug && entry?.sourceEventType ? `\nsource: ${entry.sourceEventType}` : "";
   return [`**${truncate(title, 160)}**`, truncate(body), source].filter(Boolean).join("\n\n");
 }
 
@@ -60,14 +62,22 @@ async function sendInnerLifeMessage({ client, channelId, content, logger, label 
   return result;
 }
 
-async function dispatchAutonomyEntry({ client, config, logger, entry } = {}) {
-  return sendInnerLifeMessage({
+async function dispatchAutonomyEntry({ client, config, logger, entry, context = {} } = {}) {
+  const channelId = getAutonomyChannelId(config);
+  const decision = shouldPostAutonomyEvent(entry, { ...context, config, channelId });
+  if (!decision.allowed) {
+    logger?.debug?.("[inner-life-autonomy] post suppressed", { reason: decision.reason, source: entry?.sourceEventType || null, score: decision.score });
+    return { skipped: true, reason: decision.reason, score: decision.score };
+  }
+  const result = await sendInnerLifeMessage({
     client,
-    channelId: getAutonomyChannelId(config),
-    content: formatEntryMessage(entry),
+    channelId,
+    content: formatEntryMessage(entry, { debug: getAutonomyPostingConfig(config).debug }),
     logger,
     label: "inner-life-autonomy",
   });
+  if (!result?.skipped) recordAutonomyPost(decision);
+  return result;
 }
 
 async function dispatchDiagnosticEntry({ client, config, logger, entry, content = "" } = {}) {
@@ -91,4 +101,5 @@ module.exports = {
   dispatchDiagnosticEntry,
   isChannelTemporarilyDisabled,
   disableChannelTemporarily,
+  shouldPostAutonomyEvent,
 };

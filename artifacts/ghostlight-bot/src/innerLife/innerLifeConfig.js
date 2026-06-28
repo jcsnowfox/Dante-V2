@@ -22,6 +22,11 @@ const DEFAULT_CONFIG = Object.freeze({
   quiet_hours_enabled: false,
   quiet_hours_start: "22:00",
   quiet_hours_end: "08:00",
+  autonomy_posting_enabled: false,
+  autonomy_posting_debug: false,
+  autonomy_posting_cooldown_minutes: 45,
+  autonomy_posting_min_score: 0.7,
+  autonomy_posting_public_guild_mode: true,
 });
 
 const BOOLEAN_FLAGS = Object.freeze([
@@ -43,10 +48,15 @@ const BOOLEAN_FLAGS = Object.freeze([
   "private_entries_visible_in_admin",
   "private_entries_require_review",
   "quiet_hours_enabled",
+  "autonomy_posting_enabled",
+  "autonomy_posting_debug",
+  "autonomy_posting_public_guild_mode",
 ]);
 
 const NUMERIC_FIELDS = Object.freeze({
   max_inner_life_prelude_items: { min: 0, max: 10, default: 3 },
+  autonomy_posting_cooldown_minutes: { min: 1, max: 1440, default: 45 },
+  autonomy_posting_min_score: { min: 0, max: 1, default: 0.7 },
 });
 
 const STRING_FIELDS = Object.freeze([

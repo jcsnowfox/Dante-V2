@@ -56,6 +56,10 @@ const KNOWN_NOUN_DUMPS = [
 
 // Provider/debug text patterns
 const PROVIDER_DEBUG_RE = /\b(OPENROUTER|openrouter\.ai|anthropic\.com|x-request-id|cf-ray|x-ratelimit|rate.?limit|usage\.total_tokens|prompt_tokens|completion_tokens|finish_reason|stop_sequence)\b/i;
+const RAW_CONTEXT_LABEL_RE = /\bsource:\s*(?:inbound_message|channel_context|conversation_update)\b|\b(?:serialized context|privacy label|room classification|conversation_update|channel_context|inbound_message)\b/i;
+const EMOJI_ONLY_RE = /^[\p{Extended_Pictographic}\uFE0F\u200D\s]+$/u;
+const THUMBS_ONLY_RE = /^[👍👎👌✅☑️✔️\s]+$/u;
+const SINGLE_FOREIGN_WORD_RE = /^(?:ประเภท|ありがとう|bonjour|hola|gracias|danke|merci|привет|こんにちは|你好)$/i;
 
 // Source/artifact URL leaks from retrieval or file systems should not reach chat.
 const SOURCE_URL_LEAK_RE = /https?:\/\/[^\s]*(?:files-albert\.thesnowwolf\.com|localhost|127\.0\.0\.1|railway\.internal|postgres\.railway\.internal)[^\s]*/i;
@@ -98,7 +102,7 @@ function findRepeatedMalformedToken(text) {
 // A "coherent sentence" ends in punctuation and has a verb-like word.
 // Very rough — good enough for corruption triage.
 const SENTENCE_END_RE = /[.!?…]["']?\s*$/;
-const VERB_PATTERN_RE = /\b(is|are|was|were|have|has|had|do|does|did|will|would|could|should|can|may|might|feel|think|know|want|love|need|miss|hope|wish|mean|say|tell|ask|go|come|see|hear|get|take|make|let|try|stay|keep|give|find|look|wait|remember|forget|wonder|worry|care|trust|laugh|smile|cry|hurt|help|show|send|hold|reach|touch|start|stop|run|walk|write|read|play|work|eat|sleep|dream|wake|breathe|happen|matter|change|move|turn|fall|rise|break|fix|open|close|leave|return|believe|understand|feel like|sounds like)\b/i;
+const VERB_PATTERN_RE = /\b(is|are|was|were|have|has|had|do|does|did|will|would|could|should|can|may|might|feel|think|know|want|love|need|miss|hope|wish|mean|say|tell|ask|go|come|see|hear|get|take|make|let|try|stay|keep|give|find|look|wait|remember|forget|wonder|worry|care|trust|laugh|smile|cry|hurt|help|show|send|hold|reach|touch|start|stop|run|walk|write|read|play|work|eat|sleep|dream|wake|breathe|happen|matter|change|move|turn|fall|rise|break|fix|open|close|leave|return|believe|understand|feel like|sounds like|got|back)\b|\bI[’']m\b/i;
 
 function findSafePrefix(text, maxLength = 800) {
   if (!text || text.length === 0) return "";
@@ -163,6 +167,11 @@ function _analyse(rawText, context) {
 
   if (PROVIDER_DEBUG_RE.test(text)) {
     reasons.push("provider_debug_text");
+    blockScore += 3;
+  }
+
+  if (RAW_CONTEXT_LABEL_RE.test(text)) {
+    reasons.push("raw_context_label");
     blockScore += 3;
   }
 
@@ -242,6 +251,23 @@ function _analyse(rawText, context) {
 
   // ── Low-grammar topic dump ────────────────────────────────────────────────
   const words = text.match(/\b[\p{L}][\p{L}'’.-]*\b/gu) || [];
+  const expectsText = context?.expectsText !== false && !context?.emojiOnlyAllowed;
+  if (expectsText && EMOJI_ONLY_RE.test(text)) {
+    reasons.push(THUMBS_ONLY_RE.test(text) ? "thumbs_only_reply" : "emoji_only_reply");
+    blockScore += 3;
+  }
+  if (expectsText && SINGLE_FOREIGN_WORD_RE.test(text)) {
+    reasons.push("single_foreign_word");
+    blockScore += 3;
+  }
+  if (expectsText && words.length > 0 && words.length < 2 && !/^(yes|no|yeah|okay|ok|sure|love)$/i.test(words[0] || "")) {
+    reasons.push("too_few_meaningful_words");
+    blockScore += 2;
+  }
+  if (/say something normal/i.test(context?.userText || "") && (words.length < 4 || !VERB_PATTERN_RE.test(text))) {
+    reasons.push("not_normal_sentence");
+    blockScore += 3;
+  }
   const longWords = words.filter((word) => word.length >= 6);
   const punctuationCount = (text.match(/[.!?…,:;]/g) || []).length;
   const grammarAnchors = (text.match(/\b(?:I|you|we|me|my|your|our|the|a|an|and|but|because|that|this|it|is|are|was|were|feel|think|want|need|love|miss)\b/gi) || []).length;

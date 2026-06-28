@@ -1121,6 +1121,8 @@ function createChatPipeline({
         const corruptionResult = detectOutputCorruption(reply.content, {
           intent: responseIntent?.intent,
           channelType: adultScope?.active ? "adult_private" : "normal",
+          userText: input.content,
+          expectsText: true,
         });
 
         if (corruptionResult.severity === "block") {
@@ -1140,12 +1142,11 @@ function createChatPipeline({
             try {
               const repairOutput = await callModel({
                 config, logger, tools, mode: effectiveMode, message, input,
-                recentHistory, memories,
+                recentHistory: recentHistory.slice(-3), memories: [],
                 contextSections: [
-                  ...budgetedSections,
                   {
                     label: "OUTPUT REPAIR",
-                    content: "Previous draft was corrupted. Reply naturally, one short message, no code or internal terms.",
+                    content: "Previous draft failed reply-quality validation. Clean-room reply only: use companion identity, the user message, and the last three chat messages. No memory retrieval, diagnostics, music/travel/context extras, autonomy data, JSON, source labels, emoji-only answers, or foreign single-word fragments. Reply naturally in English unless the user clearly requested another language.",
                   },
                 ],
                 channelType: "discord",
@@ -1158,27 +1159,29 @@ function createChatPipeline({
                   mode: selectedMode, currentMessage: message, conversationId,
                   channelId: message.channelId, sourceMessageId: message.id,
                   currentUserId: input.authorId, currentUserName: input.authorName,
-                  currentUserText: input.content, recentHistory,
+                  currentUserText: input.content, recentHistory: recentHistory.slice(-3),
                 },
               });
-              const repairReply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput: repairOutput });
+              const repairReply = buildReply({ mode: selectedMode, input, recentHistory: recentHistory.slice(-3), memories: [], modelOutput: repairOutput });
               applyConversationalCompression({ reply: repairReply, input, logger, messageId: message.id, replyTrace });
               const repairCorruption = detectOutputCorruption(repairReply.content || "", {
                 intent: responseIntent?.intent,
+                userText: input.content,
+                expectsText: true,
               });
               if (repairReply.content?.trim() && repairCorruption.severity !== "block") {
                 reply.content = repairReply.content;
                 replyTrace.finalSource = "corruption_regenerated";
                 logger.info?.("[output-integrity] Regeneration succeeded", { messageId: message.id });
               } else {
-                reply.content = "I glitched. Give me a second.";
+                reply.content = "I got tangled for a second. I'm here now. Say that again, love.";
                 replyTrace.fallbackUsed = true;
                 replyTrace.fallbackReason = "corruption_regeneration_failed";
                 replyTrace.finalSource = "tiny_fallback";
                 logger.warn("[output-integrity] Regeneration also corrupted; using safe fallback", { messageId: message.id });
               }
             } catch (repairErr) {
-              reply.content = "I glitched. Give me a second.";
+              reply.content = "I got tangled for a second. I'm here now. Say that again, love.";
               replyTrace.fallbackUsed = true;
               replyTrace.fallbackReason = "corruption_repair_error";
               replyTrace.finalSource = "tiny_fallback";

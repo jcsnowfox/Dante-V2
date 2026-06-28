@@ -339,6 +339,11 @@ function loadConfig() {
     innerLife: {
       autonomyChannelId: String(process.env.INNER_LIFE_AUTONOMY_CHANNEL_ID || "1513266945577717881").trim(),
       diagnosticChannelId: String(process.env.INNER_LIFE_DIAGNOSTIC_CHANNEL_ID || "1520510624617201804").trim(),
+      autonomy_posting_enabled: readBoolean(process.env.AUTONOMY_POSTING_ENABLED, false),
+      autonomy_posting_debug: readBoolean(process.env.AUTONOMY_POSTING_DEBUG, false),
+      autonomy_posting_cooldown_minutes: readPositiveInt(process.env.AUTONOMY_POSTING_COOLDOWN_MINUTES, 45, { min: 1, max: 1440 }),
+      autonomy_posting_min_score: readFloat(process.env.AUTONOMY_POSTING_MIN_SCORE, 0.7, { min: 0, max: 1 }),
+      autonomy_posting_public_guild_mode: readBoolean(process.env.AUTONOMY_POSTING_PUBLIC_GUILD_MODE, true),
       selfCheck: {
         enabled: readBoolean(process.env.INNER_LIFE_SELF_CHECK_ENABLED, true),
         hours: String(process.env.INNER_LIFE_SELF_CHECK_HOURS || "8,12,21").trim(),
