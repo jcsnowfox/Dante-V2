@@ -140,6 +140,28 @@ function weeklySummaryRanThisWeek(config, now = new Date()) {
   return currentWeekStart === previousWeekStart;
 }
 
+function parseTimeToMinutes(value, fallback = "04:00") {
+  const normalized = String(value || fallback).trim() || fallback;
+  const match = normalized.match(/^(\d{1,2}):(\d{2})$/);
+
+  if (!match) {
+    return parseTimeToMinutes(fallback, "04:00");
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return parseTimeToMinutes(fallback, "04:00");
+  }
+
+  return (hours * 60) + minutes;
+}
+
+function isScheduledTimeReached(currentTimeKey, scheduleTime) {
+  return parseTimeToMinutes(currentTimeKey) >= parseTimeToMinutes(scheduleTime);
+}
+
 function isDailySummaryDueNow(config, now = new Date()) {
   if (!config.memory?.dailySummaryEnabled) {
     return false;
@@ -149,7 +171,7 @@ function isDailySummaryDueNow(config, now = new Date()) {
   const timezone = config.chat?.timezone || "UTC";
   const current = getLocalDateParts(now, timezone);
 
-  return current.timeKey === scheduleTime && !dailySummaryRanToday(config, now);
+  return isScheduledTimeReached(current.timeKey, scheduleTime) && !dailySummaryRanToday(config, now);
 }
 
 function isWeeklySummaryDueNow(config, now = new Date()) {
@@ -164,7 +186,7 @@ function isWeeklySummaryDueNow(config, now = new Date()) {
   const currentWeekday = getLocalWeekday(now, timezone);
 
   return currentWeekday === scheduleDay
-    && current.timeKey === scheduleTime
+    && isScheduledTimeReached(current.timeKey, scheduleTime)
     && !weeklySummaryRanThisWeek(config, now);
 }
 
@@ -217,6 +239,8 @@ module.exports = {
   isAutomationDueNow,
   dailySummaryRanToday,
   weeklySummaryRanThisWeek,
+  parseTimeToMinutes,
+  isScheduledTimeReached,
   isDailySummaryDueNow,
   isWeeklySummaryDueNow,
   renderThreadTitle,

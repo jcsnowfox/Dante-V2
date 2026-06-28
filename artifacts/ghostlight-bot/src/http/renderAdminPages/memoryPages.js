@@ -1283,6 +1283,10 @@ function renderMemoryCuratorPage({
   weeklySummaryDay = 'monday',
   memoryCuratorEnabled = false,
   stageTwoModelMode = 'summary',
+  attentionScanLastRunAt = '',
+  longScanLastRunAt = '',
+  pendingReviewCount = 0,
+  suggestedMemoryCount = 0,
   theme = 'light',
   helpers,
 }) {
@@ -1295,6 +1299,19 @@ function renderMemoryCuratorPage({
     : 'monday';
   const weekdayLabel = normalizedWeeklyDay.charAt(0).toUpperCase() + normalizedWeeklyDay.slice(1);
   const returnTo = escapeHtml(buildAdminLocation({ path: '/admin/memory/curator', theme }));
+  const lastScanCandidates = [attentionScanLastRunAt, longScanLastRunAt]
+    .map((value) => new Date(value || ''))
+    .filter((date) => !Number.isNaN(date.getTime()))
+    .sort((a, b) => b.getTime() - a.getTime());
+  const lastScanLabel = lastScanCandidates.length
+    ? lastScanCandidates[0].toLocaleString('en-US', {
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+    : 'Never';
   const weekdayOptions = weekdays.map((day) =>
     '<option value="' + escapeHtml(day) + '"' + (day === normalizedWeeklyDay ? ' selected' : '') + '>' + escapeHtml(day.charAt(0).toUpperCase() + day.slice(1)) + '</option>'
   ).join('');
@@ -1409,11 +1426,11 @@ function renderMemoryCuratorPage({
     '</div>',
     '<dl class="mc-heartbeat-list">',
     '<div class="mc-hb-row"><dt class="mc-hb-label">Status</dt><dd class="mc-hb-value">' + (memoryCuratorEnabled ? 'Active' : 'Inactive') + '</dd></div>',
-    '<div class="mc-hb-row"><dt class="mc-hb-label">Last scan</dt><dd class="mc-hb-value">—</dd></div>',
+    '<div class="mc-hb-row"><dt class="mc-hb-label">Last scan</dt><dd class="mc-hb-value">' + escapeHtml(lastScanLabel) + '</dd></div>',
     '<div class="mc-hb-row"><dt class="mc-hb-label">Next scan</dt><dd class="mc-hb-value">' + escapeHtml(dailySummaryTime) + ' &middot; ' + escapeHtml(weekdayLabel) + '</dd></div>',
     '<div class="mc-hb-row"><dt class="mc-hb-label">Channels selected</dt><dd class="mc-hb-value">' + escapeHtml(String(channelCount)) + '</dd></div>',
-    '<div class="mc-hb-row"><dt class="mc-hb-label">Pending review</dt><dd class="mc-hb-value">0</dd></div>',
-    '<div class="mc-hb-row"><dt class="mc-hb-label">Suggested memories</dt><dd class="mc-hb-value">0</dd></div>',
+    '<div class="mc-hb-row"><dt class="mc-hb-label">Pending review</dt><dd class="mc-hb-value">' + escapeHtml(String(pendingReviewCount)) + '</dd></div>',
+    '<div class="mc-hb-row"><dt class="mc-hb-label">Suggested memories</dt><dd class="mc-hb-value">' + escapeHtml(String(suggestedMemoryCount)) + '</dd></div>',
     '</dl>',
     '</div>',
 
