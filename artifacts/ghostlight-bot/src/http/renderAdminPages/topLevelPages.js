@@ -61,18 +61,75 @@ const BATTLE_RHYTHM_DAYS = Object.freeze([
   { day: "Sunday", training: "Full reset / flexible day", meal: "Flexible / Irish fry-up / reset" },
 ]);
 
-const VIKING_RECIPE_CARDS = Object.freeze([
-  { title: "Seared Salmon with Roasted Roots", image: "05-recipe-photos/seared-salmon-roasted-roots.png", tags: ["Protein", "Roots"], time: "35 min", label: "Training" },
-  { title: "Lamb and Root Stew", image: "05-recipe-photos/lamb-root-stew.png", tags: ["Protein", "Slow"], time: "75 min", label: "Refuel" },
-  { title: "Skyr and Berries Bowl", image: "05-recipe-photos/skyr-berries-honey.png", tags: ["Rest", "Simple"], time: "10 min", label: "Recovery" },
+const LOW_CARB_NORDIC_RECIPE_SEEDS = Object.freeze([
+  {
+    id: "low-carb-norwegian-fiskesuppe",
+    title: "Low-Carb Norwegian Fish Soup",
+    cultureTag: "Norwegian",
+    carbsPerServing: 19,
+    carbType: "total",
+    time: "26 min",
+    sourceName: "Easy and Delish",
+    sourceUrl: "https://www.easyanddelish.com/norwegian-fish-soup-recipe/",
+    imageAsset: "05-recipe-photos/seared-salmon-roasted-roots.png",
+    tags: ["Fiskesuppe", "Seafood", "Low carb"],
+  },
+  {
+    id: "low-carb-salmon-soup-dill",
+    title: "Low-Carb Salmon Soup with Dill",
+    cultureTag: "Nordic-adjacent",
+    carbsPerServing: 4,
+    carbType: "net",
+    time: "35 min",
+    sourceName: "Step Away From The Carbs",
+    sourceUrl: "https://stepawayfromthecarbs.com/low-carb-salmon-soup/",
+    imageAsset: "05-recipe-photos/seared-salmon-roasted-roots.png",
+    tags: ["Salmon", "Dill", "Keto"],
+  },
+  {
+    id: "keto-smoked-salmon-chowder",
+    title: "Keto Smoked Salmon Chowder",
+    cultureTag: "Nordic-adjacent",
+    carbsPerServing: 9.2,
+    carbType: "net",
+    time: "20 min",
+    sourceName: "Ruled Me",
+    sourceUrl: "https://www.ruled.me/easy-keto-smoked-salmon-chowder/",
+    imageAsset: "05-recipe-photos/lamb-root-stew.png",
+    tags: ["Smoked salmon", "Chowder", "Keto"],
+  },
+  {
+    id: "keto-swedish-meatballs",
+    title: "Keto Swedish Meatballs",
+    cultureTag: "Swedish",
+    carbsPerServing: 3.3,
+    carbType: "net",
+    time: "25 min",
+    sourceName: "Sugar Free Londoner",
+    sourceUrl: "https://sugarfreelondoner.com/keto-swedish-meatballs/",
+    imageAsset: "05-recipe-photos/lamb-root-stew.png",
+    tags: ["Meatballs", "Scandinavian", "Keto"],
+  },
+  {
+    id: "keto-lohikeitto",
+    title: "Keto Finnish Salmon Soup",
+    cultureTag: "Finnish",
+    carbsPerServing: 5.1,
+    carbType: "net",
+    time: "30 min",
+    sourceName: "Low-Carb, So Simple",
+    sourceUrl: "https://www.lowcarbsosimple.com/hearty-finnish-salmon-soup-lohikeitto-simplified-and-made-keto/",
+    imageAsset: "05-recipe-photos/skyr-berries-honey.png",
+    tags: ["Lohikeitto", "Salmon", "Keto"],
+  },
 ]);
 
-const TRAVEL_SAGA_CARDS = Object.freeze([
-  { title: "Fjord Crossing", location: "Norway", state: "Wishlist", description: "A future route for cliffs, cold water, and aurora watch points." },
-  { title: "Old Town Lantern Walk", location: "City chapter", state: "Planned", description: "A compact adventure shell for museums, food stops, and quiet streets." },
-  { title: "Coastal Fortress Day", location: "North Atlantic", state: "Wishlist", description: "Map pins, notes, and concierge prompts can live here later." },
-]);
-
+function selectRotatingRecipes({ now = new Date(), count = 4 } = {}) {
+  const date = now instanceof Date ? now : new Date(now);
+  const daySeed = Number.isFinite(date.getTime()) ? Math.floor(date.getTime() / 86400000) : 0;
+  const safeCount = Math.min(Math.max(Number(count) || 4, 3), 5, LOW_CARB_NORDIC_RECIPE_SEEDS.length);
+  return Array.from({ length: safeCount }, (_, index) => LOW_CARB_NORDIC_RECIPE_SEEDS[(daySeed + index) % LOW_CARB_NORDIC_RECIPE_SEEDS.length]);
+}
 
 function getHomeHeroExcerpt(profile) {
   const fallback = "Live companion systems, memory, gallery, and rituals gathered into one cinematic dashboard.";
@@ -81,12 +138,6 @@ function getHomeHeroExcerpt(profile) {
   const excerpt = sentences.slice(0, 3).join(" ").trim();
   return excerpt.length > 360 ? `${excerpt.slice(0, 357).trim()}…` : excerpt;
 }
-
-const TRAVEL_CHECKLIST_ITEMS = Object.freeze([
-  { label: "Choose destination", detail: "Wishlist", checked: true },
-  { label: "Save preferences", detail: "Food, pace, accessibility", checked: false },
-  { label: "Build itinerary", detail: "Concierge phase", checked: false },
-]);
 
 function assetUrl(relativePath = "") {
   return `${NORDIC_DASHBOARD_ASSET_BASE}/${String(relativePath).replace(/^\/+/, "")}`;
@@ -104,6 +155,11 @@ function renderHomePage({ stats, theme = "light", helpers }) {
   const recentJournals = Array.isArray(stats.recentJournals) ? stats.recentJournals.filter(Boolean) : [];
   const recentImages = Array.isArray(stats.recentImages) ? stats.recentImages.filter(Boolean) : [];
   const recentInnerLifeEntries = Array.isArray(stats.recentInnerLifeEntries) ? stats.recentInnerLifeEntries.filter(Boolean) : [];
+  const travel = stats.travel || {};
+  const travelTrips = Array.isArray(travel.trips) ? travel.trips.filter(Boolean) : [];
+  const travelChecklistByTrip = travel.checklistByTrip || {};
+  const nextTravelTrip = travel.nextTrip || travelTrips.find((trip) => ["booked", "planned", "wishlist"].includes(trip.status)) || travelTrips[0] || null;
+  const nextTravelChecklistItems = Array.isArray(travel.nextChecklistItems) ? travel.nextChecklistItems.filter(Boolean) : (nextTravelTrip ? (travelChecklistByTrip[nextTravelTrip.id] || []) : []);
   const companion = stats.companion || {};
   const timezone = String(stats.timezone || "").trim() || "UTC";
   const now = new Date();
@@ -211,23 +267,27 @@ function renderHomePage({ stats, theme = "light", helpers }) {
     : `<p class="nordic-empty">Recent Heartbeat decisions will appear here.</p>`;
 
   const galleryMarkup = recentImages.length
-    ? `<div class="nordic-home-gallery-track">${recentImages.map((image) => {
+    ? `<div class="nordic-home-gallery-track nordic-gallery-strip">${recentImages.map((image) => {
       const previewUrl = String(image.previewUrl || "").trim();
       const caption = String(image.tagline || image.altText || "Generated image").trim();
       const shortCaption = caption.length > 80 ? `${caption.slice(0, 77)}…` : caption;
-      return `<a class="nordic-home-gallery-tile nordic-gallery-card" href="${escapeHtml(buildAdminLocation({ path: `/admin/gallery/images/detail/${encodeURIComponent(image.imageId)}`, theme }))}"${formatHomeImageAspectStyle(image.aspectRatio)}><span class="nordic-gallery-media"><img class="nordic-gallery-media-bg" src="${escapeHtml(previewUrl)}" alt="" aria-hidden="true" loading="lazy"><img class="nordic-gallery-img" src="${escapeHtml(previewUrl)}" alt="${escapeHtml(image.altText || "Generated gallery image")}" loading="lazy"></span><span class="nordic-gallery-caption"><strong>${escapeHtml(image.tagline || "Generated image")}</strong><small>${escapeHtml(shortCaption)}</small></span></a>`;
+      return `<a class="nordic-home-gallery-tile nordic-gallery-card" href="${escapeHtml(buildAdminLocation({ path: `/admin/gallery/images/detail/${encodeURIComponent(image.imageId)}`, theme }))}"${formatHomeImageAspectStyle(image.aspectRatio)}><span class="nordic-gallery-media"><img class="nordic-gallery-media-bg" src="${escapeHtml(previewUrl)}" alt="" aria-hidden="true" loading="lazy"><img class="nordic-gallery-img" src="${escapeHtml(previewUrl)}" alt="Generated gallery image" loading="lazy"></span><span class="nordic-gallery-caption"><strong>${escapeHtml(image.sourceLabel || "Generated image")}</strong><small>${escapeHtml(shortCaption)}</small></span></a>`;
     }).join("")}</div>`
     : `<div class="nordic-home-empty-gallery"><p>No gallery images yet.</p>${safeLink({ path: "/admin/gallery/images", label: "Open Gallery" })}</div>`;
 
-  const recipeMarkup = `<div class="nordic-home-recipe-list">${VIKING_RECIPE_CARDS.map((recipe) => `<article class="nordic-home-recipe-card"><img src="${escapeHtml(assetUrl(recipe.image))}" alt="${escapeHtml(recipe.title)}" loading="lazy"><div><h3>${escapeHtml(recipe.title)}</h3><p>${escapeHtml(recipe.time)} · ${escapeHtml(recipe.label)}</p><div>${recipe.tags.map((tag) => renderNordicPill({ label: tag })).join("")}</div></div></article>`).join("")}</div>`;
+  const recipeMarkup = `<div class="nordic-home-recipe-list">${selectRotatingRecipes({ now }).map((recipe) => `<a class="nordic-home-recipe-card" href="${escapeHtml(recipe.sourceUrl)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(assetUrl(recipe.imageAsset))}" alt="" aria-hidden="true" loading="lazy"><div><p class="nordic-eyebrow">${escapeHtml(recipe.cultureTag)} · ${escapeHtml(recipe.sourceName)}</p><h3>${escapeHtml(recipe.title)}</h3><p>${escapeHtml(recipe.time)} · ${escapeHtml(recipe.carbsPerServing)}g ${escapeHtml(recipe.carbType)} carbs / serving</p><div>${recipe.tags.map((tag) => renderNordicPill({ label: tag })).join("")}</div></div></a>`).join("")}</div>`;
 
   const battleMarkup = `<div class="nordic-home-rhythm-summary"><p><strong>Today:</strong> ${escapeHtml(currentRhythm.day)} · ${escapeHtml(currentRhythm.training)} · ${escapeHtml(currentRhythm.meal)}</p><p><strong>Next:</strong> ${escapeHtml(nextRhythm.day)} · ${escapeHtml(nextRhythm.training)}</p></div><div class="nordic-home-battle-grid">${BATTLE_RHYTHM_DAYS.map((day, index) => renderBattleRhythmDayCard({ day: day.day, status: index === todayIndex ? "Today" : day.training, items: [day.training, day.meal] })).join("")}</div>`;
 
-  const travelMarkup = `<div class="nordic-home-travel-map" aria-hidden="true"><img src="${escapeHtml(assetUrl("07-travel-concierge/travel-saga-map-bg.png"))}" alt=""></div><div class="nordic-home-travel-cards">${TRAVEL_SAGA_CARDS.map((card) => `<article class="travel-saga-card">${renderNordicIcon("companion", { decorative: true })}<p class="nordic-eyebrow">${escapeHtml(card.location)} · ${escapeHtml(card.state)}</p><h3>${escapeHtml(card.title)}</h3><p>${escapeHtml(card.description)}</p></article>`).join("")}</div>`;
+  const travelMarkup = travelTrips.length
+    ? `<div class="nordic-home-travel-map" aria-hidden="true"><img src="${escapeHtml(assetUrl("07-travel-concierge/travel-saga-map-bg.png"))}" alt=""></div><div class="nordic-home-travel-cards">${travelTrips.slice(0, 3).map((trip) => `<a class="travel-saga-card" href="${escapeHtml(buildAdminLocation({ path: `/admin/travel/${encodeURIComponent(trip.id)}`, theme }))}">${renderNordicIcon("companion", { decorative: true })}<p class="nordic-eyebrow">${escapeHtml([trip.location, trip.country].filter(Boolean).join(", ") || "Destination")} · ${escapeHtml(trip.status || "wishlist")}</p><h3>${escapeHtml(trip.title || "Untitled trip")}</h3><p>${escapeHtml(trip.notes || "Open the Adventure Book to add notes, preferences, and checklist items.")}</p><div class="travel-tag-row">${Array.isArray(trip.vibeTags) ? trip.vibeTags.slice(0, 4).map((tag) => renderNordicPill({ label: tag })).join("") : ""}</div></a>`).join("")}</div>`
+    : `<div class="nordic-home-empty-gallery"><p>No saved travel destinations yet.</p>${safeLink({ path: "/admin/travel", label: "Open Adventure Book" })}</div>`;
 
-  const checklistMarkup = `<div class="nordic-home-checklist">${TRAVEL_CHECKLIST_ITEMS.map((item) => renderTravelChecklistItem(item)).join("")}</div>`;
+  const checklistMarkup = nextTravelTrip && nextTravelChecklistItems.length
+    ? `<div class="nordic-home-checklist">${nextTravelChecklistItems.slice(0, 6).map((item) => `<form class="travel-home-check-item${item.checked ? " is-complete" : ""}" method="post" action="/admin/actions/travel-checklist-toggle"><input type="hidden" name="theme" value="${escapeHtml(theme)}"><input type="hidden" name="returnTo" value="/admin/home"><input type="hidden" name="itemId" value="${escapeHtml(item.id)}"><input type="hidden" name="checked" value="${item.checked ? "false" : "true"}"><button type="submit" class="travel-check-button" aria-label="${item.checked ? "Uncheck" : "Check"} ${escapeHtml(item.label || "checklist item")}">${item.checked ? "✓" : ""}</button><span><strong>${escapeHtml(item.label || "Checklist item")}</strong><small>${escapeHtml(nextTravelTrip.title || "Travel")}${item.category ? ` · ${escapeHtml(item.category)}` : ""}</small></span></form>`).join("")}</div>`
+    : `<div class="nordic-home-empty-gallery"><p>${nextTravelTrip ? "No checklist items for this trip yet." : "No travel checklist yet."}</p>${safeLink({ path: nextTravelTrip ? `/admin/travel/${encodeURIComponent(nextTravelTrip.id)}` : "/admin/travel", label: nextTravelTrip ? "Open Trip" : "Open Adventure Book" })}</div>`;
 
-  const conciergeMarkup = `<div class="nordic-home-concierge"><p>Dante can gather preferences, keep travel notes, and turn saved memories into itinerary ideas in a later phase.</p>${safeLink({ path: "/admin/tools/images", label: "Open Tools" })}</div>`;
+  const conciergeMarkup = `<div class="nordic-home-concierge"><p>${nextTravelTrip ? `Concierge context is ready for ${escapeHtml(nextTravelTrip.title)}. Open the trip to copy a planning brief built from saved preferences, notes, dates, and checklist state.` : "Add a destination in the Adventure Book, then Dante Concierge can compile a planning brief from saved trip context. Live web search is not connected here yet."}</p>${safeLink({ path: nextTravelTrip ? `/admin/travel/${encodeURIComponent(nextTravelTrip.id)}` : "/admin/travel", label: nextTravelTrip ? "Open Planning Brief" : "Open Adventure Book" })}</div>`;
 
   const innerLifeMarkup = recentInnerLifeEntries.length
     ? `<div class="nordic-home-innerlife">${recentInnerLifeEntries.slice(0, 4).map((entry) => `<article><strong>${escapeHtml(entry.title || entry.entryType || "Inner life")}</strong><span>${escapeHtml(entry.summary || "No summary recorded.")}</span></article>`).join("")}</div>`
@@ -265,14 +325,14 @@ function renderHomePage({ stats, theme = "light", helpers }) {
     "<div class=\"nordic-home-middle\">",
     `<section class="nordic-panel nordic-home-recent"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Heartbeat</p><h2 class="nordic-panel__title">Recent Actions</h2></div></div>${recentActionMarkup}${innerLifeMarkup}</section>`,
     `<section class="nordic-panel nordic-home-gallery"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Live generated media</p><h2 class="nordic-panel__title">Gallery</h2></div>${safeLink({ path: "/admin/gallery/images", label: "Open Gallery" })}</div>${galleryMarkup}</section>`,
-    `<section class="nordic-panel nordic-home-recipes"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">UI-only recipe cards</p><h2 class="nordic-panel__title">Viking Age Recipes</h2></div><span class="nordic-pill">Coming soon</span></div>${recipeMarkup}</section>`,
+    `<section class="nordic-panel nordic-home-recipes"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Real low-carb recipe links</p><h2 class="nordic-panel__title">Nordic Low-Carb Recipes</h2></div><span class="nordic-pill">Rotates daily</span></div>${recipeMarkup}</section>`,
     "</div>",
     renderNordicDivider({ label: "Saga planning", icon: "companion" }),
     "<div class=\"nordic-home-lower\">",
     `<section class="nordic-panel nordic-home-battle"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">UI-only rhythm</p><h2 class="nordic-panel__title">Battle Rhythm Training</h2></div></div>${battleMarkup}</section>`,
     `<section class="nordic-panel nordic-home-travel"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Adventure book</p><h2 class="nordic-panel__title">Travel Saga</h2></div></div>${travelMarkup}</section>`,
     `<section class="nordic-panel nordic-home-travel-check"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Checklist shell</p><h2 class="nordic-panel__title">Travel Checklist</h2></div></div>${checklistMarkup}</section>`,
-    `<section class="nordic-panel nordic-home-concierge-panel"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Planning aide</p><h2 class="nordic-panel__title">Dante Concierge</h2></div></div>${conciergeMarkup}</section>`,
+    `<section class="nordic-panel nordic-home-concierge-panel"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Planning brief</p><h2 class="nordic-panel__title">Dante Concierge</h2></div><span class="nordic-pill">No live web search</span></div>${conciergeMarkup}</section>`,
     "</div>",
     `<section class="nordic-panel nordic-home-journals"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Memory ribbon</p><h2 class="nordic-panel__title">Journal Entries</h2></div>${safeLink({ path: "/admin/journals", label: "Open Journals" })}</div>${journalMarkup}</section>`,
     "</section>",
@@ -836,6 +896,8 @@ function renderBehaviourPage({ config, theme = "light", helpers, customReactionE
 }
 
 module.exports = {
+  LOW_CARB_NORDIC_RECIPE_SEEDS,
+  selectRotatingRecipes,
   renderHomePage,
   renderCompanionPage,
   renderBehaviourPage,

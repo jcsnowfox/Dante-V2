@@ -50,6 +50,8 @@ const {
   renderNorwegianLearningPage: renderNorwegianLearningPageTemplate,
   renderNorwegianDashboard: renderNorwegianDashboardTemplate,
   renderHumanSimulationPage: renderHumanSimulationPageTemplate,
+  renderAdventureBookPage: renderAdventureBookPageTemplate,
+  renderTripDetailPage: renderTripDetailPageTemplate,
 } = require("./renderAdminPages");
 const {
   escapeHtml,
@@ -563,6 +565,8 @@ function buildAdminPageHelpers({ sortMemories, config = {} }) {
       ...params,
     }),
     renderHomePage,
+    renderAdventureBookPage,
+    renderTripDetailPage,
     renderCompanionPage,
     renderBehaviourPage,
     renderImagesPage,

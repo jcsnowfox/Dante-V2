@@ -34,6 +34,7 @@ const { handleCompanionAvatarActions } = require("./actions/companionAvatarActio
 const { handleAdminMaintenanceActions } = require("./actions/adminMaintenanceActions");
 const { handleAdminExportActions } = require("./actions/adminExportActions");
 const { handleSituationalAwarenessActions } = require("./actions/situationalAwarenessActions");
+const { handleTravelActions } = require("./actions/travelActions");
 const { NORDIC_DASHBOARD_ASSET_BASE, getNordicDashboardAssetPath } = require("./nordicDashboardAssets");
 const {
   buildMemoryExportPayload,
@@ -434,6 +435,8 @@ function createHealthServer({
         url.pathname === "/admin/tools/audio" ||
         url.pathname === "/admin/tools/gifs" ||
         url.pathname === "/admin/tools/music" ||
+        url.pathname === "/admin/travel" ||
+        url.pathname.startsWith("/admin/travel/") ||
         url.pathname === "/admin/schedules" ||
         url.pathname === "/admin/schedules/actions" ||
         url.pathname === "/admin/schedules/daily-thread" ||
@@ -651,6 +654,19 @@ function createHealthServer({
 
       {
         const handled = await handleSituationalAwarenessActions({
+          req,
+          res,
+          url,
+          context,
+          withAdmin,
+        });
+        if (handled !== false) {
+          return handled;
+        }
+      }
+
+      {
+        const handled = await handleTravelActions({
           req,
           res,
           url,
