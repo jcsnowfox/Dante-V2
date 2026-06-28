@@ -67,6 +67,10 @@ function getAdminRouteState(pathname) {
     return { section: "engineering", tab: "ai" };
   }
 
+  if (pathname === "/admin/engineering/pipeline") {
+    return { section: "engineering", tab: "pipeline" };
+  }
+
   if (pathname === "/admin/engineering" || pathname === "/admin/engineering/dependencies" || pathname === "/admin/engineering/report.json") {
     return { section: "engineering" };
   }

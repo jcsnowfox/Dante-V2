@@ -46,4 +46,47 @@ function renderEngineeringPage({ report, theme, helpers }) {
 </script>`;
 }
 
-module.exports = { renderEngineeringPage };
+function renderCanonicalPipelinePage({ snapshot, theme, helpers }) {
+  void theme;
+  const { escapeHtml } = helpers;
+  const latest = snapshot.latest || {};
+  const rows = (snapshot.events || []).map((event) => `
+    <tr>
+      <td>${escapeHtml(event.timestamp || "")}</td>
+      <td>${escapeHtml(event.stage || "")}</td>
+      <td>${escapeHtml(event.channel || "")}</td>
+      <td>${escapeHtml(String(event.durationMs ?? 0))}ms</td>
+      <td>${escapeHtml(event.currentTool || "none")}</td>
+      <td>${escapeHtml(event.currentProvider || "none")}</td>
+      <td>${escapeHtml(String(event.memoryCount ?? 0))}</td>
+      <td>${escapeHtml(String(event.promptSize ?? 0))}</td>
+      <td>${escapeHtml(event.diagnostics || "")}</td>
+    </tr>`).join("");
+  const stageList = (snapshot.stages || []).map((stage) => `<li>${escapeHtml(stage)}</li>`).join("");
+
+  return `
+<style>
+.gl-pipeline-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem}.gl-pipeline-table{width:100%;border-collapse:collapse}.gl-pipeline-table th,.gl-pipeline-table td{border-bottom:1px solid rgba(148,163,184,.22);padding:.55rem;text-align:left;vertical-align:top}.gl-pipeline-stage-list{columns:2;column-gap:2rem}.gl-pipeline-message{white-space:pre-wrap;max-height:12rem;overflow:auto}
+@media(max-width:720px){.gl-pipeline-stage-list{columns:1}.gl-pipeline-table{font-size:.78rem}}
+</style>
+<section class="page-header">
+  <p class="eyebrow">Engineering / Canonical Pipeline</p>
+  <h1 class="page-title">Canonical Pipeline</h1>
+  <p class="page-description">Live read-only nervous-system viewer for companion events as they pass through the shared runtime. Channels stay thin; intelligence belongs to the canonical pipeline.</p>
+</section>
+<section class="gl-pipeline-grid">
+  ${card("Current Stage", latest.stage || "idle", snapshot.active ? "Pipeline currently active" : "No active event", helpers)}
+  ${card("Current Channel", latest.channel || "none", "Source adapter for the latest event", helpers)}
+  ${card("Current Duration", `${latest.totalDurationMs || latest.durationMs || 0}ms`, "Total observed duration", helpers)}
+  ${card("Current Provider", latest.currentProvider || "none", "LLM/provider currently observed", helpers)}
+  ${card("Current Tool", latest.currentTool || "none", "Tool router activity", helpers)}
+  ${card("Memory Count", latest.memoryCount || 0, "Retrieved/written memory count when emitted", helpers)}
+  ${card("Prompt Size", latest.promptSize || 0, "Prompt characters when emitted", helpers)}
+  ${card("Diagnostics", latest.diagnostics || "none", "Latest trace note", helpers)}
+</section>
+<section class="card"><div class="card-header"><h2 class="card-title">Current Message</h2></div><div class="card-body"><pre class="gl-pipeline-message">${escapeHtml(latest.currentMessage || "No message observed yet.")}</pre></div></section>
+<section class="card"><div class="card-header"><h2 class="card-title">Canonical Stage Contract</h2></div><div class="card-body"><ol class="gl-pipeline-stage-list">${stageList}</ol></div></section>
+<section class="card"><div class="card-header"><h2 class="card-title">Recent Diagnostics</h2></div><div class="card-body"><table class="gl-pipeline-table"><thead><tr><th>Time</th><th>Stage</th><th>Channel</th><th>Duration</th><th>Tool</th><th>Provider</th><th>Memory</th><th>Prompt</th><th>Diagnostics</th></tr></thead><tbody>${rows || '<tr><td colspan="9">No pipeline events recorded yet.</td></tr>'}</tbody></table></div></section>`;
+}
+
+module.exports = { renderCanonicalPipelinePage, renderEngineeringPage };
