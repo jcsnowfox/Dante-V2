@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 90" fill="none" preserveAspectRatio="none">
+
+<defs>
+  <linearGradient id="glow" x1="0" x2="1" y1="0" y2="1">
+    <stop offset="0" stop-color="#00e5ff"/>
+    <stop offset="0.55" stop-color="#7d3cff"/>
+    <stop offset="1" stop-color="#d4af37"/>
+  </linearGradient>
+  <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur stdDeviation="4" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+
+<rect x="10" y="36" width="1180" height="18" rx="9" fill="#061018" fill-opacity="0.5" stroke="#d4af37" stroke-opacity="0.2"/>
+<text x="600" y="55" text-anchor="middle" font-family="serif" font-size="28" letter-spacing="16" fill="#00e5ff" fill-opacity="0.42">ᚠᚢᚦᚨᚱᚲ ᚷᚹᚺᚾᛁᛃ ᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛟᛞ</text>
+</svg>

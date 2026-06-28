@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 560" fill="none" preserveAspectRatio="none">
+
+<defs>
+  <linearGradient id="glow" x1="0" x2="1" y1="0" y2="1">
+    <stop offset="0" stop-color="#00e5ff"/>
+    <stop offset="0.55" stop-color="#7d3cff"/>
+    <stop offset="1" stop-color="#d4af37"/>
+  </linearGradient>
+  <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur stdDeviation="4" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+
+<rect x="16" y="16" width="1368" height="528" rx="32" fill="#04121b" fill-opacity="0.74" stroke="url(#glow)" stroke-opacity="0.70" stroke-width="2.5"/>
+<path d="M42 96 V42 H96 M1304 42 H1358 V96 M1358 464 V518 H1304 M96 518 H42 V464" stroke="#d4af37" stroke-width="4" stroke-opacity="0.75"/>
+<path d="M78 42 C120 80 120 80 78 118 C152 104 152 104 166 42 M1322 42 C1280 80 1280 80 1322 118 C1248 104 1248 104 1234 42 M78 518 C120 480 120 480 78 442 C152 456 152 456 166 518 M1322 518 C1280 480 1280 480 1322 442 C1248 456 1248 456 1234 518" stroke="url(#glow)" stroke-width="2" opacity="0.95" filter="url(#softGlow)"/>
+<circle cx="210" cy="280" r="160" stroke="#00e5ff" stroke-opacity="0.08" stroke-width="2"/>
+<path d="M210 116 L228 260 L344 280 L228 300 L210 444 L192 300 L76 280 L192 260 Z" stroke="#00e5ff" stroke-opacity="0.16"/>
+</svg>

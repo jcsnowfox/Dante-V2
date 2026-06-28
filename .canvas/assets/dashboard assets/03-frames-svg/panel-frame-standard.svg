@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" fill="none" preserveAspectRatio="none">
+
+<defs>
+  <linearGradient id="glow" x1="0" x2="1" y1="0" y2="1">
+    <stop offset="0" stop-color="#00e5ff"/>
+    <stop offset="0.55" stop-color="#7d3cff"/>
+    <stop offset="1" stop-color="#d4af37"/>
+  </linearGradient>
+  <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur stdDeviation="4" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+
+<rect x="18" y="18" width="1164" height="484" rx="28" fill="#061018" fill-opacity="0.72" stroke="url(#glow)" stroke-opacity="0.55" stroke-width="2"/>
+<rect x="28" y="28" width="1144" height="464" rx="22" stroke="#d4af37" stroke-opacity="0.35" stroke-width="1"/>
+<path d="M44 78 C44 44 44 44 78 44 M1122 44 C1156 44 1156 44 1156 78 M1156 442 C1156 476 1156 476 1122 476 M78 476 C44 476 44 476 44 442" stroke="#d4af37" stroke-width="3" stroke-opacity="0.65"/>
+<path d="M56 56 l42 0 l-22 22 l22 22 l-42 0 l22 -22z M1144 56 l-42 0 l22 22 l-22 22 l42 0 l-22 -22z M56 464 l42 0 l-22 -22 l22 -22 l-42 0 l22 22z M1144 464 l-42 0 l22 -22 l-22 -22 l42 0 l-22 22z" stroke="url(#glow)" stroke-width="2" filter="url(#softGlow)"/>
+</svg>
