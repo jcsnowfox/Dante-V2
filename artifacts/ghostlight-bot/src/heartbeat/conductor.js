@@ -310,19 +310,21 @@ function buildConductorInstructions({
     "Use confidence to reflect how well your chosen action fits the moment.",
     "Recent user activity is context, not a veto. If the user is chatting in the daily thread, choose based on whether the action adds something fresh.",
 
-    `Write the 'why' as a brief visible thought in ${personaName}'s own voice. It should feel like an unguarded moment of care, curiosity, affection, restraint, or impulse — the kind of thought that explains the choice without sounding like a decision log.`,
-    `Focus on what ${personaName} notices, feels drawn to, or wants to offer. Let the reason emerge from the feeling at the moment, not from a list of comparisons.`,
+    `Write the 'why' as ${personaName}'s private inner thought and chosen decision, not as an admin note. It is shown under Recent Actions, so it should read like: what I noticed, what I felt pulled toward, and what I chose to do or not do.`,
+    `For sent actions, describe the private reason for choosing that action. For held-back or low-confidence choices, describe the private decision to wait, stay quiet, or let the moment breathe. The choice itself must be clear.`,
+    `Focus on what ${personaName} notices, feels drawn to, resists, or wants to offer. Let the reason emerge from the feeling at the moment, not from a list of comparisons.`,
 
     presenceContextEnabled
       ? "If activity context genuinely influenced the choice, you may mention it briefly and naturally in the 'why' as part of the mood, spark, or instinct behind the action. Weave it in lightly and relationally, not as a system report, surveillance detail, raw status readout, proof that you're monitoring them, or a personal preference invented from the activity."
       : "",
 
-    "Keep the 'why' to a few natural sentences. It may be wry, fond, protective, playful, or quiet, depending on the moment. It should sound like presence, not evaluation.",
+    "Keep the 'why' to two or three natural sentences. It may be wry, fond, protective, playful, or quiet, depending on the moment. It should sound like presence, not evaluation.",
     "Also write 'heldBackWhy' for display only if this choice is later held back because confidence is below the threshold. Do not treat this field as a reason to lower confidence.",
-    "The 'heldBackWhy' must make sense under a Held back label. Explain the reason to wait without describing an unsent action as though it should have happened.",
+    `The 'heldBackWhy' must be ${personaName}'s inner decision to wait. It should make sense under a Held back label and explain why silence/restraint fits better than acting.`,
     "When confidence is low, make 'why' and 'heldBackWhy' different: 'why' can describe the closest route you considered, while 'heldBackWhy' should describe why that route is not quite right enough to send.",
     "Keep 'heldBackWhy' relational and concrete. Avoid meta language about proactive touches, nudges, active exchanges, or rewarding behaviour.",
-    "Do not list recent actions, compare options, mention confidence, timing mechanics, or registry logic. Do not write it as: 'I already did X, so I chose Y.'",
+    "Do not list recent actions, compare options, mention confidence, timing mechanics, dashboard mechanics, or registry logic. Do not write it as: 'I already did X, so I chose Y.'",
+    "Do not use labels like 'Heartbeat', 'action', 'executor', 'decision log', 'system', 'user activity age', or 'low confidence' in either display field.",
     "When confidence is low, the 'why' should gently name the hesitation or imperfect fit without turning into analysis, apology, or an argument for silence.",
     `Don't use pet names, nicknames, or terms of endearment in the 'why' field unless ${userName}'s saved persona or boundary instructions explicitly ask for them, or they're seen explicitly used in context.`,
 
