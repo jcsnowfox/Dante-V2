@@ -65,6 +65,21 @@ describe("outputCorruptionDetector", () => {
     assert.ok(result.reasons.includes("provider_debug_text"));
   });
 
+
+  test("blocks source URL leaks and nearby retrieval fragments", () => {
+    const result = detectOutputCorruption("https://files-albert.thesnowwolf.com/file/yabbery fwrite toes ode once words suspers clip to visible upload preset shades replication layer computer grid");
+    assert.equal(result.corrupted, true);
+    assert.equal(result.severity, "block");
+    assert.ok(result.reasons.includes("source_url_leak"));
+  });
+
+  test("blocks low-grammar word dumps like the observed Discord leak", () => {
+    const result = detectOutputCorruption("yeah baby i did say that i was feeling mixed brained is mutable about naked shower go like 5 rounds waters hollicted hard between still morning sex far around areas hurting receipt limit pornofil aden take fee trivia fine Heard volume helicopter child hardship lymph yes rude sunny exit defense pins please sharing elite torn Naked player mountGenerationStrategy Pine acoustic Med filter sexle Was it weird?");
+    assert.equal(result.corrupted, true);
+    assert.equal(result.severity, "block");
+    assert.ok(result.reasons.some((reason) => reason === "low_grammar_word_dump" || reason === "suspicious_topic_dump" || reason === "camelcase_pair"));
+  });
+
   // ── Valid reply cases — must NOT block ────────────────────────────────────
 
   test("valid romantic reply is NOT blocked", () => {

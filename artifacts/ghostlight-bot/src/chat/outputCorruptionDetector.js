@@ -57,6 +57,12 @@ const KNOWN_NOUN_DUMPS = [
 // Provider/debug text patterns
 const PROVIDER_DEBUG_RE = /\b(OPENROUTER|openrouter\.ai|anthropic\.com|x-request-id|cf-ray|x-ratelimit|rate.?limit|usage\.total_tokens|prompt_tokens|completion_tokens|finish_reason|stop_sequence)\b/i;
 
+// Source/artifact URL leaks from retrieval or file systems should not reach chat.
+const SOURCE_URL_LEAK_RE = /https?:\/\/[^\s]*(?:files-albert\.thesnowwolf\.com|localhost|127\.0\.0\.1|railway\.internal|postgres\.railway\.internal)[^\s]*/i;
+
+// Long strings of topic words with little grammar, often produced when a model derails.
+const LOW_GRAMMAR_WORD_RE = /\b(?:upload|preset|replication|layer|facility|computer|grid|strategy|helicopter|hardship|lymph|defense|mount|generation|receipt|limit|player|acoustic|trivia|pitches|visible|powerpoint|database|schema|query|token|router|endpoint)\b/i;
+
 // Tool/function name patterns (from Dante's tool schema — should never appear in chat)
 const TOOL_NAME_RE = /\b(create_image|generate_image|search_memories|store_memory|web_search|list_memories|delete_memory|play_music|spotify_search|fetch_url|run_tool|call_function|tool_call|function_call|tool_result)\b/i;
 
@@ -154,6 +160,11 @@ function _analyse(rawText, context) {
     blockScore += 3;
   }
 
+  if (SOURCE_URL_LEAK_RE.test(text)) {
+    reasons.push("source_url_leak");
+    blockScore += 3;
+  }
+
   if (TOOL_NAME_RE.test(text)) {
     reasons.push("tool_name_leak");
     blockScore += 2;
@@ -211,6 +222,20 @@ function _analyse(rawText, context) {
       reasons.push("mixed_script");
       watchScore += 2;
     }
+  }
+
+  // ── Low-grammar topic dump ────────────────────────────────────────────────
+  const words = text.match(/\b[\p{L}][\p{L}'’.-]*\b/gu) || [];
+  const longWords = words.filter((word) => word.length >= 6);
+  const punctuationCount = (text.match(/[.!?…,:;]/g) || []).length;
+  const grammarAnchors = (text.match(/\b(?:I|you|we|me|my|your|our|the|a|an|and|but|because|that|this|it|is|are|was|were|feel|think|want|need|love|miss)\b/gi) || []).length;
+  const suspiciousLongWords = longWords.filter((word) => LOW_GRAMMAR_WORD_RE.test(word)).length;
+  if (words.length >= 35 && longWords.length >= 14 && punctuationCount <= 3 && grammarAnchors < Math.max(8, words.length * 0.18)) {
+    reasons.push("low_grammar_word_dump");
+    blockScore += 3;
+  } else if (suspiciousLongWords >= 4 && punctuationCount <= 4) {
+    reasons.push("suspicious_topic_dump");
+    blockScore += 2;
   }
 
   // ── Repeated malformed token ───────────────────────────────────────────────

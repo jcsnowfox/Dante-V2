@@ -23,6 +23,14 @@ function isTextChannel(channel) {
   return Boolean(channel?.isTextBased?.() || channel?.send);
 }
 
+function classifyDiscordSendError(error) {
+  const code = String(error?.code || error?.rawError?.code || "");
+  const message = String(error?.message || "");
+  if (code === "50013" || /missing permissions/i.test(message)) return "missing_permissions";
+  if (code === "10003" || /unknown channel/i.test(message)) return "unknown_channel";
+  return "send_failed";
+}
+
 async function sendDiscordMessage({
   channel = null,
   client = null,
@@ -47,10 +55,11 @@ async function sendDiscordMessage({
     const sent = await channel.send(messagePayload);
     return { sent: true, sentMessage: sent, messageId: sent?.id || null, channelId: sent?.channelId || targetId || null };
   } catch (error) {
-    logger?.warn?.(`[${label}] send failed`, { channelId: targetId || null, error: sanitizeLogValue(error?.message) });
+    const reason = classifyDiscordSendError(error);
+    logger?.warn?.(`[${label}] send failed`, { channelId: targetId || null, reason, error: sanitizeLogValue(error?.message) });
     if (throwOnError) throw error;
-    return { skipped: true, reason: "send_failed", error: sanitizeLogValue(error?.message), channelId: targetId || null };
+    return { skipped: true, reason, error: sanitizeLogValue(error?.message), channelId: targetId || null };
   }
 }
 
-module.exports = { sendDiscordMessage, normalizePayload, sanitizeLogValue };
+module.exports = { sendDiscordMessage, normalizePayload, sanitizeLogValue, classifyDiscordSendError };

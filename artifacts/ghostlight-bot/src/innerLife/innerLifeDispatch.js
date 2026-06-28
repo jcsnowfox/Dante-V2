@@ -4,6 +4,23 @@ const { sendDiscordMessage } = require("../discord/discordSendGateway");
 
 const AUTONOMY_DEFAULT_CHANNEL_ID = "1513266945577717881";
 const DIAGNOSTIC_DEFAULT_CHANNEL_ID = "1520510624617201804";
+const disabledChannels = new Map();
+const DISABLED_CHANNEL_TTL_MS = 60 * 60 * 1000;
+
+function isChannelTemporarilyDisabled(channelId, now = Date.now()) {
+  const disabledUntil = disabledChannels.get(String(channelId || ""));
+  if (!disabledUntil) return false;
+  if (disabledUntil <= now) {
+    disabledChannels.delete(String(channelId || ""));
+    return false;
+  }
+  return true;
+}
+
+function disableChannelTemporarily(channelId, now = Date.now()) {
+  const target = String(channelId || "").trim();
+  if (target) disabledChannels.set(target, now + DISABLED_CHANNEL_TTL_MS);
+}
 
 function getAutonomyChannelId(config = {}) {
   return String(config?.innerLife?.autonomyChannelId || process.env.INNER_LIFE_AUTONOMY_CHANNEL_ID || AUTONOMY_DEFAULT_CHANNEL_ID).trim();
@@ -29,13 +46,18 @@ function formatEntryMessage(entry, { diagnostic = false } = {}) {
 async function sendInnerLifeMessage({ client, channelId, content, logger, label = "inner-life" } = {}) {
   const target = String(channelId || "").trim();
   if (!client || !target || !content) return { skipped: true, reason: "missing_deps" };
-  return sendDiscordMessage({
+  if (isChannelTemporarilyDisabled(target)) return { skipped: true, reason: "channel_temporarily_disabled", channelId: target };
+  const result = await sendDiscordMessage({
     client,
     channelId: target,
     content: truncate(content, 1900),
     logger,
     label,
   });
+  if (result?.reason === "missing_permissions" || result?.reason === "unknown_channel") {
+    disableChannelTemporarily(target);
+  }
+  return result;
 }
 
 async function dispatchAutonomyEntry({ client, config, logger, entry } = {}) {
@@ -67,4 +89,6 @@ module.exports = {
   sendInnerLifeMessage,
   dispatchAutonomyEntry,
   dispatchDiagnosticEntry,
+  isChannelTemporarilyDisabled,
+  disableChannelTemporarily,
 };

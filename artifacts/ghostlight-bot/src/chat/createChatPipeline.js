@@ -1061,15 +1061,10 @@ function createChatPipeline({
           replyTrace.corruptionBlocked = true;
           replyTrace.corruptionReasons = corruptionResult.reasons;
 
-          if (corruptionResult.recommendation === "trim_to_safe_prefix" && corruptionResult.safePrefix?.length > 30) {
-            reply.content = corruptionResult.safePrefix;
-            replyTrace.finalSource = "corruption_trimmed";
-            logger.info?.("[output-integrity] Reply trimmed to safe prefix", {
-              messageId: message.id,
-              safePrefixLength: corruptionResult.safePrefix.length,
-            });
-          } else {
-            // Attempt one regeneration with a compact repair prompt
+          {
+            // Attempt one regeneration with a compact repair prompt. Do not send a trimmed
+            // prefix: corrupted replies can start naturally and then leak internal/source text
+            // inside the same sentence, which still reads as broken to the user.
             try {
               const repairOutput = await callModel({
                 config, logger, tools, mode: effectiveMode, message, input,
