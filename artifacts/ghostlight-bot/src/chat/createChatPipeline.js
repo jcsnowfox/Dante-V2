@@ -38,6 +38,9 @@ const { updateConversationSatisfaction } = require("../conversation/conversation
 const { createConversationStateStore } = require("../conversation/conversationStateStore");
 const { createFollowUpCandidateStore } = require("../conversation/followUpCandidateStore");
 const { planReactionResponse } = require("../conversation/reactionResponsePlanner");
+const { detectOutputCorruption } = require("./outputCorruptionDetector");
+const { applyPromptBudget } = require("./promptBudget");
+const { capturePromptAudit, logAuditCapture } = require("./promptAuditCapture");
 
 const defaultConversationStateStore = createConversationStateStore();
 const defaultFollowUpCandidateStore = createFollowUpCandidateStore();
@@ -906,6 +909,19 @@ function createChatPipeline({
         }
       }
 
+      // Phase 4: Apply prompt budget before LLM call
+      const budgetedSections = applyPromptBudget(contextSections, { logger, messageId: message.id });
+
+      // Phase 2: Capture prompt audit snapshot (debug only, no-op in production)
+      const promptAudit = capturePromptAudit({
+        modelId: effectiveMode.chatModel || config.openai?.chatModel || "unknown",
+        temperature: effectiveMode.temperature,
+        topP: effectiveMode.topP,
+        maxTokens: effectiveMode.maxOutputTokens,
+        contextSections: budgetedSections,
+      });
+      logAuditCapture(promptAudit, logger, message.id);
+
       let modelOutput;
       try {
         replyTrace.llmCalled = true;
@@ -919,7 +935,7 @@ function createChatPipeline({
         input,
         recentHistory,
         memories,
-        contextSections,
+        contextSections: budgetedSections,
         channelType: "discord",
         overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
         systemPromptPrefix: adultSystemPromptPrefix,
@@ -1005,6 +1021,88 @@ function createChatPipeline({
         replyTrace.fallbackUsed = true;
         replyTrace.fallbackReason = "empty_reply";
         replyTrace.finalSource = "tiny_fallback";
+      }
+
+      // Phase 6: Output corruption gate — blocks corrupted replies before Discord send
+      if (reply.content && replyTrace.finalSource !== "tiny_fallback") {
+        const corruptionResult = detectOutputCorruption(reply.content, {
+          intent: responseIntent?.intent,
+          channelType: adultScope?.active ? "adult_private" : "normal",
+        });
+
+        if (corruptionResult.severity === "block") {
+          logger.warn("[output-integrity] Corrupted reply blocked", {
+            messageId: message.id,
+            reasons: corruptionResult.reasons,
+            recommendation: corruptionResult.recommendation,
+            textLength: reply.content.length,
+          });
+          replyTrace.corruptionBlocked = true;
+          replyTrace.corruptionReasons = corruptionResult.reasons;
+
+          if (corruptionResult.recommendation === "trim_to_safe_prefix" && corruptionResult.safePrefix?.length > 30) {
+            reply.content = corruptionResult.safePrefix;
+            replyTrace.finalSource = "corruption_trimmed";
+            logger.info?.("[output-integrity] Reply trimmed to safe prefix", {
+              messageId: message.id,
+              safePrefixLength: corruptionResult.safePrefix.length,
+            });
+          } else {
+            // Attempt one regeneration with a compact repair prompt
+            try {
+              const repairOutput = await callModel({
+                config, logger, tools, mode: effectiveMode, message, input,
+                recentHistory, memories,
+                contextSections: [
+                  ...budgetedSections,
+                  {
+                    label: "OUTPUT REPAIR",
+                    content: "Previous draft was corrupted. Reply naturally, one short message, no code or internal terms.",
+                  },
+                ],
+                channelType: "discord",
+                overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
+                systemPromptPrefix: adultSystemPromptPrefix,
+                toolContext: {
+                  surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId,
+                  mode: selectedMode, currentMessage: message, conversationId,
+                  channelId: message.channelId, sourceMessageId: message.id,
+                  currentUserId: input.authorId, currentUserName: input.authorName,
+                  currentUserText: input.content, recentHistory,
+                },
+              });
+              const repairReply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput: repairOutput });
+              const repairCorruption = detectOutputCorruption(repairReply.content || "", {
+                intent: responseIntent?.intent,
+              });
+              if (repairReply.content?.trim() && repairCorruption.severity !== "block") {
+                reply.content = repairReply.content;
+                replyTrace.finalSource = "corruption_regenerated";
+                logger.info?.("[output-integrity] Regeneration succeeded", { messageId: message.id });
+              } else {
+                reply.content = "I glitched. Give me a second.";
+                replyTrace.fallbackUsed = true;
+                replyTrace.fallbackReason = "corruption_regeneration_failed";
+                replyTrace.finalSource = "tiny_fallback";
+                logger.warn("[output-integrity] Regeneration also corrupted; using safe fallback", { messageId: message.id });
+              }
+            } catch (repairErr) {
+              reply.content = "I glitched. Give me a second.";
+              replyTrace.fallbackUsed = true;
+              replyTrace.fallbackReason = "corruption_repair_error";
+              replyTrace.finalSource = "tiny_fallback";
+              logger.warn("[output-integrity] Regeneration call failed; using safe fallback", {
+                messageId: message.id,
+                error: repairErr?.message,
+              });
+            }
+          }
+        } else if (corruptionResult.severity === "watch") {
+          logger.info?.("[output-integrity] Reply flagged as watch-level", {
+            messageId: message.id,
+            reasons: corruptionResult.reasons,
+          });
+        }
       }
 
       const duplicateCheck = checkDuplicateReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: reply.content });
