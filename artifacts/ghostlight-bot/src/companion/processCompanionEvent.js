@@ -19,6 +19,11 @@ const {
   normalizeInboundEvent,
   normalizeOutboundResult,
 } = require("./companionEvent");
+const {
+  emitCanonicalPipelineTrace,
+  finishCanonicalPipelineTrace,
+  startCanonicalPipelineTrace,
+} = require("./canonicalPipelineDiagnostics");
 
 function extractResponseText(reply) {
   if (reply == null) {
@@ -43,6 +48,8 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
       throw new Error("[companion] Discord companion event is missing metadata.discord.message.");
     }
 
+    emitCanonicalPipelineTrace("llm_provider", event, { provider: "chatPipeline.run" });
+
     const reply = await chatPipeline.run({
       message,
       mode: discord.mode,
@@ -60,6 +67,10 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
       event,
     );
 
+    emitCanonicalPipelineTrace("post_processing", event, { diagnostics: "discord reply normalized" });
+    emitCanonicalPipelineTrace("memory_writer", event, { diagnostics: "delegated to existing chat pipeline" });
+    emitCanonicalPipelineTrace("diagnostics", event, { diagnostics: "discord canonical pass-through complete" });
+
     // `reply` is passed through untouched so the Discord sender keeps its full
     // payload (files, generated image/audio ids, suppressEmbeds, warnings).
     return { event, outbound, reply };
@@ -73,6 +84,8 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
     const sl = event.metadata?.secondLife || {};
     const contextSections = Array.isArray(sl.contextSections) ? sl.contextSections : [];
     const publicChat = sl.publicChat === true;
+
+    emitCanonicalPipelineTrace("llm_provider", event, { provider: "secondLifeReplyGenerator.generateReply" });
 
     const { text } = await secondLifeReplyGenerator.generateReply({
       event,
@@ -92,18 +105,31 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
       event,
     );
 
+    emitCanonicalPipelineTrace("post_processing", event, { diagnostics: "second life reply normalized" });
+    emitCanonicalPipelineTrace("memory_writer", event, { diagnostics: "delegated to existing second life pipeline" });
+    emitCanonicalPipelineTrace("diagnostics", event, { diagnostics: "second life canonical pass-through complete" });
+
     return { event, outbound, reply: text ? { content: text } : null };
   }
 
   async function processCompanionEvent(rawEvent) {
     const event = normalizeInboundEvent(rawEvent);
+    startCanonicalPipelineTrace(event);
+    emitCanonicalPipelineTrace("companion_event", event, { diagnostics: "normalized inbound companion event" });
+    emitCanonicalPipelineTrace("identity_resolver", event, { diagnostics: "using existing companion identity path" });
+    emitCanonicalPipelineTrace("user_resolver", event, { diagnostics: "using existing channel user path" });
+    emitCanonicalPipelineTrace("relationship_resolver", event, { diagnostics: "using existing relationship context path" });
 
     if (event.channelType === "discord") {
-      return processDiscordEvent(event);
+      const result = await processDiscordEvent(event);
+      finishCanonicalPipelineTrace(event, { diagnostics: "discord response ready" });
+      return result;
     }
 
     if (event.channelType === "second_life") {
-      return processSecondLifeEvent(event);
+      const result = await processSecondLifeEvent(event);
+      finishCanonicalPipelineTrace(event, { diagnostics: "second life response ready" });
+      return result;
     }
 
     logger?.warn?.("[companion] Received event for a channel without an adapter yet.", {
