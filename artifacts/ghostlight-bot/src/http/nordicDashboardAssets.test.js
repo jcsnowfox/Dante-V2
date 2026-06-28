@@ -13,6 +13,7 @@ const {
   NORDIC_ICON_FALLBACKS,
   hasNordicDashboardSourceDir,
   getNordicDashboardAssetPath,
+  getNordicDashboardManifestPath,
   isNordicDashboardEnabled,
   resolveNordicIcon,
 } = require("./nordicDashboardAssets");
@@ -39,7 +40,7 @@ test("nordic dashboard assets are manifest-backed and feature-flagged off by def
   assert.equal(isNordicDashboardEnabled({ NEXT_PUBLIC_NORDIC_DASHBOARD: "true" }), true);
   assert.equal(isNordicDashboardEnabled({ NORDIC_DASHBOARD_ENABLED: "1" }), true);
 
-  const manifestPath = path.join(process.cwd(), "assets", "nordic-dashboard", "manifest.json");
+  const manifestPath = getNordicDashboardManifestPath();
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   assert.equal(manifest.basePath, NORDIC_DASHBOARD_ASSET_BASE);
   assert.equal(manifest.iconBasePath, NORDIC_DASHBOARD_ICON_BASE);

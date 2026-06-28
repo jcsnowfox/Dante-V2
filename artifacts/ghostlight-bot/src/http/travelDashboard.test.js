@@ -10,6 +10,7 @@ const { renderHomePage } = require("./renderAdminPages/topLevelPages");
 const { renderAdventureBookPage, renderTripDetailPage, buildPlanningBrief } = require("./renderAdminPages/travelPages");
 const { getAdminRouteState } = require("./adminPageHandlers/shared");
 const { renderShell } = require("./renderAdminPages/shared");
+const { handleTravelPageRequest, buildTravelStatusPayload } = require("./adminPageHandlers/travelPageHandler");
 
 const helpers = {
   escapeHtml(value) { return String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;"); },
@@ -130,6 +131,80 @@ test("adventure book route and trip detail route render", async (t) => {
   assert.match(book, /Adventure Book/);
   assert.match(detail, /Dante Concierge Planning Brief/);
   assert.match(detail, /Live web lookup is not connected here yet/);
+  assert.doesNotMatch(detail, /live web search is connected/i);
+});
+
+test("travel handler renders safe error state when travelAdventureStore is missing", async () => {
+  let html = "";
+  const innerRes = { end(value) { html = value; } };
+  await handleTravelPageRequest({
+    url: new URL("http://localhost/admin/travel"),
+    route: { section: "travel" },
+    innerRes,
+    innerContext: {},
+    helpers: { ...helpers, getMessage: () => "", getError: () => "", renderAdminShell: ({ pageBody }) => pageBody, renderAdventureBookPage, renderTripDetailPage },
+    theme: "dark",
+    themeLinks: {},
+  });
+  assert.match(html, /Travel storage unavailable/);
+  assert.match(html, /Travel Saga storage is unavailable/);
+  assert.match(html, /TRAVEL_ADVENTURES_FILE or TRAVEL_DATA_PATH/);
+  assert.match(html, /Railway volume mount/);
+});
+
+test("travel detail handler renders safe error state when travelAdventureStore is missing", async () => {
+  let html = "";
+  const innerRes = { end(value) { html = value; } };
+  await handleTravelPageRequest({
+    url: new URL("http://localhost/admin/travel/missing-id"),
+    route: { section: "travel", tripId: "missing-id" },
+    innerRes,
+    innerContext: {},
+    helpers: { ...helpers, getMessage: () => "", getError: () => "", renderAdminShell: ({ pageBody }) => pageBody, renderAdventureBookPage, renderTripDetailPage },
+    theme: "dark",
+    themeLinks: {},
+  });
+  assert.match(html, /Travel storage unavailable/);
+  assert.doesNotMatch(html, /TypeError/);
+});
+
+test("travel handler catches thrown store errors and renders safe admin error panel", async () => {
+  let html = "";
+  const warnings = [];
+  const innerRes = { end(value) { html = value; } };
+  await handleTravelPageRequest({
+    url: new URL("http://localhost/admin/travel"),
+    route: { section: "travel" },
+    innerRes,
+    innerContext: {
+      logger: { warn: (...args) => warnings.push(args) },
+      travelAdventureStore: {
+        async listTrips() { throw new Error("simulated travel read failure"); },
+      },
+    },
+    helpers: { ...helpers, getMessage: () => "", getError: () => "", renderAdminShell: ({ pageBody }) => pageBody, renderAdventureBookPage, renderTripDetailPage },
+    theme: "dark",
+    themeLinks: {},
+  });
+  assert.match(html, /Travel storage unavailable/);
+  assert.match(html, /simulated travel read failure/);
+  assert.equal(warnings.length, 1);
+});
+
+test("travel status payload is safe for present and missing stores", async (t) => {
+  const store = await makeStore(t);
+  await store.saveTrip({ title: "Safe Path Test", status: "planned" });
+  const status = await buildTravelStatusPayload({ innerContext: { travelAdventureStore: store } });
+  assert.equal(status.storeAvailable, true);
+  assert.equal(status.persistenceMode, "json-file");
+  assert.equal(status.liveWebConcierge, false);
+  assert.equal(status.configuredPathBasename, "travel.json");
+  assert.doesNotMatch(JSON.stringify(status), /dante-travel-/);
+
+  const missing = await buildTravelStatusPayload({ innerContext: {} });
+  assert.equal(missing.storeAvailable, false);
+  assert.equal(missing.liveWebConcierge, false);
+  assert.match(missing.lastLoadError, /missing from app context/);
 });
 
 test("invalid or missing ids are rejected safely by store operations", async (t) => {
@@ -149,8 +224,10 @@ test("planning brief compiles trip context without claiming web search", async (
   assert.doesNotMatch(brief, /web search completed/i);
 });
 
-test("sidebar remains unchanged", () => {
-  const shell = renderShell({ currentSection: "home", pageBody: "<main>Travel</main>", theme: "dark", themeLinks: {}, config: {}, helpers });
+test("sidebar includes Travel and active state works", () => {
+  const shell = renderShell({ currentSection: "travel", pageBody: "<main>Travel</main>", theme: "dark", themeLinks: {}, config: {}, helpers });
   assert.match(shell, /gl-nav-link/);
   assert.match(shell, /Gallery/);
+  assert.match(shell, /href="\/admin\/travel" aria-current="page"/);
+  assert.match(shell, />Travel<\/span><\/a>/);
 });

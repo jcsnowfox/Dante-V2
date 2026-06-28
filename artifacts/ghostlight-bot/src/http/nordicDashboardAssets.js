@@ -71,6 +71,22 @@ function getNordicDashboardSourceDir(startDir = process.cwd()) {
   return path.join(findRepoRoot(startDir), NORDIC_DASHBOARD_SOURCE_RELATIVE_PATH);
 }
 
+function getNordicDashboardPublicAssetDir(startDir = process.cwd()) {
+  const repoRoot = findRepoRoot(startDir);
+  const candidates = [
+    path.join(repoRoot, "assets", "nordic-dashboard"),
+    path.join(repoRoot, "artifacts", "ghostlight-bot", "assets", "nordic-dashboard"),
+    path.join(__dirname, "..", "..", "assets", "nordic-dashboard"),
+  ];
+  return candidates.find((candidate) => {
+    try { return fs.statSync(candidate).isDirectory(); } catch { return false; }
+  }) || candidates[0];
+}
+
+function getNordicDashboardManifestPath(startDir = process.cwd()) {
+  return path.join(getNordicDashboardPublicAssetDir(startDir), "manifest.json");
+}
+
 function hasNordicDashboardSourceDir(startDir = process.cwd()) {
   try { return fs.statSync(getNordicDashboardSourceDir(startDir)).isDirectory(); } catch { return false; }
 }
@@ -115,6 +131,8 @@ module.exports = {
   NORDIC_UPLOADED_ICON_ASSETS,
   findRepoRoot,
   getNordicDashboardSourceDir,
+  getNordicDashboardPublicAssetDir,
+  getNordicDashboardManifestPath,
   hasNordicDashboardSourceDir,
   getNordicDashboardAssetPath,
   isNordicDashboardEnabled,

@@ -70,7 +70,7 @@ test("home dashboard renders cinematic Nordic layout without fake links", () => 
   assert.match(html, /Battle Rhythm Training/);
   assert.match(html, /Travel Saga/);
   assert.match(html, /Travel Checklist/);
-  assert.match(html, /Dante Concierge/);
+  assert.match(html, /Dante Concierge Planning Brief/);
   assert.match(html, /Journal Entries/);
   assert.doesNotMatch(html, /href="#"/);
   assert.match(html, /Online/);
@@ -172,8 +172,10 @@ test("home dashboard links route to real admin paths and UI-only modules do not 
   assert.doesNotMatch(html, /View all/i);
   assert.doesNotMatch(html, /Plan Adventure/i);
   assert.doesNotMatch(html, /Ask Concierge/i);
-  assert.match(html, /Dante Concierge/);
+  assert.match(html, /Dante Concierge Planning Brief/);
+  assert.match(html, /Planning Brief|Preview/);
   assert.match(html, /No live web search/);
+  assert.doesNotMatch(html, /live web search is connected/i);
   assert.doesNotMatch(html, /UI-only recipe cards/);
   assert.match(html, /Real low-carb recipe links/);
   assert.match(html, /Checklist shell/);
