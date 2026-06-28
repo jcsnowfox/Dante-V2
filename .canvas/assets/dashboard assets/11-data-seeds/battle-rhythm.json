@@ -1,0 +1,124 @@
+{
+  "trainingRhythm": [
+    {
+      "day": "Monday",
+      "short": "MON",
+      "type": "Strength",
+      "label": "Shield Strength Day",
+      "focus": "Full body strength",
+      "notes": [
+        "Magic AI Mirror",
+        "Pro Power Home Gym",
+        "Kettlebell optional"
+      ]
+    },
+    {
+      "day": "Tuesday",
+      "short": "TUE",
+      "type": "Recovery",
+      "label": "Shield Recovery Day",
+      "focus": "Recovery / mobility",
+      "notes": [
+        "10\u201320 min easy walk or mobility",
+        "Optional gentle 30 min walk"
+      ]
+    },
+    {
+      "day": "Wednesday",
+      "short": "WED",
+      "type": "Cardio",
+      "label": "Torch Cardio Day",
+      "focus": "Heart/lungs confidence",
+      "notes": [
+        "VR Boxing / FitXR",
+        "Treadmill walk",
+        "Low-impact cardio"
+      ]
+    },
+    {
+      "day": "Thursday",
+      "short": "THU",
+      "type": "Recovery",
+      "label": "Shield Reset Day",
+      "focus": "Nervous system reset",
+      "notes": [
+        "Walk / stretch",
+        "Breathwork",
+        "Sleep support"
+      ]
+    },
+    {
+      "day": "Friday",
+      "short": "FRI",
+      "type": "Endurance",
+      "label": "Shield Endurance Day",
+      "focus": "Sustained cardio",
+      "notes": [
+        "iFit hike",
+        "Incline walk",
+        "Exercise bike",
+        "Zone 2"
+      ]
+    },
+    {
+      "day": "Saturday",
+      "short": "SAT",
+      "type": "Active Recovery",
+      "label": "Torch Active Recovery",
+      "focus": "Refuel and mobility",
+      "notes": [
+        "Light walk",
+        "Mobility",
+        "Controlled carb/refuel support"
+      ]
+    },
+    {
+      "day": "Sunday",
+      "short": "SUN",
+      "type": "Full Reset",
+      "label": "Full Reset / Flexible Day",
+      "focus": "Family, food prep, rest",
+      "notes": [
+        "No formal workout",
+        "Flexible meal / Irish fry-up if chosen"
+      ]
+    }
+  ],
+  "mealRhythm": [
+    {
+      "day": 1,
+      "type": "Carnivore"
+    },
+    {
+      "day": 2,
+      "type": "Carnivore"
+    },
+    {
+      "day": 3,
+      "type": "Controlled Carb / Torch Day"
+    },
+    {
+      "day": 4,
+      "type": "Carnivore"
+    },
+    {
+      "day": 5,
+      "type": "Carnivore"
+    },
+    {
+      "day": 6,
+      "type": "Controlled Carb / Torch Day"
+    },
+    {
+      "day": 7,
+      "type": "Flexible / Irish Fry-Up / Reset"
+    }
+  ],
+  "rules": [
+    "Protein first",
+    "1600 calorie target unless user changes it",
+    "No random grazing",
+    "Structure beats chaos",
+    "No more than two shield days in a row before refuel/reset"
+  ]
+}

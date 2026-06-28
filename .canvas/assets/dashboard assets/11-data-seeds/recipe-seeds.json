@@ -1,0 +1,42 @@
+[
+  {
+    "id": "seared-salmon-roasted-roots",
+    "title": "Seared Salmon + Roasted Roots",
+    "tags": [
+      "High protein",
+      "Training day",
+      "Nordic"
+    ],
+    "image": "/assets/nordic-dashboard/recipes/seared-salmon-roasted-roots.png"
+  },
+  {
+    "id": "lamb-root-stew",
+    "title": "Lamb + Root Stew",
+    "tags": [
+      "Warm",
+      "Recovery",
+      "High protein"
+    ],
+    "image": "/assets/nordic-dashboard/recipes/lamb-root-stew.png"
+  },
+  {
+    "id": "skyr-berries-honey",
+    "title": "Skyr + Berries + Honey",
+    "tags": [
+      "Refuel",
+      "Controlled carb",
+      "Quick"
+    ],
+    "image": "/assets/nordic-dashboard/recipes/skyr-berries-honey.png"
+  },
+  {
+    "id": "rye-bread-butter",
+    "title": "Rye Bread + Butter",
+    "tags": [
+      "Simple",
+      "Flexible",
+      "Nordic"
+    ],
+    "image": null
+  }
+]

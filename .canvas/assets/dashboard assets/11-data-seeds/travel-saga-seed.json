@@ -1,0 +1,39 @@
+{
+  "travelSaga": {
+    "title": "Travel Saga",
+    "subtitle": "Adventure book + companion concierge",
+    "states": [
+      "Visited",
+      "Planned",
+      "Wishlist"
+    ]
+  },
+  "checklist": [
+    {
+      "label": "Northern Lights experience",
+      "state": "wishlist"
+    },
+    {
+      "label": "Sail a Viking longship",
+      "state": "planned"
+    },
+    {
+      "label": "Explore Bergen Bryggen",
+      "state": "wishlist"
+    },
+    {
+      "label": "Visit a stave church",
+      "state": "wishlist"
+    },
+    {
+      "label": "Fjord hike / scenic route",
+      "state": "planned"
+    }
+  ],
+  "conciergeRules": [
+    "Use existing chat/tool route if available.",
+    "Do not create dead buttons.",
+    "Do not implement web search unless backend tool already exists.",
+    "Dante can act as guide/concierge later using real search/tool system."
+  ]
+}
