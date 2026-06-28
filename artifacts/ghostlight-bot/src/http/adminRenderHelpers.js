@@ -540,6 +540,28 @@ function renderNorwegianDashboard(params) {
   });
 }
 
+function renderAdventureBookPage(params) {
+  return renderAdventureBookPageTemplate({
+    ...params,
+    helpers: {
+      escapeHtml,
+      buildAdminLocation,
+      ...(params.helpers || {}),
+    },
+  });
+}
+
+function renderTripDetailPage(params) {
+  return renderTripDetailPageTemplate({
+    ...params,
+    helpers: {
+      escapeHtml,
+      buildAdminLocation,
+      ...(params.helpers || {}),
+    },
+  });
+}
+
 function renderHumanSimulationPage(params) {
   return renderHumanSimulationPageTemplate({
     ...params,
