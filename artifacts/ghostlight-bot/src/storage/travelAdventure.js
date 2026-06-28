@@ -74,10 +74,19 @@ function resolveTravelAdventureFilePath({ filePath = "", env = process.env, cwd 
   return configuredPath || path.join(cwd, "data", "travel-adventures.json");
 }
 
+function resolveTravelAdventurePathType({ filePath = "", env = process.env } = {}) {
+  if (clean(filePath)) return "explicit";
+  if (clean(env.TRAVEL_ADVENTURES_FILE)) return "TRAVEL_ADVENTURES_FILE";
+  if (clean(env.TRAVEL_DATA_PATH)) return "TRAVEL_DATA_PATH";
+  return "default";
+}
+
 function createTravelAdventureStore({ filePath = "", logger = null, env = process.env } = {}) {
   const resolvedPath = resolveTravelAdventureFilePath({ filePath, env });
+  const configuredPathType = resolveTravelAdventurePathType({ filePath, env });
   let state = defaultState();
   let loaded = false;
+  let lastLoadError = "";
 
   async function load() {
     if (loaded) return;
@@ -85,8 +94,10 @@ function createTravelAdventureStore({ filePath = "", logger = null, env = proces
       const raw = await fs.readFile(resolvedPath, "utf8");
       const parsed = JSON.parse(raw);
       state = { trips: Array.isArray(parsed.trips) ? parsed.trips : [], checklistItems: Array.isArray(parsed.checklistItems) ? parsed.checklistItems : [] };
+      lastLoadError = "";
     } catch (error) {
       if (error.code !== "ENOENT") logger?.warn?.("[travel] Failed to load travel store", { error: error.message });
+      lastLoadError = error.code === "ENOENT" ? "" : clean(error.message);
       state = defaultState();
     }
     loaded = true;
@@ -106,7 +117,8 @@ function createTravelAdventureStore({ filePath = "", logger = null, env = proces
     async setChecklistChecked(itemId, checked) { await load(); const item = state.checklistItems.find((row) => row.id === clean(itemId)); if (!item) return null; item.checked = Boolean(checked); item.updatedAt = nowIso(); await save(); return item; },
     async deleteChecklistItem(itemId) { await load(); const target = clean(itemId); const before = state.checklistItems.length; state.checklistItems = state.checklistItems.filter((item) => item.id !== target); await save(); return before !== state.checklistItems.length; },
     async getNextTripWithChecklist() { const trips = await this.listTrips({ includeArchived: false }); const preferred = trips.find((trip) => ["booked", "planned", "wishlist"].includes(trip.status)) || trips[0] || null; if (!preferred) return null; return { trip: preferred, checklistItems: await this.listChecklistItems(preferred.id) }; },
+    async getDiagnostics() { await load(); return { persistenceMode: "json-file", liveWebConcierge: false, configuredPathType, configuredPathBasename: path.basename(resolvedPath), tripCount: state.trips.length, checklistCount: state.checklistItems.length, lastLoadError }; },
   };
 }
 
-module.exports = { createTravelAdventureStore, TRIP_STATUSES, CHECKLIST_CATEGORIES, normalizeTrip, normalizeChecklistItem, normalizePreferences, resolveTravelAdventureFilePath };
+module.exports = { createTravelAdventureStore, TRIP_STATUSES, CHECKLIST_CATEGORIES, normalizeTrip, normalizeChecklistItem, normalizePreferences, resolveTravelAdventureFilePath, resolveTravelAdventurePathType };
