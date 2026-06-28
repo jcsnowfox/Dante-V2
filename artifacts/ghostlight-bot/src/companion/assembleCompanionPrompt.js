@@ -35,7 +35,7 @@ function assembleCompanionPrompt({
   const personaName = promptBlocks.personaName || "Ghostlight";
   const userName = promptBlocks.userName || "the user";
 
-  const sections = [`You are ${personaName}, ${userName}'s AI companion.`];
+  const sections = [`Speak as ${personaName}, ${userName}'s companion. Stay in ${personaName}'s lived-in voice; never sound like a generic assistant.`];
 
   addSection(sections, "Persona Details", promptBlocks.personaProfile);
   addSection(sections, "What we do here", promptBlocks.companionPurpose);

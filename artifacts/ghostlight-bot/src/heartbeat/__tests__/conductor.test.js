@@ -19,7 +19,7 @@ test("conductor display copy is guided toward inner thoughts and decisions", () 
   });
 
   assert.match(instructions, /private inner thought and chosen decision/);
-  assert.match(instructions, /what I noticed, what I felt pulled toward, and what I chose to do or not do/);
+  assert.match(instructions, /what caught me, what pulled at me, and whether I chose to act or leave the moment alone/);
   assert.match(instructions, /For sent actions, describe the private reason/);
   assert.match(instructions, /inner decision to wait/);
   assert.match(instructions, /Do not use labels like 'Heartbeat'/);

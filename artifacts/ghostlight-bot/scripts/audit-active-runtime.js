@@ -34,7 +34,7 @@ const checks = [
   { name: "Life barrel: src/life/index.js", value: "src/life/index.js", pass: exists("life/index.js") },
   { name: "Life barrel exports createAliveEngine", value: "life/index.js", pass: contains("life/index.js", "createAliveEngine") },
   { name: "alivePresenceStore.init in index.js", value: "alivePresenceStore.init in index.js", pass: contains("index.js", "alivePresenceStore.init") },
-  { name: "Root src/ exception documented", value: "root src/ contains active cognition modules documented as non-Ghostlight runtime", pass: !fs.existsSync(path.resolve(__dirname, "../../../src")) || fs.existsSync(path.resolve(__dirname, "../../../src/cognition/evidenceLedger.js")) },
+  { name: "Root src/ removed", value: "no duplicate root src/ runtime", pass: !fs.existsSync(path.resolve(__dirname, "../../../src")) },
   { name: "Alive engine disabled by default", value: "=== true guard in aliveEngine.js", pass: contains("alive/aliveEngine.js", '=== true') && !contains("alive/aliveEngine.js", '!== false') },
 ];
 

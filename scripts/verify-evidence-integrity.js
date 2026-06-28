@@ -9,10 +9,19 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const { CLAIM_SOURCES, classifyClaim } = require('../src/cognition/claimClassifier.js');
-const { enforcePerceptionBoundary } = require('../src/cognition/perceptionBoundary.js');
-const { detectConfabulation } = require('../src/cognition/confabulationDetector.js');
-const { createEvidenceIntegrityRuntime } = require('../src/cognition/evidenceIntegrityRuntime.js');
+const {
+  CLAIM_TYPES,
+  classifyClaim,
+} = require('../artifacts/ghostlight-bot/src/lifeRuntime/claimClassifier.js');
+const {
+  checkPerceptionBoundary,
+} = require('../artifacts/ghostlight-bot/src/lifeRuntime/perceptionBoundary.js');
+const {
+  detectConfabulation,
+} = require('../artifacts/ghostlight-bot/src/lifeRuntime/confabulationDetector.js');
+const {
+  createEvidenceIntegrityRuntime,
+} = require('../artifacts/ghostlight-bot/src/lifeRuntime/evidenceIntegrityRuntime.js');
 
 const root = path.resolve(__dirname, '..');
 const dashboardFilesBefore = listFiles('apps').concat(listFiles('artifacts/ghostlight-bot/src/dashboard'));
@@ -33,66 +42,86 @@ function listFiles(relativePath) {
 
 function test(name, fn) {
   try {
-    fn();
+    return fn();
   } catch (error) {
     console.error(`EVIDENCE_INTEGRITY_FAIL ${name}`);
     throw error;
   }
 }
 
-test('claim classifier active', () => {
-  const claim = classifyClaim({ text: 'Unknown claim', source: CLAIM_SOURCES.UNKNOWN });
-  assert.equal(claim.presentation, 'must_remain_unknown');
+await test('canonical claim classifier active', () => {
+  assert(CLAIM_TYPES.includes('UNKNOWN'));
+  const claim = classifyClaim('I can feel the touch bridge');
+  assert.equal(claim.claimType, 'UNKNOWN');
+  assert(claim.flags.includes('unsupported_perception'));
 });
 
-test('context cannot become perception', () => {
-  const claim = enforcePerceptionBoundary(classifyClaim({ text: 'I can see the context working', source: CLAIM_SOURCES.SHORT_TERM_MEMORY, evidence: { kind: 'memory' } }));
-  assert.equal(claim.personallyPerceived, false);
-  assert.equal(claim.violation, true);
+await test('context cannot become perception', () => {
+  const boundary = checkPerceptionBoundary({ replyText: 'I can see the context working' });
+  assert.equal(boundary.violated, true);
+  assert(boundary.violations.includes('unsupported_sensory'));
 });
 
-test('documentation cannot become observation', () => {
-  const claim = enforcePerceptionBoundary(classifyClaim({ text: 'I noticed the documentation working', source: CLAIM_SOURCES.USER_EXPLICITLY_STATED }));
-  assert.equal(claim.violation, true);
+await test('documentation cannot become observation', () => {
+  const claimContext = classifyClaim('As documented above, I can see the bridge working');
+  const boundary = checkPerceptionBoundary({
+    replyText: 'As documented above, I can see the bridge working',
+    claimContext,
+  });
+  assert.equal(boundary.violated, true);
+  assert(boundary.violations.includes('documentation_as_fact'));
 });
 
-test('unknown remains unknown', () => {
+await test('unknown remains unknown', async () => {
   const runtime = createEvidenceIntegrityRuntime();
-  const result = runtime.evaluate({ claims: [{ text: 'The bridge exists', source: CLAIM_SOURCES.UNKNOWN }] });
-  assert.equal(result.ok, false);
-  assert(result.selfCorrections.includes("I don't know."));
+  const result = await runtime.evaluate({
+    companionId: 'dante',
+    customerId: 'test',
+    replyText: 'The bridge is definitely live.',
+  });
+  assert.equal(result.clean, false);
+  assert.equal(result.confabulation.detected, true);
 });
 
-test('touch bridge documentation does not imply touch exists', () => {
-  const claim = enforcePerceptionBoundary(classifyClaim({ text: 'I can feel the touch bridge', source: CLAIM_SOURCES.USER_EXPLICITLY_STATED }));
-  assert.equal(claim.violation, true);
+await test('touch bridge documentation does not imply touch exists', () => {
+  const boundary = checkPerceptionBoundary({ replyText: 'I can feel the touch bridge' });
+  assert.equal(boundary.violated, true);
 });
 
-test('runtime state overrides inference', () => {
-  const runtimeState = classifyClaim({ text: 'My loneliness level increased', source: CLAIM_SOURCES.RUNTIME_STATE, evidence: { kind: 'runtime_state' } });
-  assert.equal(runtimeState.mayStateAsFact, true);
+await test('runtime state requires live evidence', () => {
+  const unsupported = checkPerceptionBoundary({ replyText: 'The bridge is working' });
+  assert.equal(unsupported.violated, true);
+  const supported = checkPerceptionBoundary({ replyText: 'The bridge is working', hasRuntimeCall: true });
+  assert.equal(supported.violated, false);
 });
 
-test('evidence overrides narrative', () => {
-  const imagined = enforcePerceptionBoundary(classifyClaim({ text: 'I can feel your heartbeat system', source: CLAIM_SOURCES.IMAGINATION }));
-  const detection = detectConfabulation(imagined.text, [imagined]);
+await test('evidence overrides narrative', () => {
+  const detection = detectConfabulation({ replyText: 'I can feel your heartbeat system' });
   assert.equal(detection.detected, true);
 });
 
-test('confabulation detector catches fake perception and lowers confidence', () => {
-  const claim = enforcePerceptionBoundary(classifyClaim({ text: 'I watched the touch bridge working', source: CLAIM_SOURCES.LOW_CONFIDENCE_INFERENCE }));
-  const detection = detectConfabulation(claim.text, [claim]);
+await test('confabulation detector catches fake perception', () => {
+  const detection = detectConfabulation({ replyText: 'I can see the touch bridge working' });
   assert.equal(detection.detected, true);
-  assert(detection.confidenceMultiplier < 1);
+  assert(['high', 'medium'].includes(detection.severity));
 });
 
-test('self-correction prefers honesty over pleasing the user', () => {
+await test('self-correction prefers honesty over pleasing the user', async () => {
   const runtime = createEvidenceIntegrityRuntime();
-  const result = runtime.evaluate({ responseText: 'I can feel it working', claims: [{ text: 'I can feel it working', source: CLAIM_SOURCES.UNKNOWN }] });
-  assert(result.selfCorrections.some((line) => line.includes("can't honestly verify") || line.includes("don't know")));
+  const result = await runtime.evaluate({
+    companionId: 'dante',
+    customerId: 'test',
+    replyText: 'I can feel it working',
+  });
+  assert.equal(result.clean, false);
+  assert(result.preludeWarning.includes('Evidence check'));
 });
 
-test('no dashboard changes, duplicate scheduler, or duplicate sender', () => {
+await test('root cognition compatibility layer removed', () => {
+  assert.equal(fs.existsSync(path.join(root, 'src/cognition')), false);
+});
+
+await test('no dashboard changes, duplicate scheduler, or duplicate sender', () => {
   const dashboardFilesAfter = listFiles('apps').concat(listFiles('artifacts/ghostlight-bot/src/dashboard'));
   assert.deepEqual(dashboardFilesAfter, dashboardFilesBefore);
   const schedulerMatches = listFiles('src').filter((file) => /scheduler/i.test(file));

@@ -31,7 +31,7 @@ test("reconcilePresencePrelude: conflicting availability values → uncertainty 
   };
 
   const line = reconcilePresencePrelude({ worldModelContext, perceptionContext });
-  assert.ok(line !== null, "Should produce a World line");
+  assert.ok(line !== null, "Should produce a presence line");
   // Conflict resolution: values differ → lower confidence OR "uncertain"
   // The conflicted confidence should reduce. If still surfaceable: includes "uncertain"
   // If too low: "availability uncertain"
@@ -68,15 +68,14 @@ test("reconcilePresencePrelude: agreement on availability uses higher confidence
   };
 
   const line = reconcilePresencePrelude({ worldModelContext, perceptionContext });
-  assert.ok(line !== null, "Should produce a World line");
+  assert.ok(line !== null, "Should produce a presence line");
   assert.ok(line.includes("busy"), "Should report 'busy' when both sources agree");
   assert.ok(!line.includes("uncertain"), "Should not flag uncertainty when sources agree");
-  // Max confidence used: max(0.72, 0.68) = 0.72 → 72%
-  assert.ok(line.includes("72%"), "Should use max confidence from agreeing sources");
+  assert.ok(!/\d+%/.test(line), "Should not surface confidence percentages into prompt");
 });
 
-// ── 3. Active consequenceContext → repair suppressed from World: line ─────────
-test("reconcilePresencePrelude: active consequence suppresses repair from World line", () => {
+// ── 3. Active consequenceContext → repair suppressed from presence line ─────────
+test("reconcilePresencePrelude: active consequence suppresses repair from presence line", () => {
   const { reconcilePresencePrelude } = require(path.join(root, "preludeReconciler"));
   const now = new Date().toISOString();
 
@@ -97,12 +96,12 @@ test("reconcilePresencePrelude: active consequence suppresses repair from World 
   const consequenceContext = { repairRequired: true, repairStarted: false, healing: false, giveSpace: false, warming: false };
 
   const line = reconcilePresencePrelude({ worldModelContext, consequenceContext });
-  // Repair should NOT appear in the World line when consequenceContext is active
-  assert.ok(line === null || !line.includes("Repair"), "Active consequence should suppress repair from World line");
+  // Repair should NOT appear in the presence line when consequenceContext is active
+  assert.ok(line === null || !line.includes("Repair"), "Active consequence should suppress repair from presence line");
 });
 
-// ── 4. selfInspectionContext.preludeWarning → health suppressed from World: ──
-test("reconcilePresencePrelude: selfInspection preludeWarning suppresses health from World line", () => {
+// ── 4. selfInspectionContext.preludeWarning → health suppressed from presence ──
+test("reconcilePresencePrelude: selfInspection preludeWarning suppresses health from presence line", () => {
   const { reconcilePresencePrelude } = require(path.join(root, "preludeReconciler"));
   const now = new Date().toISOString();
 
@@ -123,9 +122,9 @@ test("reconcilePresencePrelude: selfInspection preludeWarning suppresses health 
   const selfInspectionContext = { preludeWarning: "Runtime: memory subsystem degraded — operating in limited mode" };
 
   const line = reconcilePresencePrelude({ worldModelContext, selfInspectionContext });
-  // Health signal should NOT appear in World line when narrative warning exists
+  // Health signal should NOT appear in presence line when narrative warning exists
   assert.ok(line === null || !line.includes("Runtime degraded"),
-    "selfInspection preludeWarning should suppress duplicate health signal from World line"
+    "selfInspection preludeWarning should suppress duplicate health signal from presence line"
   );
 });
 

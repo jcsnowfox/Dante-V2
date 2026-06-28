@@ -511,6 +511,7 @@ async function handleNorwegianCorrect(interaction, store, userScope, logger) {
   await interaction.editReply(response);
 }
 
+// Media recommendations must be backed by verified real domains such as nrk.no or youtube.com.
 async function handleNorwegianMedia(interaction, store, userScope, logger) {
   if (!store.available) {
     await interaction.editReply(
@@ -527,6 +528,7 @@ async function handleNorwegianMedia(interaction, store, userScope, logger) {
     `sourceStatus: **not_checked**\n` +
     `Availability note: unknown until validated by live search or stored trusted URL.`
   ));
+  logger.info("[norwegian] media search completed", { userScope, resultCount: 0, sourceStatus: "not_checked" });
 }
 
 async function handleNorwegianNews(interaction, store, userScope, logger) {
@@ -1058,7 +1060,7 @@ async function handleNorwegianPlan(interaction, store, userScope, logger) {
 
   await interaction.editReply(truncate(
     `**Personalized Learning Plan** 📋\n\n` +
-    `Based on your estimated level (${profile.estimatedLevel}) and weak spots:\n\n` +
+    `Your estimated level is ${profile.estimatedLevel}, and these weak spots point here:\n\n` +
     `**Recommended path:** ${path.title}\n` +
     `**Level range:** ${path.levelRange}\n` +
     `**Description:** ${path.description}\n` +

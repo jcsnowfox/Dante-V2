@@ -119,12 +119,30 @@ describe("attentionDriftEngine", () => {
   });
 
   it("repair context boosts unresolved repair focus probability", () => {
-    // Run 20 times; with hasRepair=true, 'unresolved repair' weight is 0.80 (highest)
+    const deterministic = createAttentionDriftEngine({
+      config: {},
+      logger: null,
+      rng: () => 0.5,
+    });
+
+    const result = deterministic.selectFocus({ hasRepair: true });
+
+    assert.equal(result.focus, "unresolved repair");
+    assert.equal(result.weight, 0.8);
+  });
+
+  it("uses injected rng for stable repeated curiosity focus selection", () => {
+    const deterministic = createAttentionDriftEngine({
+      config: {},
+      logger: null,
+      rng: () => 0.5,
+    });
+
     const results = Array.from({ length: 20 }, () =>
-      engine.selectFocus({ hasRepair: true }).focus,
+      deterministic.selectFocus({ hasRepair: true }).focus,
     );
-    // At least once it should appear
-    assert.ok(results.some(f => f === "unresolved repair"));
+
+    assert.deepEqual(results, Array(20).fill("unresolved repair"));
   });
 
   it("updateFocus persists and getCurrentFocus retrieves it", async () => {

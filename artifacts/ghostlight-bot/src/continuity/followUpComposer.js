@@ -13,33 +13,33 @@ const { auditFollowUpText } = require("./continuitySafety");
  */
 
 const CAMPING_VARIANTS = [
-  "You're back from camping, right? How was it? Tell me the best bit first.",
-  "How was camping? Good chaos, bad chaos, or never-again-until-next-time chaos?",
-  "I remembered you were away this weekend. Did you end up going, or did life eat the plan?",
+  "Back from camping, love? Best bit first. Worst bit second.",
+  "Camping verdict: good chaos, bad chaos, or never-again-until-next-time chaos?",
+  "I remembered you were away this weekend. Did you go, or did life eat the plan?",
 ];
 
 const TRAVEL_VARIANTS = [
-  "Back safe? How did it go?",
-  "How was the trip? Give me the highlight reel.",
-  "Did you make it back alright? How was everything?",
+  "Back safe? Give me the tiny highlight first.",
+  "Trip survived? Tell me the part that stuck.",
+  "You make it back alright? No essay. Just the headline.",
 ];
 
 const APPOINTMENT_VARIANTS = [
-  "How did the appointment go?",
-  "How did it go today?",
-  "All done with the appointment? How are you doing?",
+  "Appointment done? How are you, really?",
+  "How did it go today? Short version is allowed.",
+  "All done with the appointment? I’m listening.",
 ];
 
 const TASK_VARIANTS = [
-  "Did you get a chance to do that?",
-  "How did it go?",
-  "Did that happen in the end?",
+  "Did that happen, or are we letting it die with dignity?",
+  "How did it go? Tiny version.",
+  "Did you get to it in the end? No judgement if not.",
 ];
 
 const GENERIC_VARIANTS = [
   "How did that go?",
-  "Did things work out?",
-  "How are you getting on with that?",
+  "Did it work out, or did the gremlin win?",
+  "Still worth poking, or are we leaving it alone?",
 ];
 
 function pickVariant(variants, seed = 0) {
