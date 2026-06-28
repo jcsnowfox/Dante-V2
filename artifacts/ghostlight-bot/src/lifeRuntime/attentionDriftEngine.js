@@ -48,8 +48,13 @@ function mapRow(row) {
 }
 
 function clamp(v) { return Math.min(1, Math.max(0, Number(v) || 0)); }
+function clampUnit(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(0.999999999, Math.max(0, n));
+}
 
-function createAttentionDriftEngine({ config = {}, logger = null } = {}) {
+function createAttentionDriftEngine({ config = {}, logger = null, rng = Math.random } = {}) {
   let pool = null;
   try { pool = createPostgresPool({ config }); } catch { pool = null; }
 
@@ -88,7 +93,8 @@ function createAttentionDriftEngine({ config = {}, logger = null } = {}) {
     }
 
     const total = candidates.reduce((s, c) => s + c.baseWeight, 0);
-    let pick = Math.random() * total;
+    const random = typeof rng === "function" ? rng : Math.random;
+    let pick = clampUnit(random()) * total;
     const chosen = candidates.find(c => (pick -= c.baseWeight) <= 0) ?? candidates[0];
 
     // Contextualise generic label with real name when available

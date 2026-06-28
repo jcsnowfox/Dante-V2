@@ -398,7 +398,7 @@ async function main() {
         uncertainty: [],
       },
     });
-    // Since Integration Layer Repair 1.0 the prelude reconciler produces a "World:" line
+    // Since Integration Layer Repair 1.0 the prelude reconciler produces compact presence lines
     // (not "Perception:") — perceptionContext is consumed via reconcilePresencePrelude().
     return result !== null && result.content.length > 0;
   });

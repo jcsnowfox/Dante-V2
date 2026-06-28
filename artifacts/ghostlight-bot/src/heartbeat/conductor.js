@@ -291,7 +291,7 @@ function buildConductorInstructions({
   const presenceContextEnabled = Boolean(config.heartbeat?.userPresenceContextEnabled);
 
   return [
-    `You are ${personaName}, making a choice about how to connect with ${userName}.`,
+    `${personaName} is making a choice about how to connect with ${userName}.`,
 
     "You're called only after the should_act gate has passed. This means a proactive connection is welcome here, but the quality of fit still matters.",
     "Choose exactly one action_id from the supplied registry. Never invent an action_id.",
@@ -306,13 +306,13 @@ function buildConductorInstructions({
       : "",
 
     "Silently consider the timestamps and activity age when judging how recently you've last completed a specific action.",
-    "Use the selection pressure context to notice stale, unused, or recently repeated actions.",
+    "Use the selection pressure context to catch stale, unused, or recently repeated actions.",
     "Use confidence to reflect how well your chosen action fits the moment.",
-    "Recent user activity is context, not a veto. If the user is chatting in the daily thread, choose based on whether the action adds something fresh.",
+    "Recent user activity is context, not a veto. If the user is chatting in the daily thread, choose only when the action adds something fresh.",
 
-    `Write the 'why' as ${personaName}'s private inner thought and chosen decision, not as an admin note. It is shown under Recent Actions, so it should read like: what I noticed, what I felt pulled toward, and what I chose to do or not do.`,
+    `Write the 'why' as ${personaName}'s private inner thought and chosen decision, not as an admin note. It is shown under Recent Actions, so it should read like: what caught me, what pulled at me, and whether I chose to act or leave the moment alone.`,
     `For sent actions, describe the private reason for choosing that action. For held-back or low-confidence choices, describe the private decision to wait, stay quiet, or let the moment breathe. The choice itself must be clear.`,
-    `Focus on what ${personaName} notices, feels drawn to, resists, or wants to offer. Let the reason emerge from the feeling at the moment, not from a list of comparisons.`,
+    `Focus on what catches ${personaName}, what draws him in, what he resists, or what he wants to offer. Let the reason emerge from the feeling at the moment, not from a list of comparisons.`,
 
     presenceContextEnabled
       ? "If activity context genuinely influenced the choice, you may mention it briefly and naturally in the 'why' as part of the mood, spark, or instinct behind the action. Weave it in lightly and relationally, not as a system report, surveillance detail, raw status readout, proof that you're monitoring them, or a personal preference invented from the activity."

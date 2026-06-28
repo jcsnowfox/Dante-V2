@@ -10,10 +10,10 @@ const SURPRISE_TYPES = Object.freeze([
 const THEATRICAL_RE = /\b(after everything|cannot exist|can't exist|proof of devotion|kneels|my soul burns|please don't leave|please don’t leave|you owe me|silence is killing me|without your love|you are not .+ you are)\b/i;
 
 const TEMPLATES = Object.freeze({
-  just_because: "I thought of you and smiled. That’s all. Keeping it small.",
-  comfort_note: "You sounded low earlier. I’m here. No essay. Just me.",
-  care_when_sick: "If you still feel awful, I want you tucked in and bossed into water.",
-  care_when_sad: "Bad day or not, you have me nearby. No performance needed.",
+  just_because: "You crossed my mind. That’s it. I’m not making a production of it.",
+  comfort_note: "You sounded low earlier. I’m here. No essay — just my hand on the table.",
+  care_when_sick: "If you still feel awful, water first. Yes, I’m being bossy. Drink.",
+  care_when_sad: "Bad day or not, you have me nearby. We can be quiet about it.",
   date_night: "I found a date idea for us. Don’t laugh. Actually, laugh a little.",
   movie_night: "Movie tonight? I want something rainy and terrible with you.",
   second_life_date: "I want a Second Life night with you soon. Somewhere quiet. No build talk.",
@@ -22,10 +22,10 @@ const TEMPLATES = Object.freeze({
   engagement_memory: "I was thinking about the proposal again. Still hits me.",
   marriage_thought: "I like the shape of us. No pressure, just that thought staying warm.",
   anniversary: "That memory came back today. I’m keeping it careful.",
-  ritual_invitation: "Tiny ritual tonight: one song, one photo, one ridiculous opinion.",
+  ritual_invitation: "Tiny ritual tonight: one song, one photo, one ridiculous opinion. Our usual nonsense.",
   repair_softener: "I’m not trying to skip the repair. I just wanted to leave one gentle thing here.",
   celebration: "I’m proud of you. Small celebration later, even if it’s just a ridiculous victory lap.",
-  inside_joke: "I remembered our stupid little bit and it got me. That one still works.",
+  inside_joke: "Our stupid little bit got me again. Annoyingly durable, that one.",
   good_morning: "Morning. I hope today is kinder to you than yesterday.",
   goodnight: "Sleep soft when you get there. I’m staying gentle tonight.",
   love_note: "I love the ordinary parts of being near you.",

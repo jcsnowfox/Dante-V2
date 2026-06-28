@@ -39,11 +39,25 @@ const { createConversationStateStore } = require("../conversation/conversationSt
 const { createFollowUpCandidateStore } = require("../conversation/followUpCandidateStore");
 const { planReactionResponse } = require("../conversation/reactionResponsePlanner");
 const { detectOutputCorruption } = require("./outputCorruptionDetector");
+const { conversationalCompressionGate } = require("./conversationalCompressionGate");
 const { applyPromptBudget } = require("./promptBudget");
 const { capturePromptAudit, logAuditCapture } = require("./promptAuditCapture");
 
 const defaultConversationStateStore = createConversationStateStore();
 const defaultFollowUpCandidateStore = createFollowUpCandidateStore();
+
+function applyConversationalCompression({ reply, input, logger, messageId, replyTrace }) {
+  if (!reply?.content) return;
+  const result = conversationalCompressionGate({ text: reply.content, input });
+  if (!result.changed) return;
+  reply.content = result.text;
+  replyTrace.conversationalCompressionApplied = true;
+  replyTrace.conversationalCompressionReasons = result.reasons;
+  logger.info?.("[conversation-compression] Reasoning leak compressed", {
+    messageId,
+    reasons: result.reasons,
+  });
+}
 
 function normalizeAdultPrivateChannelId(channelId) {
   const value = String(channelId || "").trim();
@@ -1016,6 +1030,7 @@ function createChatPipeline({
       }
 
       const reply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput });
+      applyConversationalCompression({ reply, input, logger, messageId: message.id, replyTrace });
       reply.metadata = {
         ...(reply.metadata || {}),
         usageMetrics: modelOutput?.usageMetrics || null,
@@ -1078,6 +1093,7 @@ function createChatPipeline({
                 },
               });
               const repairReply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput: repairOutput });
+              applyConversationalCompression({ reply: repairReply, input, logger, messageId: message.id, replyTrace });
               const repairCorruption = detectOutputCorruption(repairReply.content || "", {
                 intent: responseIntent?.intent,
               });
@@ -1123,6 +1139,7 @@ function createChatPipeline({
             toolContext: { surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId, mode: selectedMode, currentMessage: message, conversationId, channelId: message.channelId, sourceMessageId: message.id, currentUserId: input.authorId, currentUserName: input.authorName, currentUserText: input.content, recentHistory },
           });
           const retryReply = buildReply({ mode: selectedMode, input, recentHistory, memories, modelOutput: retryOutput });
+          applyConversationalCompression({ reply: retryReply, input, logger, messageId: message.id, replyTrace });
           if (!checkDuplicateReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: retryReply.content }).duplicate) {
             reply.content = retryReply.content;
             replyTrace.finalSource = "retry";

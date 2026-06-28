@@ -36,6 +36,9 @@ const CREATE_TABLE_SQL = `
 
 function iso(v = new Date()) { return (v instanceof Date ? v : new Date(v)).toISOString(); }
 function makeId() { return `rs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`; }
+function compareIsoDesc(a, b) { return String(b || "").localeCompare(String(a || "")); }
+function compareIsoAsc(a, b) { return String(a || "").localeCompare(String(b || "")); }
+
 function mapRow(row) {
   if (!row) return null;
   return {
@@ -112,7 +115,10 @@ function createRomanticSurpriseStore({ db = null, pool: providedPool = null, con
       const result = await pool.query("SELECT * FROM romantic_surprises WHERE companion_id = $1 AND customer_id = $2 ORDER BY created_at DESC LIMIT $3", [companionId, customerId, Math.min(Number(limit) || 10, 100)]);
       return result.rows.map(mapRow);
     }
-    return rows.filter(r => r.companion_id === companionId && r.customer_id === customerId).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, limit);
+    return rows
+      .filter(r => r.companion_id === companionId && r.customer_id === customerId)
+      .sort((a, b) => compareIsoDesc(a.created_at, b.created_at))
+      .slice(0, limit);
   }
 
   async function getDue({ companionId, customerId, now = new Date(), limit = 5 } = {}) {
@@ -121,14 +127,22 @@ function createRomanticSurpriseStore({ db = null, pool: providedPool = null, con
       return result.rows.map(mapRow);
     }
     const t = now.getTime();
-    return rows.filter(r => r.companion_id === companionId && r.customer_id === customerId && r.status === "planned" && new Date(r.planned_for).getTime() <= t).slice(0, limit);
+    return rows
+      .filter(r => r.companion_id === companionId && r.customer_id === customerId && r.status === "planned" && new Date(r.planned_for).getTime() <= t)
+      .sort((a, b) => compareIsoAsc(a.planned_for, b.planned_for))
+      .slice(0, limit);
   }
 
   async function markSent({ id, companionId, customerId, now = new Date(), metadata = {} } = {}) { return update({ id, companionId, customerId, now, patch: { status: "sent", sent_at: iso(now), blocked_reason: null, metadata } }); }
   async function markBlocked({ id, companionId, customerId, reason, now = new Date() } = {}) { return update({ id, companionId, customerId, now, patch: { status: "blocked", blocked_reason: reason } }); }
   async function acknowledgeLatest({ companionId, customerId, now = new Date(), reaction = "" } = {}) {
-    const recent = await listRecent({ companionId, customerId, limit: 25 });
-    const row = recent.filter(r => r.status === "sent" && !r.acknowledged_at).sort((a, b) => String(b.sent_at).localeCompare(String(a.sent_at)))[0];
+    const candidates = pool?.query
+      ? (await pool.query("SELECT * FROM romantic_surprises WHERE companion_id = $1 AND customer_id = $2 AND status = 'sent' AND acknowledged_at IS NULL ORDER BY sent_at DESC NULLS LAST LIMIT 1", [companionId, customerId])).rows.map(mapRow)
+      : rows
+        .filter(r => r.companion_id === companionId && r.customer_id === customerId && r.status === "sent" && !r.acknowledged_at)
+        .sort((a, b) => compareIsoDesc(a.sent_at, b.sent_at))
+        .slice(0, 1);
+    const row = candidates[0];
     if (!row) return null;
     return update({ id: row.id, companionId, customerId, now, patch: { status: "acknowledged", acknowledged_at: iso(now), metadata: { ...(row.metadata || {}), acknowledgedReaction: reaction } } });
   }
@@ -145,8 +159,16 @@ function createRomanticSurpriseStore({ db = null, pool: providedPool = null, con
     return create({ companionId, customerId, surpriseType: "temporary_block", status: "blocked", reason, blockedReason: reason, plannedFor: until || now, metadata: { blockUntil: iso(until || now), temporaryBlock: true }, now });
   }
   async function getActiveTemporaryBlock({ companionId, customerId, now = new Date() } = {}) {
-    const recent = await listRecent({ companionId, customerId, limit: 50 });
-    return recent.find(r => r.status === "blocked" && r.metadata?.temporaryBlock && new Date(r.metadata.blockUntil || 0).getTime() > now.getTime()) || null;
+    if (pool?.query) {
+      const result = await pool.query(
+        "SELECT * FROM romantic_surprises WHERE companion_id = $1 AND customer_id = $2 AND status = 'blocked' AND metadata->>'temporaryBlock' = 'true' AND metadata->>'blockUntil' > $3 ORDER BY created_at DESC LIMIT 1",
+        [companionId, customerId, iso(now)],
+      );
+      return mapRow(result.rows[0]) || null;
+    }
+    return rows
+      .filter(r => r.companion_id === companionId && r.customer_id === customerId && r.status === "blocked" && r.metadata?.temporaryBlock && new Date(r.metadata.blockUntil || 0).getTime() > now.getTime())
+      .sort((a, b) => compareIsoDesc(a.created_at, b.created_at))[0] || null;
   }
   return { init, create, update, listRecent, getDue, markSent, markBlocked, acknowledgeLatest, expireIgnored, createTemporaryBlock, getActiveTemporaryBlock, _rows: rows, db: pool, CREATE_TABLE_SQL, CREATE_SCHEMA_REGISTRY_SQL };
 }

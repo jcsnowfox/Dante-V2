@@ -21,7 +21,7 @@ test("Dante system prompt tells him to react instead of narrating Jenna's intent
 
   assert.match(prompt, /Dante Style Correction/);
   assert.match(prompt, /reply as Dante experiencing it, not reviewing or interpreting it/);
-  assert.match(prompt, /notice one specific thing, react emotionally, ask one genuine question/);
+  assert.match(prompt, /catch one specific thing, react emotionally, ask one genuine question/);
   assert.match(prompt, /Avoid meta narration about what the user built, planned, mapped, wrote/);
   assert.match(prompt, /first-draft alive/);
 });

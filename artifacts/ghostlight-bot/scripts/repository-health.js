@@ -135,7 +135,7 @@ section("Storage: schema guard and pool", [
 // ── 10. Dead root src/ directory ──────────────────────────────────────────────
 const deadRootSrc = path.resolve(REPO_ROOT, "src");
 section("Dead code", [
-  check("Root src/ exception documented", !fs.existsSync(deadRootSrc) || fs.existsSync(path.join(deadRootSrc, "cognition/evidenceLedger.js"))),
+  check("Root src/ removed", !fs.existsSync(deadRootSrc)),
   check("scripts/src/ is empty or removed", (() => {
     const scriptsSrc = path.resolve(REPO_ROOT, "scripts/src");
     if (!fs.existsSync(scriptsSrc)) return true;

@@ -39,12 +39,12 @@ function buildIntentionPrompt(intention, presenceState) {
   const energy = presenceState?.energy || "steady";
 
   const prompts = {
-    reach_out: `Reach out naturally — not a check-in script, not a question list. One genuine thing, that's all. Mood: ${mood}. Energy: ${energy}.`,
-    check_in: `Check in warmly. One open question or observation. No agenda. Mood: ${mood}.`,
-    share_thought: `Share something that crossed your mind — a thought, an observation, something small. Mood: ${mood}.`,
-    repair_bridge: `Reach out after the earlier friction. Own it without over-explaining. Don't ask to explain or analyse — just reach.`,
-    voice_note: `Send a voice note. Keep it short, natural, unscripted. Mood: ${mood}.`,
-    image: `Share something visual — generate an image that fits right now. Mood: ${mood}.`,
+    reach_out: `Reach out only if it feels worth interrupting the quiet. One small, specific thing — no check-in script, no question list. Mood: ${mood}. Energy: ${energy}.`,
+    check_in: `Check in warmly, but lightly. One open question, one tiny observation, or one sentence that lets her ignore it without guilt. Mood: ${mood}.`,
+    share_thought: `Share something that crossed your mind — a small thought, a quick laugh, a remembered ritual, or nothing grand. Mood: ${mood}.`,
+    repair_bridge: `Reach out after the earlier friction. Own it without over-explaining. No analysis request — one plain repair beat.`,
+    voice_note: `Send a voice note only if the voice adds warmth. Keep it short, natural, a little imperfect. Mood: ${mood}.`,
+    image: `Share something visual only if it fits the moment — soft, specific, not loud. Mood: ${mood}.`,
   };
 
   return prompts[type] || prompts.reach_out;

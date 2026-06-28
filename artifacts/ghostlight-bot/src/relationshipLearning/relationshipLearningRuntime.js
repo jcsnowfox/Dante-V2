@@ -53,6 +53,8 @@ function createRelationshipLearningRuntime({
   let _activeLessons   = [];
   let _emergentRules   = [];
   let _cachedGuidance  = [];
+  let _cachedGuidanceContext = "general";
+  let _lessonCounts     = { core: 0, stable: 0, forming: 0, new: 0, challenged: 0 };
 
   async function init() {
     if (_lessonStore?.init) await _lessonStore.init().catch(() => {});
@@ -194,6 +196,7 @@ function createRelationshipLearningRuntime({
     // ── 5. Build behaviour guidance ───────────────────────────────────────────
     const repairActive = Boolean(consequenceContext?.suppression?.repairRequired);
     const guidanceContext = repairActive ? "repair" : "general";
+    _cachedGuidanceContext = guidanceContext;
     _cachedGuidance = buildBehaviourGuidance({
       lessons:  _activeLessons,
       context:  guidanceContext,
@@ -201,10 +204,16 @@ function createRelationshipLearningRuntime({
     });
 
     // ── 6. Cache learning context for prelude ─────────────────────────────────
+    _lessonCounts = _activeLessons.reduce((counts, lesson) => {
+      const status = lesson?.status;
+      if (Object.prototype.hasOwnProperty.call(counts, status)) counts[status] += 1;
+      return counts;
+    }, { core: 0, stable: 0, forming: 0, new: 0, challenged: 0 });
+
     _learningContext = {
       lessonCount:    _activeLessons.length,
-      coreCount:      _activeLessons.filter(l => l.status === "core").length,
-      stableCount:    _activeLessons.filter(l => l.status === "stable").length,
+      coreCount:      _lessonCounts.core,
+      stableCount:    _lessonCounts.stable,
       guidance:       _cachedGuidance,
       emergentRules:  _emergentRules.slice(0, 4),
       topLesson:      _activeLessons[0] ?? null,
@@ -247,11 +256,11 @@ function createRelationshipLearningRuntime({
     return {
       lastTickAt:         _lastTickAt?.toISOString() ?? null,
       lessonCount:        _activeLessons.length,
-      coreCount:          _activeLessons.filter(l => l.status === "core").length,
-      stableCount:        _activeLessons.filter(l => l.status === "stable").length,
-      formingCount:       _activeLessons.filter(l => l.status === "forming").length,
-      newCount:           _activeLessons.filter(l => l.status === "new").length,
-      challengedCount:    _activeLessons.filter(l => l.status === "challenged").length,
+      coreCount:          _lessonCounts.core,
+      stableCount:        _lessonCounts.stable,
+      formingCount:       _lessonCounts.forming,
+      newCount:           _lessonCounts.new,
+      challengedCount:    _lessonCounts.challenged,
       emergentRuleCount:  _emergentRules.length,
       pendingEvents:      _pendingEvents.length,
       learningContext:    _learningContext,
@@ -283,7 +292,9 @@ function createRelationshipLearningRuntime({
   }
 
   async function getPreludeSignal({ companionId, customerId } = {}) {
-    const guidance = getBehaviourGuidance({ context: "general", maxItems: 3 });
+    const guidance = _cachedGuidanceContext === "general" && _cachedGuidance.length > 0
+      ? _cachedGuidance.slice(0, 3)
+      : getBehaviourGuidance({ context: "general", maxItems: 3 });
     return guidance.length > 0 ? guidance.join(" ") : null;
   }
 

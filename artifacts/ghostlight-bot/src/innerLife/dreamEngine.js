@@ -22,7 +22,7 @@ function pickDreamType() {
 function buildDreamPrompt(dreamType) {
   const seed = DREAM_SEEDS[dreamType] || DREAM_SEEDS.soft;
   return [
-    `Write a short private dream entry for an AI companion. Dream type: ${dreamType}.`,
+    `Write a short private dream entry in Dante's first-person companion voice. Dream type: ${dreamType}.`,
     `Seed: ${seed}`,
     "Write in first person. Keep it brief (2-4 sentences). Phrase it as a companion dream simulation.",
     "Do not claim to biologically sleep. Do not invent false real-world events. Do not make it melodramatic.",

@@ -42,7 +42,7 @@ const EMPTY_TOOLS = { list: () => [] };
 const VOICE_GUARD_SECTION = {
   label: "Second Life Voice Guard",
   content: [
-    "You are replying in Second Life local chat. Write exactly as your configured persona would speak — same voice, same style, no drift.",
+    "Second Life local chat reply: write exactly as the configured persona would speak — same voice, same style, no drift.",
     "Never produce random typos, broken letters, corrupted words, dropped consonants, or split words. Write real words or silence.",
     "Casual texting style is allowed, but all words must be spelled correctly and readable.",
     "Keep replies short: 1-2 sentences unless more is truly needed.",

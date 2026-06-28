@@ -55,43 +55,58 @@ function buildLifePrelude(state = {}) {
   } = state;
 
   const lines = [];
+  const emitted = new Set();
+  const addLine = (line, category = null) => {
+    const text = String(line || "").replace(/\s+/g, " ").trim();
+    if (!text) return;
+    if (category) {
+      if (emitted.has(category)) return;
+      emitted.add(category);
+    }
+    lines.push(text);
+  };
+  const addPreludeBlock = (block) => {
+    for (const line of String(block || "").split(/\n+/)) {
+      const category = _promptDietCategory(line);
+      addLine(line, category);
+    }
+  };
 
   if (selfInspectionContext?.preludeWarning) {
-    lines.push(selfInspectionContext.preludeWarning);
+    addLine(_compactRuntimeHealth(selfInspectionContext.preludeWarning), "runtime_health");
   }
 
   if (evidenceIntegrityContext?.preludeWarning) {
-    lines.push(evidenceIntegrityContext.preludeWarning);
+    addLine(evidenceIntegrityContext.preludeWarning, "evidence_integrity");
   }
 
   if (selfConsistencyContext?.preludeWarning) {
-    lines.push(selfConsistencyContext.preludeWarning);
+    addLine(selfConsistencyContext.preludeWarning, "self_consistency");
   }
 
   if (relationshipLearningSignal) {
-    lines.push(String(relationshipLearningSignal).slice(0, 180));
+    addLine(String(relationshipLearningSignal).slice(0, 180), "relationship_lesson");
   }
 
   if (learningContext && learningContext.lessonCount > 0 && learningContext.guidance?.length > 0) {
-    const topGuidance = learningContext.guidance.slice(0, 3);
-    lines.push(`Relationship lessons:\n${topGuidance.map(l => `  • ${l}`).join("\n")}`);
+    addLine(`Relationship lesson: ${learningContext.guidance[0]}`, "relationship_lesson");
   }
 
   // Consequence signal leads — when something between Dante and Jenna is
   // unresolved (or freshly warm), it shapes the reply more than anything else.
   if (consequenceContext) {
     const consequenceLine = buildConsequencePrelude(consequenceContext);
-    if (consequenceLine) lines.push(consequenceLine);
+    if (consequenceLine) addLine(consequenceLine, "repair");
   }
 
   if (dailyPlan) {
     const mood   = dailyPlan.mood   || "neutral";
     const energy = dailyPlan.energy || "steady";
     const focus  = dailyPlan.focus  || "";
-    lines.push(focus ? `Today: ${mood}, ${energy} energy — ${focus}` : `Today: ${mood}, ${energy} energy`);
+    addLine(focus ? `Today: ${mood}, ${energy} energy — ${focus}` : `Today: ${mood}, ${energy} energy`, "daily_plan");
 
     if (dailyPlan.privateActivity) {
-      lines.push(`Currently: ${dailyPlan.privateActivity}`);
+      addLine(`Currently: ${dailyPlan.privateActivity}`, "current_activity");
     }
   }
 
@@ -99,17 +114,17 @@ function buildLifePrelude(state = {}) {
     .filter(e => e && e.description)
     .slice(0, 2)
     .map(e => `• ${e.description}`);
-  if (visibleEvents.length) lines.push(...visibleEvents);
+  if (visibleEvents.length) addLine(visibleEvents[0], "recent_event");
 
   // Growth context — at most one line
   if (growthContext) {
     const { activeHobby, activeProject, recentInterest } = growthContext;
     if (activeProject?.title) {
-      lines.push(`Project: ${activeProject.title}`);
+      addLine(`Project: ${activeProject.title}`, "growth");
     } else if (activeHobby?.name) {
-      lines.push(`Into: ${activeHobby.name} lately`);
+      addLine(`Into: ${activeHobby.name} lately`, "growth");
     } else if (recentInterest?.topic) {
-      lines.push(`Thinking about: ${recentInterest.topic}`);
+      addLine(`Thinking about: ${recentInterest.topic}`, "growth");
     }
   }
 
@@ -117,11 +132,11 @@ function buildLifePrelude(state = {}) {
   if (curiosityContext) {
     const { attentionFocus, maturingCount } = curiosityContext;
     if (attentionFocus?.focus && maturingCount > 0) {
-      lines.push(`Quietly circling: ${attentionFocus.focus}; ${maturingCount} private thought${maturingCount === 1 ? "" : "s"} maturing`);
+      addLine(`Quietly circling: ${attentionFocus.focus}; ${maturingCount} private thought${maturingCount === 1 ? "" : "s"} maturing`, "curiosity");
     } else if (attentionFocus?.focus) {
-      lines.push(`Quietly circling: ${attentionFocus.focus}`);
+      addLine(`Quietly circling: ${attentionFocus.focus}`, "curiosity");
     } else if (maturingCount > 0) {
-      lines.push(`${maturingCount} private thought${maturingCount === 1 ? "" : "s"} maturing`);
+      addLine(`${maturingCount} private thought${maturingCount === 1 ? "" : "s"} maturing`, "curiosity");
     }
   }
 
@@ -130,29 +145,29 @@ function buildLifePrelude(state = {}) {
   // instead. Never dumps raw need scores. Only fires when urgency is notable.
   if (homeostasisContext) {
     const signal = _buildHomeostasisSignal(homeostasisContext);
-    if (signal) lines.push(signal);
+    if (signal) addLine(signal, "homeostasis");
   }
 
   // Identity signal — ONE compact line, only when something meaningful to surface
   if (identityContext) {
     const identityLine = buildIdentitySignal(identityContext);
-    if (identityLine) lines.push(identityLine);
+    if (identityLine) addLine(identityLine, "identity");
   }
 
   // Fulfillment signal — ONE compact line, only when a recent action is notable
   if (fulfillmentContext) {
     const fulfillmentLine = buildFulfillmentSignal(fulfillmentContext);
-    if (fulfillmentLine) lines.push(fulfillmentLine);
+    if (fulfillmentLine) addLine(fulfillmentLine, "fulfillment");
   }
 
   // Narrative identity signal — at most ONE compact line when a notable chapter is active
   if (narrativeContext?.preludeSignal) {
-    lines.push(String(narrativeContext.preludeSignal).slice(0, 160));
+    addLine(String(narrativeContext.preludeSignal).slice(0, 160), "narrative");
   }
 
-  // Reconciled presence signal — ONE canonical line for availability, repair, and health.
-  // preludeReconciler selects the authoritative source when perception and worldModel
-  // disagree, preventing the LLM from seeing two confidence values for the same fact.
+  // Reconciled presence signal — one line per category: availability, repair,
+  // runtime health, and quiet hours. preludeReconciler selects the authoritative
+  // source and strips confidence metadata before anything reaches the LLM.
   if (perceptionContext || worldModelContext) {
     const presenceLine = reconcilePresencePrelude({
       worldModelContext:    worldModelContext ?? null,
@@ -160,7 +175,7 @@ function buildLifePrelude(state = {}) {
       selfInspectionContext: selfInspectionContext ?? null,
       consequenceContext:   consequenceContext ?? null,
     });
-    if (presenceLine) lines.push(presenceLine);
+    if (presenceLine) addPreludeBlock(presenceLine);
   }
 
   // Cognitive deliberation signal — at most ONE compact line when deliberation produced
@@ -168,7 +183,7 @@ function buildLifePrelude(state = {}) {
   // or "private_thought" without a conflict. Never reveals the cognitive runtime exists.
   if (cognitiveContext) {
     const cogLine = buildCognitivePreludeSignal(cognitiveContext);
-    if (cogLine) lines.push(cogLine);
+    if (cogLine) addLine(cogLine, "cognitive");
   }
 
   // Emergent living-behavior / relationship-DNA signal — at most ONE compact
@@ -179,31 +194,30 @@ function buildLifePrelude(state = {}) {
       guidance: emergentContext,
       culture:  { safe: emergentContext.culture ?? null },
     });
-    if (emergentLine) lines.push(emergentLine);
+    if (emergentLine) addLine(emergentLine, "emergence");
   }
 
   // Neural Integration coherence signal — at most ONE line, only when meaningful.
   // Uses the already-computed neuralPrelude from the integration context to avoid
   // re-running the pure function twice.
-  if (integrationContext?.neuralPrelude) {
-    lines.push(String(integrationContext.neuralPrelude).slice(0, 160));
-  } else if (integrationContext) {
-    const neuralLine = buildNeuralPrelude({
+  const neuralLine = integrationContext?.neuralPrelude
+    || (integrationContext ? buildNeuralPrelude({
       health:               integrationContext.health,
       conflicts:            integrationContext.conflicts ?? [],
       integrationConfidence: integrationContext.integrationConfidence ?? 1,
-    });
-    if (neuralLine) lines.push(neuralLine);
+    }) : null);
+  if (neuralLine && !/all runtime systems coherent/i.test(neuralLine)) {
+    addLine(neuralLine.replace(/confidence reduced/gi, "signals conflict"), "runtime_health");
   }
 
   // Relationship signal — at most one compact line, never raw scores
-  if (relationshipContext) {
+  if (relationshipContext && !emitted.has("repair") && !emitted.has("relationship_lesson") && !emitted.has("emergence")) {
     const { weatherSummary, upcomingAnniversaries } = relationshipContext;
     const upcoming = Array.isArray(upcomingAnniversaries) ? upcomingAnniversaries : [];
     if (upcoming.length > 0) {
-      lines.push(`Relationship: ${weatherSummary || "present"} — ${upcoming[0].label} coming up`);
+      addLine(`Relationship: ${weatherSummary || "present"} — ${upcoming[0].label} coming up`, "relationship_state");
     } else if (weatherSummary) {
-      lines.push(`Relationship: ${weatherSummary}`);
+      addLine(`Relationship: ${weatherSummary}`, "relationship_state");
     }
   }
 
@@ -213,6 +227,24 @@ function buildLifePrelude(state = {}) {
     label:   "DANTE PRIVATE LIFE [internal — inform natural references, do not narrate directly]",
     content: lines.join("\n"),
   };
+}
+
+function _promptDietCategory(line) {
+  const text = String(line || "").toLowerCase();
+  if (text.startsWith("availability:")) return "availability";
+  if (text.startsWith("repair:")) return "repair";
+  if (text.startsWith("runtime health:") || text.startsWith("integration:")) return "runtime_health";
+  if (text.startsWith("deliberating:") || text.startsWith("privately planning:")) return "cognitive";
+  if (text.startsWith("living behavior:") || text.startsWith("relationship dna:") || text.startsWith("emergent pattern:")) return "emergence";
+  return null;
+}
+
+function _compactRuntimeHealth(line) {
+  const text = String(line || "").replace(/\s+/g, " ").trim();
+  if (/degraded|limited|warning|failed|unavailable/i.test(text)) {
+    return `Runtime health: ${text.replace(/^Runtime:\s*/i, "").slice(0, 130)}`;
+  }
+  return text.slice(0, 150);
 }
 
 /**
