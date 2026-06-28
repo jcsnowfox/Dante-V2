@@ -24,6 +24,7 @@ const { buildConsequencePrelude }   = require("./consequencePreludeBuilder");
 const { buildIdentitySignal }       = require("./identityPreludeBuilder");
 const { buildFulfillmentSignal }    = require("./fulfillmentPreludeBuilder");
 const { buildPerceptionSignal }     = require("./perceptionPreludeBuilder");
+const { buildWorldModelSignal }     = require("./worldModelPreludeBuilder");
 
 function buildLifePrelude(state = {}) {
   if (!state) return null;
@@ -45,6 +46,7 @@ function buildLifePrelude(state = {}) {
     selfInspectionContext = null,
     narrativeContext    = null,
     perceptionContext   = null,
+    worldModelContext   = null,
   } = state;
 
   const lines = [];
@@ -147,6 +149,12 @@ function buildLifePrelude(state = {}) {
   if (perceptionContext) {
     const perceptionLine = buildPerceptionSignal(perceptionContext);
     if (perceptionLine) lines.push(perceptionLine);
+  }
+
+  // World model signal — ONE compact line summarising Dante's current world beliefs
+  if (worldModelContext) {
+    const worldLine = buildWorldModelSignal(worldModelContext.worldModel ?? null);
+    if (worldLine) lines.push(worldLine);
   }
 
   // Relationship signal — at most one compact line, never raw scores

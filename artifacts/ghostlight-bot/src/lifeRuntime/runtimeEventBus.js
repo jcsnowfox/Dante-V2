@@ -8,6 +8,7 @@ const EVENT_TYPES = Object.freeze([
   "need_changed","need_satisfied","need_depleted","identity_value_changed","identity_belief_changed","identity_preference_changed","project_progressed","project_completed","project_abandoned","curiosity_matured","insight_created","relationship_weather_changed","repair_started","repair_completed","consequence_created","fulfillment_succeeded","fulfillment_failed","fulfillment_deferred","resource_discovered","diagnostic_warning","self_confidence_low","first_experience_recorded","journal_entry_created","prelude_refreshed",
   "narrative_chapter_opened","narrative_chapter_updated","narrative_self_story_updated",
   "perception_world_state_updated","perception_availability_changed","perception_confidence_decayed",
+  "world_model_updated","world_belief_conflict","world_belief_decayed",
 ]);
 
 function stripSecrets(value, seen = new WeakSet()) {
