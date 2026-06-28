@@ -37,6 +37,7 @@ const { createRelationshipLearningRuntime } = require("../relationshipLearning/r
 const { createRomanticSurpriseRuntime } = require("./romanticSurpriseRuntime");
 const { createAffectiveDecisionRuntime } = require("./affectiveDecisionRuntime");
 const { createEvidenceIntegrityRuntime } = require("./evidenceIntegrityRuntime");
+const { createSelfInspectionRuntime }    = require("./selfInspectionRuntime");
 
 const PRIVATE_EVENTS = [
   { type: "ritual",      desc: "made coffee",                           moodEffect: 0.05,  energyEffect: 0.05  },
@@ -104,6 +105,7 @@ function createLifeRuntime({
   romanticSurpriseStore = null,
   affectiveDecisionRuntime = null,
   evidenceIntegrityRuntime = null,
+  selfInspectionRuntime = null,
 } = {}) {
   const lifeConfig = config?.lifeRuntime || {};
   const enabled = lifeConfig.enabled === true || process.env.LIFE_RUNTIME_ENABLED === "true";
@@ -114,6 +116,16 @@ function createLifeRuntime({
   const eventBus = runtimeEventBus || createRuntimeEventBus({ logger, sourceHealth: healthTracker });
   const affectiveDecision = affectiveDecisionRuntime || createAffectiveDecisionRuntime({ config, logger });
   const evidenceIntegrity = evidenceIntegrityRuntime || createEvidenceIntegrityRuntime({ config, logger, selfConsistencyMonitor });
+  const { companionId: _companionId, customerId: _customerId } = (() => {
+    const companionId = config?.memory?.companionId || config?.companion?.id || "dante";
+    const customerId  = config?.memory?.userScope || "user";
+    return { companionId, customerId };
+  })();
+  const selfInspection = selfInspectionRuntime || createSelfInspectionRuntime({
+    config, logger,
+    companionId: _companionId,
+    customerId:  _customerId,
+  });
   const repairPersistence = repairPersistenceEngine || createRepairPersistenceEngine({
     consequenceStore, logger, client: config?.discordClient || null, channelId: config?.chat?.channelId || config?.discord?.channelId || "",
     affectiveDecisionRuntime: affectiveDecision,
@@ -188,6 +200,7 @@ function createLifeRuntime({
     if (relationshipLearningRuntime?.init)   await relationshipLearningRuntime.init().catch(() => {});
     else if (relationshipLearning?.init)     await relationshipLearning.init().catch(() => {});
     if (romanticSurprises?.init)             await romanticSurprises.init().catch(() => {});
+    if (selfInspection?.init)               await selfInspection.init().catch(() => {});
 
     // Seed defaults once companion is known
     const { companionId, customerId } = getScope();
@@ -1016,6 +1029,7 @@ function createLifeRuntime({
       romanticSurpriseContext: _romanticSurpriseStatus,
       affectiveDecision: affectiveDecision.getStatus(),
       evidenceIntegrity: evidenceIntegrity.getStatus(),
+      selfInspection: selfInspection.getStatus(),
       selfConsistency: selfConsistencyMonitor.getStatus(),
       diagnostics: diagnosticRuntime.getStatus(),
       runtimeEvents: eventBus.getStatus(),

@@ -41,9 +41,14 @@ function buildLifePrelude(state = {}) {
     relationshipLearningSignal = null,
     learningContext     = null,
     evidenceIntegrityContext = null,
+    selfInspectionContext = null,
   } = state;
 
   const lines = [];
+
+  if (selfInspectionContext?.preludeWarning) {
+    lines.push(selfInspectionContext.preludeWarning);
+  }
 
   if (evidenceIntegrityContext?.preludeWarning) {
     lines.push(evidenceIntegrityContext.preludeWarning);
