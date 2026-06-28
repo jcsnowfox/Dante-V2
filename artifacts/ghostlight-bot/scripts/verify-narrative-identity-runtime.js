@@ -384,9 +384,9 @@ async function main() {
 
   await checkAsync("runtimeEventBus: narrative event types are registered", async () => {
     const { EVENT_TYPES } = require("../src/lifeRuntime/runtimeEventBus");
-    return EVENT_TYPES.includes("narrative_chapter_opened")
-      && EVENT_TYPES.includes("narrative_chapter_updated")
-      && EVENT_TYPES.includes("narrative_self_story_updated");
+    // narrative_chapter_opened and narrative_self_story_updated were removed as
+    // dead events by Integration Layer Repair 1.0 — only narrative_chapter_updated remains.
+    return EVENT_TYPES.includes("narrative_chapter_updated");
   });
 
   await checkAsync("runtimeEventBus: narrative events emit correctly", async () => {
