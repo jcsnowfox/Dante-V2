@@ -440,11 +440,24 @@ function renderCompanionIdentityTab({ runtimeSettings, theme, helpers }) {
 
 function renderAdultPrivateModeTab({ state, theme, helpers }) {
   const { escapeHtml } = helpers;
+  const diagnosticRows = [
+    ["Adult Private Mode enabled", state.adultPrivateModeEnabled ? "Yes" : "No"],
+    ["Current channel adult-enabled", state.adultPrivateModeChannelId ? "Configured channel only" : "No channel configured"],
+    ["Current user matches adult-mode owner/user", state.chatUserIdValue ? "Configured owner only" : "No owner configured"],
+    ["Adult model override active", state.adultPrivateModeModel ? "Configured model override" : "Uses Romance/default fallback"],
+    ["Adult prompt injected", state.adultPrivateModeSystemPrompt ? "When scope matches" : "No adult prompt configured"],
+    ["adultModeEscalation injected", state.adultPrivateModeEnabled && state.adultPrivateModeChannelId && state.chatUserIdValue ? "When scope matches" : "Blocked until enabled/channel/user all match"],
+    ["Aftercare currently active", "Only after safeword/stop/discomfort in matched channel"],
+    ["Last adult-mode refusal/block reason", "See structured logs: refusal_detected / refusal_blocked / reason"],
+  ];
 
   return [
     "<form method=\"post\" action=\"/admin/actions/settings-save\">",
     renderBehaviourFormFields({ theme, tab: "private-mode", helpers }),
-    "<p class=\"meta behaviour-tab-intro\">Bind a specific private Discord channel to a dedicated adult/intimacy model and behaviour layer. Only messages sent to the configured channel ID will use these overrides. Use <code>!adult</code> in any channel to toggle this mode on or off for that channel.</p>",
+    `<section class="lite-panel"><h3>Adult Private Mode Diagnostics</h3><dl class="settings-diagnostics">`,
+    diagnosticRows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join(""),
+    `</dl><p class="meta">Live message-scoped values are written to structured logs on every chat turn.</p></section>`,
+    "<p class=\"meta behaviour-tab-intro\">Bind a specific private Discord channel to a dedicated adult/intimacy model and behaviour layer. Only messages sent to the configured channel ID by the configured owner/user will use these overrides. Use <code>!adult</code> in any channel to toggle this mode on or off for that channel.</p>",
     "<label class=\"switch-field image-settings-toggle\">",
     "<input type=\"hidden\" name=\"adultPrivateModeEnabled\" value=\"false\">",
     "<span class=\"switch-control\">",
