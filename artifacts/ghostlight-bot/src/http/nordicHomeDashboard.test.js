@@ -81,12 +81,15 @@ test("home dashboard renders cinematic Nordic layout without fake links", () => 
 test("gallery renders only supplied live media URLs and empty state when absent", () => {
   const html = render();
   assert.match(html, /\/admin\/media\/live-generated-thumb\.webp/);
-  assert.match(html, /<img src="\/admin\/media\/live-generated-thumb\.webp"/);
+  assert.match(html, /class="nordic-gallery-img" src="\/admin\/media\/live-generated-thumb\.webp"/);
+  assert.match(html, /class="nordic-gallery-media-bg" src="\/admin\/media\/live-generated-thumb\.webp"/);
   assert.doesNotMatch(html, /09-user-reference-battle-meal-plans/);
   assert.doesNotMatch(html, /approved-dashboard-layout-reference/);
   const gallerySection = html.match(/<section class="nordic-panel nordic-home-gallery"[\s\S]*?<\/section>/)?.[0] || "";
-  assert.doesNotMatch(gallerySection, /<img src="\/assets\/nordic-dashboard/);
+  assert.doesNotMatch(gallerySection, /class="nordic-gallery-img" src="\/assets\/nordic-dashboard/);
   assert.doesNotMatch(html, /user-dante-gallery-example/);
+  assert.doesNotMatch(gallerySection, /<span>Saved by Dante<\/span>/);
+  assert.match(gallerySection, /nordic-gallery-caption/);
 
   const empty = render({ recentImages: [] });
   assert.match(empty, /No gallery images yet\./);

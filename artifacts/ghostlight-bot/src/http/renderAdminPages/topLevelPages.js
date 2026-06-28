@@ -211,7 +211,12 @@ function renderHomePage({ stats, theme = "light", helpers }) {
     : `<p class="nordic-empty">Recent Heartbeat decisions will appear here.</p>`;
 
   const galleryMarkup = recentImages.length
-    ? `<div class="nordic-home-gallery-track">${recentImages.map((image) => `<a class="nordic-home-gallery-tile" href="${escapeHtml(buildAdminLocation({ path: `/admin/gallery/images/detail/${encodeURIComponent(image.imageId)}`, theme }))}"${formatHomeImageAspectStyle(image.aspectRatio)}><img src="${escapeHtml(image.previewUrl)}" alt="${escapeHtml(image.altText || "Generated gallery image")}" loading="lazy"><span>${escapeHtml(image.tagline || "Generated image")}</span></a>`).join("")}</div>`
+    ? `<div class="nordic-home-gallery-track">${recentImages.map((image) => {
+      const previewUrl = String(image.previewUrl || "").trim();
+      const caption = String(image.tagline || image.altText || "Generated image").trim();
+      const shortCaption = caption.length > 80 ? `${caption.slice(0, 77)}…` : caption;
+      return `<a class="nordic-home-gallery-tile nordic-gallery-card" href="${escapeHtml(buildAdminLocation({ path: `/admin/gallery/images/detail/${encodeURIComponent(image.imageId)}`, theme }))}"${formatHomeImageAspectStyle(image.aspectRatio)}><span class="nordic-gallery-media"><img class="nordic-gallery-media-bg" src="${escapeHtml(previewUrl)}" alt="" aria-hidden="true" loading="lazy"><img class="nordic-gallery-img" src="${escapeHtml(previewUrl)}" alt="${escapeHtml(image.altText || "Generated gallery image")}" loading="lazy"></span><span class="nordic-gallery-caption"><strong>${escapeHtml(image.tagline || "Generated image")}</strong><small>${escapeHtml(shortCaption)}</small></span></a>`;
+    }).join("")}</div>`
     : `<div class="nordic-home-empty-gallery"><p>No gallery images yet.</p>${safeLink({ path: "/admin/gallery/images", label: "Open Gallery" })}</div>`;
 
   const recipeMarkup = `<div class="nordic-home-recipe-list">${VIKING_RECIPE_CARDS.map((recipe) => `<article class="nordic-home-recipe-card"><img src="${escapeHtml(assetUrl(recipe.image))}" alt="${escapeHtml(recipe.title)}" loading="lazy"><div><h3>${escapeHtml(recipe.title)}</h3><p>${escapeHtml(recipe.time)} · ${escapeHtml(recipe.label)}</p><div>${recipe.tags.map((tag) => renderNordicPill({ label: tag })).join("")}</div></div></article>`).join("")}</div>`;
@@ -233,7 +238,7 @@ function renderHomePage({ stats, theme = "light", helpers }) {
     : `<p class="nordic-empty">No journal entries yet.</p>`;
 
   return [
-    `<section class="nordic-dashboard nordic-home-shell nordic-home-wide nordic-bg" data-dashboard="nordic-home" style="--nordic-home-bg:url('${escapeHtml(assetUrl("02 backgrounds/aurora-fjord-dashboard-bg.png"))}')">`,
+    `<section class="nordic-dashboard nordic-home-shell nordic-home-wide nordic-bg" data-dashboard="nordic-home" style="--nordic-home-bg:url('${escapeHtml(assetUrl("02 backgrounds/aurora-fjord-dashboard-bg.png"))}');--nordic-home-fortress:url('${escapeHtml(assetUrl("02 backgrounds/moonlit-coastal-fortress.png"))}');--nordic-home-frame:url('${escapeHtml(assetUrl("03-frames-svg/panel-frame-wide.svg"))}');--nordic-home-hero-frame:url('${escapeHtml(assetUrl("03-frames-svg/panel-frame-hero.svg"))}');--nordic-home-runes:url('${escapeHtml(assetUrl("03-frames-svg/rune-strip.svg"))}');--nordic-home-travel-bg:url('${escapeHtml(assetUrl("07-travel-concierge/travel-world-map-cinematic.png"))}')">`,
     updateNoticeMarkup,
     warningMarkup,
     "<div class=\"nordic-home-top\">",
