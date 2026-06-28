@@ -644,13 +644,18 @@ async function callModel({
       model: selectedModel,
     })
     : { checked: false, supportsTools: true, reason: "no_tools" };
-  const toolsEnabled = !(toolSupport.checked && toolSupport.supportsTools === false);
+  const requiresPositiveToolSupport = String(providerLabel || "").toLowerCase() === "openrouter";
+  const toolsEnabled = requiresPositiveToolSupport
+    ? Boolean(toolSupport.checked && toolSupport.supportsTools)
+    : !(toolSupport.checked && toolSupport.supportsTools === false);
 
   if (!toolsEnabled) {
     logger.debug?.("[chat] Muting tools for selected model", {
       provider: providerLabel,
       model: selectedModel,
-      reason: "model_does_not_support_tools",
+      reason: requiresPositiveToolSupport && !toolSupport.checked
+        ? "openrouter_tool_support_unverified"
+        : "model_does_not_support_tools",
     });
   }
 
