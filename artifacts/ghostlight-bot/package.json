@@ -151,7 +151,8 @@
     "verify:output-integrity": "node scripts/verify-output-integrity.js",
     "verify:neural-integration": "node scripts/verify-neural-integration.js",
     "verify:conversational-compression": "node scripts/verify-conversational-compression.js",
-    "verify:travel-dashboard": "node scripts/verify-travel-dashboard.mjs"
+    "verify:travel-dashboard": "node scripts/verify-travel-dashboard.mjs",
+    "verify:dashboard-not-broken": "node scripts/verify-dashboard-not-broken.js"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

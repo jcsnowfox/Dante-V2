@@ -116,7 +116,7 @@ async function runFunctionalTests() {
   await capEvents.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "t2" });
   await capEvents.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "t3" });
   const capEngine = createAliveEngine({
-    config: { memory: { companionId: "dante", userScope: "jenna" }, alive: { dailyReachOutCap: 3 } },
+    config: { memory: { companionId: "dante", userScope: "jenna" }, alive: { dailyReachOutCap: 3, quietHoursStart: 0, quietHoursEnd: 0 } },
     aliveEventsStore: capEvents,
     intentionQueue: createIntentionQueueStore({ config: {} }),
   });
@@ -127,7 +127,7 @@ async function runFunctionalTests() {
   const cooldownEvents = createAliveEventsStore({ config: {} });
   await cooldownEvents.logEvent({ companionId: "dante", customerId: "jenna", eventType: "intention_created", reason: "recent" });
   const cooldownEngine = createAliveEngine({
-    config: { memory: { companionId: "dante", userScope: "jenna" }, alive: { cooldownMs: 2 * 60 * 60 * 1000 } },
+    config: { memory: { companionId: "dante", userScope: "jenna" }, alive: { cooldownMs: 2 * 60 * 60 * 1000, quietHoursStart: 0, quietHoursEnd: 0 } },
     aliveEventsStore: cooldownEvents,
     intentionQueue: createIntentionQueueStore({ config: {} }),
   });
@@ -136,7 +136,7 @@ async function runFunctionalTests() {
 
   // 4. Absence guard — user recently active
   const recentEngine = createAliveEngine({
-    config: { memory: { companionId: "dante", userScope: "jenna" } },
+    config: { memory: { companionId: "dante", userScope: "jenna" }, alive: { quietHoursStart: 0, quietHoursEnd: 0 } },
     aliveEventsStore: createAliveEventsStore({ config: {} }),
     intentionQueue: createIntentionQueueStore({ config: {} }),
     interactionPresenceStore: {
@@ -149,7 +149,7 @@ async function runFunctionalTests() {
   // 5. Enqueue fires when user absent
   const absentQueue = createIntentionQueueStore({ config: {} });
   const absentEngine = createAliveEngine({
-    config: { memory: { companionId: "dante", userScope: "jenna" } },
+    config: { memory: { companionId: "dante", userScope: "jenna" }, alive: { quietHoursStart: 0, quietHoursEnd: 0 } },
     aliveEventsStore: createAliveEventsStore({ config: {} }),
     intentionQueue: absentQueue,
     interactionPresenceStore: {
@@ -174,7 +174,7 @@ async function runFunctionalTests() {
 
   // 7. Provider failure survival
   const crashEngine = createAliveEngine({
-    config: { memory: { companionId: "dante", userScope: "jenna" } },
+    config: { memory: { companionId: "dante", userScope: "jenna" }, alive: { quietHoursStart: 0, quietHoursEnd: 0 } },
     aliveEventsStore: {
       countTodayByType: async () => { throw new Error("DB DOWN"); },
       listRecent: async () => [],
