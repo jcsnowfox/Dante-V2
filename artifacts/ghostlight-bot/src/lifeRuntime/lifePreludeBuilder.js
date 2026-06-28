@@ -23,6 +23,7 @@
 const { buildConsequencePrelude }   = require("./consequencePreludeBuilder");
 const { buildIdentitySignal }       = require("./identityPreludeBuilder");
 const { buildFulfillmentSignal }    = require("./fulfillmentPreludeBuilder");
+const { buildPerceptionSignal }     = require("./perceptionPreludeBuilder");
 
 function buildLifePrelude(state = {}) {
   if (!state) return null;
@@ -43,6 +44,7 @@ function buildLifePrelude(state = {}) {
     evidenceIntegrityContext = null,
     selfInspectionContext = null,
     narrativeContext    = null,
+    perceptionContext   = null,
   } = state;
 
   const lines = [];
@@ -139,6 +141,12 @@ function buildLifePrelude(state = {}) {
   // Narrative identity signal — at most ONE compact line when a notable chapter is active
   if (narrativeContext?.preludeSignal) {
     lines.push(String(narrativeContext.preludeSignal).slice(0, 160));
+  }
+
+  // Perception signal — ONE compact line when world state has something notable
+  if (perceptionContext) {
+    const perceptionLine = buildPerceptionSignal(perceptionContext);
+    if (perceptionLine) lines.push(perceptionLine);
   }
 
   // Relationship signal — at most one compact line, never raw scores
