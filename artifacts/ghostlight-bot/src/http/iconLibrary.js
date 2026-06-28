@@ -87,6 +87,15 @@ const ICON_PATHS = {
 // Kinds that should reuse another kind's glyph.
 const ICON_ALIASES = {
   journal: "journals",
+  memory: "memories",
+  search: "web_search",
+  voiceNote: "audio",
+  spotifySong: "music",
+  spotifyPlaylist: "playlist",
+  mentionUser: "mention_user",
+  feedbackLearning: "feedbackLearning",
+  emotionalArc: "emotionalArc",
+  relationalState: "relationalState",
   continuity: "automation",
   metronome: "heartbeat",
   heartbeat_action_gif: "gif",

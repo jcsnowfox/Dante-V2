@@ -1,0 +1,24 @@
+{
+  "version": 3,
+  "basePath": "/assets/nordic-dashboard",
+  "phase": "phase-2-design-system-binary-free",
+  "assets": {},
+  "pendingManualAssets": {
+    "auroraVikingDashboardReference": {
+      "category": "reference",
+      "expectedStaticUrl": "/assets/nordic-dashboard/reference/aurora-viking-dashboard-reference.png",
+      "installedFilename": "aurora-viking-dashboard-reference.png",
+      "originalSourcePath": ".canvas/assets/asset_-1753950970.png",
+      "usageNotes": "Pending manual upload outside the Codex PR flow; do not use as live gallery content or companion portrait.",
+      "decorative": true
+    }
+  },
+  "iconBasePath": "/assets/nordic-dashboard/icons",
+  "icons": {},
+  "pendingManualIconAssets": {},
+  "notes": [
+    "This manifest is intentionally binary-free for Codex PR compatibility.",
+    "PNG/JPG/WebP assets must be uploaded manually outside the Codex PR flow before being listed under assets or icons.",
+    "Semantic icons fall back to the existing admin icon library until uploaded icon assets are manually installed."
+  ]
+}
