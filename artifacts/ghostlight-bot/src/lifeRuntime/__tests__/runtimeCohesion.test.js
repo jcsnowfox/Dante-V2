@@ -27,13 +27,14 @@ test("missing event store does not crash and strips secrets", async () => {
 
 test("major runtimes can emit required cohesion event types", async () => {
   const bus = createRuntimeEventBus();
+  // identity_preference_changed and resource_discovered were dead events removed
+  // in Integration Layer Repair 1.0 (never emitted AND never consumed).
   const cases = [
     ["homeostasis", "need_changed"],
     ["identity", "identity_belief_changed"],
     ["identity", "identity_value_changed"],
-    ["identity", "identity_preference_changed"],
     ["fulfillment", "fulfillment_succeeded"],
-    ["fulfillment", "resource_discovered"],
+    ["fulfillment", "fulfillment_failed"],
     ["curiosity", "insight_created"],
     ["growth", "project_progressed"],
     ["relationship", "relationship_weather_changed"],

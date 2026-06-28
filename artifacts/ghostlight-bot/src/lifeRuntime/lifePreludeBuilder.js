@@ -23,8 +23,7 @@
 const { buildConsequencePrelude }   = require("./consequencePreludeBuilder");
 const { buildIdentitySignal }       = require("./identityPreludeBuilder");
 const { buildFulfillmentSignal }    = require("./fulfillmentPreludeBuilder");
-const { buildPerceptionSignal }     = require("./perceptionPreludeBuilder");
-const { buildWorldModelSignal }     = require("./worldModelPreludeBuilder");
+const { reconcilePresencePrelude }  = require("./preludeReconciler");
 
 function buildLifePrelude(state = {}) {
   if (!state) return null;
@@ -145,16 +144,17 @@ function buildLifePrelude(state = {}) {
     lines.push(String(narrativeContext.preludeSignal).slice(0, 160));
   }
 
-  // Perception signal — ONE compact line when world state has something notable
-  if (perceptionContext) {
-    const perceptionLine = buildPerceptionSignal(perceptionContext);
-    if (perceptionLine) lines.push(perceptionLine);
-  }
-
-  // World model signal — ONE compact line summarising Dante's current world beliefs
-  if (worldModelContext) {
-    const worldLine = buildWorldModelSignal(worldModelContext.worldModel ?? null);
-    if (worldLine) lines.push(worldLine);
+  // Reconciled presence signal — ONE canonical line for availability, repair, and health.
+  // preludeReconciler selects the authoritative source when perception and worldModel
+  // disagree, preventing the LLM from seeing two confidence values for the same fact.
+  if (perceptionContext || worldModelContext) {
+    const presenceLine = reconcilePresencePrelude({
+      worldModelContext:    worldModelContext ?? null,
+      perceptionContext:    perceptionContext ?? null,
+      selfInspectionContext: selfInspectionContext ?? null,
+      consequenceContext:   consequenceContext ?? null,
+    });
+    if (presenceLine) lines.push(presenceLine);
   }
 
   // Relationship signal — at most one compact line, never raw scores
