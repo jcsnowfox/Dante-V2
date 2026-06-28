@@ -61,7 +61,13 @@ const PROVIDER_DEBUG_RE = /\b(OPENROUTER|openrouter\.ai|anthropic\.com|x-request
 const SOURCE_URL_LEAK_RE = /https?:\/\/[^\s]*(?:files-albert\.thesnowwolf\.com|localhost|127\.0\.0\.1|railway\.internal|postgres\.railway\.internal)[^\s]*/i;
 
 // Long strings of topic words with little grammar, often produced when a model derails.
-const LOW_GRAMMAR_WORD_RE = /\b(?:upload|preset|replication|layer|facility|computer|grid|strategy|helicopter|hardship|lymph|defense|mount|generation|receipt|limit|player|acoustic|trivia|pitches|visible|powerpoint|database|schema|query|token|router|endpoint)\b/i;
+const LOW_GRAMMAR_WORD_RE = /\b(?:upload|preset|replication|layer|facility|computer|grid|strategy|helicopter|hardship|lymph|defense|mount|generation|receipt|limit|player|acoustic|trivia|pitches|visible|powerpoint|database|schema|query|token|router|endpoint|variable|extracted|cartoon|toolbox|bibliography|tickets|resize|patterns|teamwork|scheme)\b/i;
+
+// Fragmented model sludge often arrives as short English-looking shards mixed
+// with unrelated retrieval/UI terms. These are not normal bot replies, but they
+// may not contain code tokens, JSON, SQL, or provider debug headers.
+const KNOWN_FRAGMENT_DUMP_RE = /\b(?:Dating\s+toolbox|NewReader|feed\s+tickets|arc\s+question|resize\s+patterns|cartoon\s+elbows|magic\s+model|regime\s+clouds)\b/i;
+const STANDALONE_LETTER_FRAGMENT_RE = /(?:^|\s)(?:[a-z]\s+){2,}[a-z](?=\s|$)/i;
 
 // Tool/function name patterns (from Dante's tool schema — should never appear in chat)
 const TOOL_NAME_RE = /\b(create_image|generate_image|search_memories|store_memory|web_search|list_memories|delete_memory|play_music|spotify_search|fetch_url|run_tool|call_function|tool_call|function_call|tool_result)\b/i;
@@ -178,6 +184,16 @@ function _analyse(rawText, context) {
     }
   }
 
+  if (KNOWN_FRAGMENT_DUMP_RE.test(text)) {
+    reasons.push("known_fragment_dump");
+    blockScore += 3;
+  }
+
+  if (STANDALONE_LETTER_FRAGMENT_RE.test(text)) {
+    reasons.push("standalone_letter_fragment");
+    watchScore += 2;
+  }
+
   // ── camelCase cluster ──────────────────────────────────────────────────────
   const camelMatches = text.match(CAMEL_CASE_TOKEN_RE) || [];
   const camelCount = camelMatches.filter(w => w.length >= 8).length;
@@ -230,8 +246,13 @@ function _analyse(rawText, context) {
   const punctuationCount = (text.match(/[.!?…,:;]/g) || []).length;
   const grammarAnchors = (text.match(/\b(?:I|you|we|me|my|your|our|the|a|an|and|but|because|that|this|it|is|are|was|were|feel|think|want|need|love|miss)\b/gi) || []).length;
   const suspiciousLongWords = longWords.filter((word) => LOW_GRAMMAR_WORD_RE.test(word)).length;
+  const shortFragments = words.filter((word) => word.length <= 3 && !/^(i|a|an|the|and|but|you|we|me|my|our|it|is|are|was|to|of|in|on|for|not|yes|no|hey|hi|so)$/i.test(word)).length;
+  const fragmentRatio = words.length ? shortFragments / words.length : 0;
   if (words.length >= 35 && longWords.length >= 14 && punctuationCount <= 3 && grammarAnchors < Math.max(8, words.length * 0.18)) {
     reasons.push("low_grammar_word_dump");
+    blockScore += 3;
+  } else if (words.length >= 35 && fragmentRatio >= 0.2 && grammarAnchors < Math.max(10, words.length * 0.25)) {
+    reasons.push("fragmented_word_dump");
     blockScore += 3;
   } else if (suspiciousLongWords >= 4 && punctuationCount <= 4) {
     reasons.push("suspicious_topic_dump");
