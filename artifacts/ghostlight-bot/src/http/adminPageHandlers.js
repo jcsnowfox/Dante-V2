@@ -43,8 +43,9 @@ const { handleAlivePageRequest } = require("./adminPageHandlers/alivePageHandler
 const { handleTravelPageRequest } = require("./adminPageHandlers/travelPageHandler");
 const { buildEngineeringReport } = require("../engineeringIntelligence");
 const { buildAiDiagnosticsReport } = require("../aiDiagnostics");
-const { renderEngineeringPage } = require("./renderAdminPages/engineeringPage");
+const { renderCanonicalPipelinePage, renderEngineeringPage } = require("./renderAdminPages/engineeringPage");
 const { renderAiDiagnosticsPage } = require("./renderAdminPages/aiDiagnosticsPage");
+const { getCanonicalPipelineSnapshot } = require("../companion/canonicalPipelineDiagnostics");
 
 async function handleAdminPageRequest({
   req = null,
@@ -70,6 +71,17 @@ async function handleAdminPageRequest({
     innerRes.end(helpers.renderAdminShell({
       currentSection: "engineering",
       pageBody: renderAiDiagnosticsPage({ report, theme, helpers }),
+      theme,
+      themeLinks,
+      config: innerContext.config,
+    }));
+    return;
+  }
+
+  if (route.section === "engineering" && route.tab === "pipeline") {
+    innerRes.end(helpers.renderAdminShell({
+      currentSection: "engineering",
+      pageBody: renderCanonicalPipelinePage({ snapshot: getCanonicalPipelineSnapshot(), theme, helpers }),
       theme,
       themeLinks,
       config: innerContext.config,
