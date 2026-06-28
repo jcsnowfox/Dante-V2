@@ -20,7 +20,9 @@ check("gateway enforces allowedMentions", gateway.includes("allowedMentions"));
 check("gateway has safe logging", gateway.includes("sanitizeLogValue"));
 
 const sendSearch = rg("channel\\.send");
-const sendLines = sendSearch.stdout.split("\n").filter(Boolean).filter((line) => !line.includes("src/discord/discordSendGateway.js"));
+const sendLines = sendSearch.stdout.split("\n").filter(Boolean)
+  .filter((line) => !line.includes("src/discord/discordSendGateway.js"))
+  .filter((line) => !line.includes("__tests__"));
 const forbiddenSystemSend = sendLines.filter((line) => /src\/(innerLife|automations|heartbeat|proactiveActions|alive|lifeRuntime)\//.test(line));
 check("no duplicate autonomous/system channel.send outside gateway", forbiddenSystemSend.length === 0, forbiddenSystemSend.join(" | "));
 check("interactive reply path exceptions documented", gateway.includes("Interactive user replies may still use the messageCreate reply path"));
