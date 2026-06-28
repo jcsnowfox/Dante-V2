@@ -29,6 +29,10 @@ const NAV_GROUPS = [
     { section: "gallery", label: "Gallery", path: "/admin/gallery/images", icon: "gallery" },
     { section: "tools", label: "Tools", path: "/admin/tools/images", icon: "tools" },
   ] },
+  { label: "Developer", links: [
+    { section: "engineering", label: "Engineering", path: "/admin/engineering", icon: "dashboard" },
+    { section: "engineering", label: "AI Diagnostics", path: "/admin/engineering/ai", icon: "dashboard" },
+  ] },
   { label: "Admin", links: [
     { section: "admin", label: "Admin", path: "/admin/admin", icon: "dashboard" },
   ] },

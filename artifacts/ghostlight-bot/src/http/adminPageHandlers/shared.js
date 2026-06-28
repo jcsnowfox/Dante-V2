@@ -63,6 +63,14 @@ function getAdminRouteState(pathname) {
     return { section: "home" };
   }
 
+  if (pathname === "/admin/engineering/ai" || pathname === "/admin/engineering/ai/report.json") {
+    return { section: "engineering", tab: "ai" };
+  }
+
+  if (pathname === "/admin/engineering" || pathname === "/admin/engineering/dependencies" || pathname === "/admin/engineering/report.json") {
+    return { section: "engineering" };
+  }
+
   if (pathname === "/admin/companion") {
     return { section: "companion" };
   }
