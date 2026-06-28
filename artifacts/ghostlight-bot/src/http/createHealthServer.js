@@ -407,6 +407,15 @@ function createHealthServer({
         })(req, res, context);
       }
 
+      if (req.method === "GET" && url.pathname === "/admin/travel/status.json") {
+        return withAdmin(async (_req, innerRes, innerContext) => {
+          const { buildTravelStatusPayload } = require("./adminPageHandlers/travelPageHandler");
+          const payload = await buildTravelStatusPayload({ innerContext });
+          innerRes.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+          innerRes.end(JSON.stringify(payload));
+        })(req, res, context);
+      }
+
       if (req.method === "GET" && (url.pathname === "/admin/inner-life" || url.pathname.startsWith("/admin/inner-life/"))) {
         const redirectPath = url.pathname.replace(/^\/admin\/inner-life/, "/admin/continuity");
         res.writeHead(302, { Location: redirectPath + (url.search || "") });

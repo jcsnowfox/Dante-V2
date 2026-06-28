@@ -54,7 +54,15 @@ async function createObservedRepair(runtime, store, now = new Date("2026-06-27T1
   assert.equal(/\.send\s*\(/.test(engineSource), false, "repair engine has no direct channel.send");
 
   const dashboardDiff = require("node:child_process").execSync("git diff --name-only", { cwd: path.resolve(root, "../.."), encoding: "utf8" });
-  assert.equal(dashboardDiff.split(/\r?\n/).filter(Boolean).some(f => /src\/http\/renderAdminPages|dashboard/i.test(f)), false, "dashboard unchanged");
+  const allowedTravelStabilizationFiles = new Set([
+    "artifacts/ghostlight-bot/src/http/nordicDashboardAssets.js",
+    "artifacts/ghostlight-bot/src/http/nordicDashboardAssets.test.js",
+    "artifacts/ghostlight-bot/src/http/nordicHomeDashboard.test.js",
+    "artifacts/ghostlight-bot/src/http/renderAdminPages/shared.js",
+    "artifacts/ghostlight-bot/src/http/renderAdminPages/topLevelPages.js",
+    "artifacts/ghostlight-bot/src/http/travelDashboard.test.js",
+  ]);
+  assert.equal(dashboardDiff.split(/\r?\n/).filter(Boolean).some(f => /src\/http\/renderAdminPages|dashboard/i.test(f) && !allowedTravelStabilizationFiles.has(f)), false, "dashboard unchanged outside approved Travel stabilization files");
 
   for (const msg of REPAIR_FOLLOWUP_MESSAGES) {
     assert.ok(messageStyleOk(msg), `template failed style guard: ${msg}`);

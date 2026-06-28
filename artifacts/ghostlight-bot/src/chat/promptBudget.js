@@ -113,11 +113,15 @@ function applyPromptBudget(contextSections, { logger, messageId } = {}) {
         label:    s.label,
         content:  trimmed,
         chars:    trimmed.length,
+        originalChars: content.length,
+        estimatedTokens: Math.ceil(trimmed.length / 4),
         tier:     _getTier(s.label),
         isMemory,
         isPrelude,
       };
     });
+
+  const totalRequestedChars = tagged.reduce((sum, item) => sum + item.chars, 0);
 
   // Sort by tier ascending (tier 1 kept first)
   tagged.sort((a, b) => a.tier - b.tier);
@@ -132,14 +136,16 @@ function applyPromptBudget(contextSections, { logger, messageId } = {}) {
       kept.push({ label: item.label, content: item.content });
       total += item.chars;
     } else {
-      dropped.push(item.label);
+      dropped.push(item);
     }
   }
 
   if (dropped.length && logger?.warn) {
     logger.warn("[prompt-budget] sections dropped to stay within budget", {
       messageId: messageId || "",
-      dropped,
+      dropped: dropped.map((item) => item.label),
+      droppedChars: dropped.reduce((sum, item) => sum + item.chars, 0),
+      totalRequestedChars,
       totalKeptChars: total,
       budget: MAX_CONTEXT_CHARS,
     });

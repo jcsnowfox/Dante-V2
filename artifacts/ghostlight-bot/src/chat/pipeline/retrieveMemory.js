@@ -37,6 +37,29 @@ function buildMemoryQueries({ input, mode, recentUserMessages }) {
   };
 }
 
+
+function getMemoryText(memoryItem = {}) {
+  if (typeof memoryItem === "string") {
+    return memoryItem;
+  }
+
+  return String(
+    memoryItem.content
+      || memoryItem.text
+      || memoryItem.memory
+      || memoryItem.summary
+      || memoryItem.contentText
+      || memoryItem.content_text
+      || "",
+  );
+}
+
+function getMemoryScore(memoryItem = {}) {
+  const score = memoryItem?.score ?? memoryItem?.relevanceScore ?? memoryItem?.relevance_score ?? memoryItem?.similarity;
+  const numeric = Number(score);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function getConversationId(message) {
   return message.channel?.isThread?.() ? message.channel.id : message.channelId;
 }
@@ -67,10 +90,10 @@ async function loadRecentUserMessages({ message, conversations = null }) {
     .slice(-2);
 }
 
-async function retrieveMemory({ memory, message, input, mode, conversations = null }) {
+async function retrieveMemory({ memory, message, input, mode, conversations = null, logger = null }) {
   const recentUserMessages = await loadRecentUserMessages({ message, conversations });
 
-  return memory.retrieve({
+  const memories = await memory.retrieve({
     guildId: message.guildId,
     userId: input.authorId,
     query: buildMemoryQueries({
@@ -80,9 +103,25 @@ async function retrieveMemory({ memory, message, input, mode, conversations = nu
     }),
     mode,
   });
+  const results = Array.isArray(memories) ? memories : [];
+  const relevanceScores = results
+    .map(getMemoryScore)
+    .filter((score) => score !== null);
+
+  logger?.debug?.("[chat] Memory retrieval metrics", {
+    messageId: message.id || "",
+    mode: mode?.name || "",
+    memoryCount: results.length,
+    memoryChars: results.reduce((sum, item) => sum + getMemoryText(item).length, 0),
+    relevanceScores: relevanceScores.length ? relevanceScores : undefined,
+  });
+
+  return results;
 }
 
 module.exports = {
   retrieveMemory,
   buildMemoryQueries,
+  getMemoryText,
+  getMemoryScore,
 };

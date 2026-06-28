@@ -1,7 +1,7 @@
 {
   "name": "@workspace/ghostlight-bot",
   "version": "1.3.1",
-  "description": "Ghostlight \u2014 private AI companion bot (template base)",
+  "description": "Ghostlight — private AI companion bot (template base)",
   "license": "UNLICENSED",
   "main": "src/index.js",
   "scripts": {
@@ -127,7 +127,7 @@
     "verify:situational-awareness-tools": "node scripts/verify-situational-awareness-tools.js",
     "verify:situational-awareness-proactive": "node scripts/verify-situational-awareness-proactive.js",
     "verify:situational-awareness-not-dead": "node scripts/verify-situational-awareness-not-dead.js",
-    "verify:all": "node scripts/audit-active-runtime.js && node --test && node scripts/find-dead-code.js && node scripts/verify-dashboard-not-broken.js && node scripts/verify-life-wiring.js && node scripts/verify-alive-layer-proof.js && node scripts/repository-health.js",
+    "verify:all": "node scripts/audit-active-runtime.js && node --test && node scripts/find-dead-code.js && node scripts/verify-dashboard-not-broken.js && pnpm run verify:travel-dashboard && node scripts/verify-life-wiring.js && node scripts/verify-alive-layer-proof.js && node scripts/repository-health.js",
     "verify:self-consistency-monitor": "node scripts/verify-self-consistency-monitor.js",
     "verify:runtime-integration": "node scripts/verify-runtime-integration.js",
     "verify:affective-decision-runtime": "node scripts/verify-affective-decision-runtime.js",
@@ -151,6 +151,7 @@
     "verify:output-integrity": "node scripts/verify-output-integrity.js",
     "verify:neural-integration": "node scripts/verify-neural-integration.js",
     "verify:conversational-compression": "node scripts/verify-conversational-compression.js"
+    "verify:travel-dashboard": "node scripts/verify-travel-dashboard.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

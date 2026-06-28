@@ -187,6 +187,17 @@ async function runStartupStep(step, logger, action) {
 async function startApp() {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
+  const appContext = {
+    config,
+    logger,
+    ready: false,
+  };
+
+  createHealthServer({
+    port: config.port,
+    logger,
+    appContext,
+  });
 
   const databaseHost = (() => {
     try { return new URL(config?.database?.url || process.env.DATABASE_URL || "").hostname || null; } catch { return null; }
@@ -503,7 +514,7 @@ async function startApp() {
     imageStylePresets,
     imageAppearancePresets,
   });
-  const appContext = {
+  Object.assign(appContext, {
     client,
     config,
     conversations,
@@ -581,7 +592,7 @@ async function startApp() {
     licenseRuntime: license.createInitialRuntime(),
     norwegianLearning,
     ready: false,
-  };
+  });
   client.appContext = {
     client,
     config,
@@ -644,12 +655,6 @@ async function startApp() {
 
   const gameButtonHandler = gameSystem.createButtonHandler({ appContext });
   client.appContext.gameButtonHandler = gameButtonHandler;
-
-  createHealthServer({
-    port: config.port,
-    logger,
-    appContext,
-  });
 
   await runStartupStep("conversations.init", logger, () => conversations.init());
   await runStartupStep("memoryStore.init", logger, () => memoryStore.init());
