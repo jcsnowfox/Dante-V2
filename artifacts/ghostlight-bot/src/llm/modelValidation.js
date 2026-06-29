@@ -210,7 +210,8 @@ function buildModelCapabilities(models = []) {
     const outputModalities = Array.isArray(model?.architecture?.output_modalities)
       ? model.architecture.output_modalities.map((item) => String(item || "").trim()).filter(Boolean)
       : [];
-    const supportsTools = supportedParameters.includes("tools");
+    const noToolModel = /(^|\/)l3\.1-euryale-70b$/i.test(id) || /(^|\/)l3\.1-euryale-70b$/i.test(canonicalSlug);
+    const supportsTools = noToolModel ? false : supportedParameters.includes("tools");
 
     for (const alias of [...expandModelIdAliases(id), ...expandModelIdAliases(canonicalSlug)]) {
       modelIds.add(alias);
@@ -280,6 +281,9 @@ function getCachedOpenRouterModelToolSupport({
   const modelCapability = cached?.modelCapabilities?.get(modelId);
 
   if (!modelCapability) {
+    if (/(^|\/)l3\.1-euryale-70b$/i.test(modelId)) {
+      return { checked: true, supportsTools: false, reason: "known_no_tools_model" };
+    }
     return {
       checked: false,
       supportsTools: true,
