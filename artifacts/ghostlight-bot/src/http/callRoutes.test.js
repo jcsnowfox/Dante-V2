@@ -6,16 +6,12 @@ const test = require("node:test");
 const { createHealthServer } = require("./createHealthServer");
 const { buildContextDiagnostics } = require("../context/diagnostics");
 const { renderShell } = require("./renderAdminPages/shared");
+const { renderCallPage } = require("./callRoutes");
 
 function request(server, pathname, headers = {}) {
   const { port } = server.address();
   return new Promise((resolve, reject) => {
     const req = http.get({ hostname: "127.0.0.1", port, path: pathname, headers }, (res) => {
-
-function request(server, pathname) {
-  const { port } = server.address();
-  return new Promise((resolve, reject) => {
-    const req = http.get({ hostname: "127.0.0.1", port, path: pathname }, (res) => {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", (chunk) => { body += chunk; });
@@ -33,7 +29,6 @@ function createTestServer(config) {
       ready: true,
       config: {
         admin: { username: "owner", password: "secret" },
-        admin: {},
         discord: {},
         chat: { timezone: "UTC", promptBlocks: { personaName: "Dante" } },
         features: {},
@@ -113,12 +108,10 @@ test("diagnostics includes call route mounted and calls enabled flags", () => {
 
   assert.equal(diagnostics.features.calls.calls_enabled, true);
   assert.equal(diagnostics.features.calls.call_route_mounted, true);
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const { renderCallPage } = require('./callRoutes');
+});
 
-test('/call/:companionId page contains mobile call controls and browser STT fallback', () => {
-  const html = renderCallPage({ companionId: 'dante' });
+test("/call/:companionId page contains mobile call controls and browser STT fallback", () => {
+  const html = renderCallPage({ companionId: "dante", enabled: true });
   assert.match(html, /Start call/);
   assert.match(html, /Hands-free mode/);
   assert.match(html, /Push-to-talk mode/);
