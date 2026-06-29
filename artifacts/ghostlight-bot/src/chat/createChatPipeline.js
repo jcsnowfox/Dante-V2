@@ -26,7 +26,7 @@ const { detectPromise } = require("../continuity/promiseLedger");
 const { resolveToneMode, formatTonePrelude } = require("../continuity/toneModeResolver");
 const { buildVoiceRules } = require("../continuity/voiceFingerprintGuard");
 const { buildConversationMirrorLimiterSection } = require("./conversationMirrorLimiter");
-const { tinyFallbackForReason, checkDuplicateReply, rememberReply } = require("../continuity/replyFallbacks");
+const { tinyFallbackForReason, contextualFallbackForReason, checkDuplicateReply, rememberReply, getFallbackCount } = require("../continuity/replyFallbacks");
 const { analyzeRepair, buildRepairPrelude, saveRepairBeat } = require("../relationshipRepair/engine");
 const { updateSystemTruth } = require("../systemTruth/runtimeState");
 const { curateRuntimeMemory } = require("../memory/runtimeCurator");
@@ -37,7 +37,7 @@ const { classifyResponseIntent, buildIntentInstruction, INTENTS } = require("../
 const { updateConversationSatisfaction } = require("../conversation/conversationSatisfactionEngine");
 const { createConversationStateStore } = require("../conversation/conversationStateStore");
 const { createFollowUpCandidateStore } = require("../conversation/followUpCandidateStore");
-const { planReactionResponse } = require("../conversation/reactionResponsePlanner");
+const { planReactionResponse, normalizeEmojiReplyMode } = require("../conversation/reactionResponsePlanner");
 const { detectOutputCorruption } = require("./outputCorruptionDetector");
 const { conversationalCompressionGate } = require("./conversationalCompressionGate");
 const { applyPromptBudget } = require("./promptBudget");
@@ -179,6 +179,29 @@ function detectDiscomfort(text = "") {
 function boolConfig(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
   return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
+function isOutputCorruptionAuditOnly(config = {}) {
+  return boolConfig(config.chat?.outputCorruptionAuditOnly ?? process.env.OUTPUT_CORRUPTION_AUDIT_ONLY, false);
+}
+
+function detectVoiceNoteIntent(text = "") {
+  return /\b(voice\s*note|voice\s*message|audio\s*message|send\s+.*\bvoice|record\s+.*\bvoice)\b/i.test(String(text || ""));
+}
+
+function logFallbackDiagnostics(logger, { message, input, replyTrace, corruptionReasons = [], modelOutput = {}, effectiveMode = {}, fallbackSelected = "", fallbackSavedToHistory = false, responseIntent = null, voiceNoteIntent = false } = {}) {
+  logger?.warn?.("[reply-fallback] fallback diagnostics", {
+    messageId: message?.id,
+    originalOutputLength: replyTrace?.originalOutputLength || 0,
+    corruptionReasons,
+    model: modelOutput?.model || effectiveMode?.chatModel || "unknown",
+    provider: modelOutput?.provider || "unknown",
+    fallbackSelected,
+    fallbackCountLast10Messages: getFallbackCount({ channelId: message?.channelId || message?.channel?.id || "", userScope: input?.authorId || "" }),
+    fallbackSavedToHistory,
+    emojiOnly: responseIntent?.intent === INTENTS.EMOJI_ONLY,
+    voiceNoteIntentActive: Boolean(voiceNoteIntent),
+  });
 }
 
 function isReplySafeModeEnabled(config = {}) {
@@ -813,6 +836,7 @@ function createChatPipeline({
       }
       const messageEventType = message.eventType || message.type || (message.reaction || message.emoji ? "reaction" : "message");
       const reactionEmoji = message.emoji?.name || message.reaction?.emoji?.name || message.reactionEmoji || "";
+      const voiceNoteIntent = detectVoiceNoteIntent(input.content);
       const responseIntent = classifyResponseIntent({
         text: input.content,
         eventType: messageEventType,
@@ -848,7 +872,7 @@ function createChatPipeline({
       }
 
       if (!responseIntent.shouldCallLlm && [INTENTS.NO_RESPONSE, INTENTS.REACTION_ONLY, INTENTS.EMOJI_ONLY, INTENTS.END_THREAD, INTENTS.FOLLOW_UP_LATER].includes(responseIntent.intent)) {
-        const plan = planReactionResponse({ intent: responseIntent.intent, text: input.content, emoji: reactionEmoji, eventType: messageEventType, media: Boolean(message.attachments?.size || message.stickers?.size) });
+        const plan = planReactionResponse({ intent: responseIntent.intent, text: input.content, emoji: reactionEmoji, eventType: messageEventType, media: Boolean(message.attachments?.size || message.stickers?.size), emojiOnlyReplyMode: normalizeEmojiReplyMode(config.chat?.emojiOnlyReplyMode ?? process.env.EMOJI_ONLY_REPLY_MODE) });
         if (plan.action === "react" && plan.emoji && typeof message.react === "function") {
           await message.react(plan.emoji).catch(() => {});
         }
@@ -1284,8 +1308,9 @@ function createChatPipeline({
         replyTrace.finalSource = "tiny_fallback";
       }
 
-      // Phase 6: Output corruption gate — blocks corrupted replies before Discord send
+      // Phase 6: Output corruption gate — blocks corrupted replies before Discord send unless audit-only is enabled.
       if (reply.content && replyTrace.finalSource !== "tiny_fallback") {
+        const corruptionAuditOnly = isOutputCorruptionAuditOnly(config);
         const corruptionResult = detectOutputCorruption(reply.content, {
           intent: responseIntent?.intent,
           channelType: adultScope?.active ? "adult_private" : "normal",
@@ -1294,87 +1319,91 @@ function createChatPipeline({
         });
 
         if (corruptionResult.severity === "block") {
-          logger.warn("[output-integrity] Corrupted reply blocked", {
+          replyTrace.originalOutputLength = reply.content.length;
+          replyTrace.corruptionReasons = corruptionResult.reasons;
+          logger.warn("[output-integrity] Corrupted reply detected", {
             messageId: message.id,
+            auditOnly: corruptionAuditOnly,
             reasons: corruptionResult.reasons,
             recommendation: corruptionResult.recommendation,
             textLength: reply.content.length,
           });
-          replyTrace.corruptionBlocked = true;
-          replyTrace.corruptionReasons = corruptionResult.reasons;
           logReplyPromptDebug(logger, "output-corruption-detected", {
             messageId: message.id,
             outputCorruptionDetected: true,
-            replyBlocked: true,
+            replyBlocked: !corruptionAuditOnly,
             reasons: corruptionResult.reasons,
-            fallbackOrRegenerationHappened: "regeneration_started",
+            fallbackOrRegenerationHappened: corruptionAuditOnly ? false : "repair_started",
           });
 
-          {
-            // Attempt one regeneration with memory/history/extra context stripped down
-            // to core persona and a tiny repair instruction. Do not reuse the contaminated
-            // prompt, and do not send a trimmed prefix.
-            try {
-              const cleanRegenerationContext = [
-                {
-                  label: "OUTPUT REPAIR",
-                  content: "Previous draft was corrupted. Reply naturally as Dante in one short conversational message. Do not mention tools, code, prompts, context, diagnostics, or internal terms.",
-                },
-              ];
-              const repairOutput = await callModel({
-                config, logger, tools, mode: effectiveMode, message, input,
-                recentHistory: [], memories: [],
-                contextSections: [],
-                replySafeMode: true,
-                toolsEnabled: false,
-                channelType: "discord",
-                privacyLevel: adultScope?.active ? "adult_private" : "public",
-                adultModeActive: Boolean(adultScope?.active),
-                overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
-                systemPromptPrefix: adultSystemPromptPrefix,
-                toolContext: {
-                  surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId,
-                  mode: selectedMode, currentMessage: message, conversationId,
-                  channelId: message.channelId, sourceMessageId: message.id,
-                  currentUserId: input.authorId, currentUserName: input.authorName,
-                  currentUserText: input.content, recentHistory: [],
-                },
-              });
+          if (!corruptionAuditOnly) {
+            replyTrace.corruptionBlocked = true;
+            if (corruptionResult.safePrefix && corruptionResult.recommendation === "trim_to_safe_prefix") {
+              reply.content = corruptionResult.safePrefix;
               replyTrace.fallbackUsed = true;
-              replyTrace.fallbackReason = "corruption_regeneration";
-              const repairReply = buildReply({ mode: selectedMode, input, recentHistory: [], memories: [], modelOutput: repairOutput });
-              applyConversationalCompression({ reply: repairReply, input, logger, messageId: message.id, replyTrace });
-              const repairCorruption = detectOutputCorruption(repairReply.content || "", {
-                intent: responseIntent?.intent,
-                userText: input.content,
-                expectsText: true,
-              });
-              if (repairReply.content?.trim() && repairCorruption.severity !== "block") {
-                reply.content = repairReply.content;
-                replyTrace.finalSource = "corruption_regenerated";
-                logger.info?.("[output-integrity] Regeneration succeeded", { messageId: message.id });
-                logReplyPromptDebug(logger, "output-corruption-regeneration", {
-                  messageId: message.id,
-                  fallbackOrRegenerationHappened: "regeneration_succeeded",
+              replyTrace.fallbackReason = "corruption_safe_trim";
+              replyTrace.finalSource = "corruption_safe_trim";
+              logger.info?.("[output-integrity] Corrupted reply safely trimmed", { messageId: message.id, safePrefixLength: reply.content.length });
+            } else {
+              try {
+                const cleanRegenerationContext = [
+                  {
+                    label: "OUTPUT REPAIR",
+                    content: "Previous draft was corrupted. Reply naturally as Dante in one short conversational message. Do not mention tools, code, prompts, context, diagnostics, or internal terms.",
+                  },
+                ];
+                const repairOutput = await callModel({
+                  config, logger, tools, mode: effectiveMode, message, input,
+                  recentHistory: [], memories: [],
                   contextSections: cleanRegenerationContext,
-                  memories: [],
+                  replySafeMode: true,
+                  toolsEnabled: false,
+                  channelType: "discord",
+                  privacyLevel: adultScope?.active ? "adult_private" : "public",
+                  adultModeActive: Boolean(adultScope?.active),
+                  overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
+                  systemPromptPrefix: adultSystemPromptPrefix,
+                  toolContext: {
+                    surface: "chat", userScope: config.memory?.userScope, guildId: message.guildId,
+                    mode: selectedMode, currentMessage: message, conversationId,
+                    channelId: message.channelId, sourceMessageId: message.id,
+                    currentUserId: input.authorId, currentUserName: input.authorName,
+                    currentUserText: input.content, recentHistory: [],
+                  },
                 });
-              } else {
-                reply.content = "I got tangled for a second. I’m here now.";
                 replyTrace.fallbackUsed = true;
-                replyTrace.fallbackReason = "corruption_regeneration_failed";
+                replyTrace.fallbackReason = "corruption_regeneration";
+                const repairReply = buildReply({ mode: selectedMode, input, recentHistory: [], memories: [], modelOutput: repairOutput });
+                applyConversationalCompression({ reply: repairReply, input, logger, messageId: message.id, replyTrace });
+                const repairCorruption = detectOutputCorruption(repairReply.content || "", {
+                  intent: responseIntent?.intent,
+                  userText: input.content,
+                  expectsText: true,
+                });
+                if (repairReply.content?.trim() && repairCorruption.severity !== "block") {
+                  reply.content = repairReply.content;
+                  replyTrace.finalSource = "corruption_regenerated";
+                  logger.info?.("[output-integrity] Regeneration succeeded", { messageId: message.id });
+                } else {
+                  reply.content = contextualFallbackForReason("corruption_regeneration_failed", logger, { channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, voiceNoteIntent, emojiOnly: responseIntent?.intent === INTENTS.EMOJI_ONLY, userText: input.content });
+                  replyTrace.fallbackUsed = true;
+                  replyTrace.fallbackReason = "corruption_regeneration_failed";
+                  replyTrace.finalSource = "tiny_fallback";
+                  logger.warn("[output-integrity] Regeneration also corrupted; using contextual fallback", { messageId: message.id, reasons: repairCorruption.reasons });
+                }
+              } catch (repairErr) {
+                reply.content = contextualFallbackForReason("corruption_repair_error", logger, { channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, voiceNoteIntent, emojiOnly: responseIntent?.intent === INTENTS.EMOJI_ONLY, userText: input.content });
+                replyTrace.fallbackUsed = true;
+                replyTrace.fallbackReason = "corruption_repair_error";
                 replyTrace.finalSource = "tiny_fallback";
-                logger.warn("[output-integrity] Regeneration also corrupted; using safe fallback", { messageId: message.id });
+                logger.warn("[output-integrity] Regeneration call failed; using contextual fallback", {
+                  messageId: message.id,
+                  error: repairErr?.message,
+                });
               }
-            } catch (repairErr) {
-              reply.content = "I got tangled for a second. I’m here now.";
-              replyTrace.fallbackUsed = true;
-              replyTrace.fallbackReason = "corruption_repair_error";
-              replyTrace.finalSource = "tiny_fallback";
-              logger.warn("[output-integrity] Regeneration call failed; using safe fallback", {
-                messageId: message.id,
-                error: repairErr?.message,
-              });
+            }
+            if (replyTrace.finalSource === "tiny_fallback") {
+              logFallbackDiagnostics(logger, { message, input, replyTrace, corruptionReasons: corruptionResult.reasons, modelOutput, effectiveMode, fallbackSelected: reply.content, fallbackSavedToHistory: false, responseIntent, voiceNoteIntent });
             }
           }
         } else if (corruptionResult.severity === "watch") {
@@ -1424,6 +1453,7 @@ function createChatPipeline({
       } else {
         logger.info?.(`[reply-trace] duplicateBlocked=false`);
       }
+      const fallbackSavedToHistory = !(replyTrace.finalSource === "tiny_fallback" || replyTrace.finalSource === "corruption_regenerated");
       rememberReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: reply.content });
       logReplyPromptDebug(logger, "final-text-sent-to-discord", {
         messageId: message.id,
@@ -1504,18 +1534,29 @@ function createChatPipeline({
       }
 
 
-      await curateRuntimeMemory({ text: reply?.content || "", role: "assistant", memoryStore, config, logger, source: { authorId: input.authorId, channelId: message.channelId || message.channel?.id, messageId: `${message.id}:assistant` } });
+      if (fallbackSavedToHistory) {
+        await curateRuntimeMemory({ text: reply?.content || "", role: "assistant", memoryStore, config, logger, source: { authorId: input.authorId, channelId: message.channelId || message.channel?.id, messageId: `${message.id}:assistant` } });
+      } else {
+        logger.info?.("[reply-fallback] skipped assistant memory curation", { messageId: message.id, finalSource: replyTrace.finalSource });
+      }
 
       try {
+        if (!fallbackSavedToHistory) {
+          logger.info?.("[reply-fallback] skipped assistant promise curation", { messageId: message.id, finalSource: replyTrace.finalSource });
+        } else {
         const companionPromise = detectPromise({ text: reply?.content || "", role: "assistant", channelContext: beatChannelContext });
         if (companionPromise && promiseLedger?.savePromise) {
           await promiseLedger.savePromise({ ...beatScope, ...companionPromise, source_channel_id: message.channelId || "", source_message_id: `${message.id}:assistant` });
+        }
         }
       } catch (error) {
         logger.warn("[chat] Companion promise curation failed; continuing", { messageId: message.id, error: error.message });
       }
 
       try {
+        if (!fallbackSavedToHistory) {
+          logger.info?.("[reply-fallback] skipped assistant beat curation", { messageId: message.id, finalSource: replyTrace.finalSource });
+        } else {
         const companionBeat = classifyEmotionalBeat({
           text: reply?.content || "",
           role: "assistant",
@@ -1524,6 +1565,7 @@ function createChatPipeline({
           channelContext: beatChannelContext,
         });
         if (companionBeat) await saveBeat(companionBeat, "assistant");
+        }
       } catch (error) {
         logger.warn("[chat] Companion reply beat curation failed; continuing", { messageId: message.id, error: error.message });
       }
@@ -1557,4 +1599,6 @@ module.exports = {
   detectDiscomfort,
   detectRefusalText,
   isReplySafeModeEnabled,
+  isOutputCorruptionAuditOnly,
+  detectVoiceNoteIntent,
 };
