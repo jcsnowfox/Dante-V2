@@ -28,7 +28,14 @@
 const { resolveCompanionId } = require("../companion/resolveCompanionId");
 
 const API_PREFIX = "/api/second-life";
+const SL_PING_PATH = "/sl/ping";
+const SL_CHAT_PATH = "/sl/chat";
 const MAX_BODY_BYTES = 256 * 1024;
+
+function sendPlainText(res, statusCode, body) {
+  res.writeHead(statusCode, { "Content-Type": "text/plain; charset=utf-8" });
+  res.end(body);
+}
 
 function sendJson(res, statusCode, payload) {
   const body = JSON.stringify(payload == null ? {} : payload);
@@ -189,11 +196,24 @@ function normalizeEventFromBody(body, fallbackType) {
 }
 
 async function handleSecondLifeApiRequest({ req, res, url, context }) {
+  const logger = context.logger || null;
+
+  if (req.method === "GET" && url.pathname === SL_PING_PATH) {
+    logger?.info?.("[second-life-api] GET /sl/ping health check hit.");
+    sendPlainText(res, 200, "secondlife bridge alive");
+    return true;
+  }
+
+  if (req.method === "GET" && url.pathname === SL_CHAT_PATH) {
+    logger?.info?.("[second-life-api] GET /sl/chat health check hit.");
+    sendPlainText(res, 200, "secondlife chat route alive - use POST");
+    return true;
+  }
+
   if (!url.pathname.startsWith(API_PREFIX)) {
     return false;
   }
 
-  const logger = context.logger || null;
   const secondLife = context.secondLife || null;
   const adapter = context.secondLifeAdapter || null;
   const config = context.config || {};
