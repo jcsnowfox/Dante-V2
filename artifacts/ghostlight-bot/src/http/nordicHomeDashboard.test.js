@@ -45,7 +45,7 @@ function render(stats = {}) {
       ],
       featureStates: [{ label: "Images", icon: "gallery", active: true, path: "/admin/tools/images" }],
       recentDecisions: [
-        { label: "<Check>", status: "fired", executorType: "send_message", at: "2026-06-28T10:00:00Z", why: "Used <live> heartbeat" },
+        { label: "<Check>", status: "fired", executorType: "send_message", at: "2026-06-28T10:00:00Z", doing: "Sending a quiet note into the Velvet Room.", thinking: "The evening has stretched long, and the silence feels deliberate rather than empty.", why: "Used <live> heartbeat" },
       ],
       recentImages: [
         { imageId: "img-1", previewUrl: "/admin/media/live-generated-thumb.webp", altText: "Live <gallery>", tagline: "Saved by Dante", aspectRatio: "4:5" },
@@ -154,7 +154,8 @@ test("journal and recent action cards escape unsafe text", () => {
   const html = render();
   assert.match(html, /Dante &lt;Wolf&gt;/);
   assert.match(html, /&lt;Check&gt;/);
-  assert.match(html, /Used &lt;live&gt; heartbeat/);
+  assert.match(html, /<b>Doing:<\/b> Sending a quiet note into the Velvet Room\./);
+  assert.match(html, /<b>Thinking:<\/b> The evening has stretched long, and the silence feels deliberate rather than empty\./);
   assert.match(html, /Dream &lt;entry&gt;/);
   assert.match(html, /Safe &amp;lt;journal&amp;gt; text|Safe &lt;journal&gt; text/);
   assert.doesNotMatch(html, /<script>/);
