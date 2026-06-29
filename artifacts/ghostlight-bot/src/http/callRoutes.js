@@ -58,7 +58,7 @@ function buildCallPageModel({ companionId, companionName = "Dante", enabled }) {
     ? "Voice calling is enabled for this companion."
     : "Voice calling is currently disabled. Set CALLS_ENABLED=true in Railway and redeploy to enable this page.";
   const action = callsEnabled
-    ? `<button id="start" type="button" class="primary">Start call</button>`
+    ? `<button id="call-start" type="button" class="primary">Start call</button>`
     : `<a class="secondary" href="/admin">Back to dashboard</a>`;
 
   return { safeCompanionId, safeCompanionName, title, status, action, enabled: callsEnabled };
@@ -79,8 +79,6 @@ function renderCallPanel({ companionId, companionName = "Dante", enabled, dashbo
 
 function renderCallPage({ companionId, companionName = "Dante", enabled = readCallsEnabled() }) {
   const model = buildCallPageModel({ companionId, companionName, enabled });
-  const callsEnabledJson = JSON.stringify(model.enabled);
-  const companionIdJson = JSON.stringify(model.safeCompanionId);
 
   return `<!doctype html>
 <html lang="en">
@@ -89,47 +87,38 @@ function renderCallPage({ companionId, companionName = "Dante", enabled = readCa
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${model.title}</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; min-height: 100vh; background: #0d1018; color: #f7efe5; }
-    .wrap { max-width: 760px; margin: auto; padding: 18px; }
-    .card, .call-dante-panel { background: #171b28; border: 1px solid #30364a; border-radius: 22px; padding: 18px; margin: 14px 0; }
-    .row, .actions { display: flex; gap: 10px; flex-wrap: wrap; }
-    button, a, textarea { font: inherit; border-radius: 14px; padding: 12px; }
-    button, .primary { background: #d7a86e; border: 0; color: #1a1208; font-weight: 800; text-decoration: none; }
-    .secondary { background: #2b3144; color: #fff; text-decoration: none; }
+    :root { color-scheme: dark; --gold:#d6b56d; --cyan:#39d7f0; --ink:#030712; --panel:#08111f; --line:rgba(214,181,109,.28); --muted:#b9c7d6; }
+    body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; margin: 0; min-height: 100vh; background: radial-gradient(circle at 18% 10%, rgba(57,215,240,.16), transparent 28%), linear-gradient(145deg, #03040a, #0b0714 70%); color: #f7efe5; }
+    .wrap { width: min(980px, calc(100vw - 28px)); margin: auto; padding: 22px 0 36px; }
+    .card, .call-dante-panel { background: linear-gradient(145deg, rgba(3,7,18,.92), rgba(8,17,31,.78)); border: 1px solid var(--line); border-radius: 24px; padding: 18px; margin: 14px 0; box-shadow: 0 24px 70px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08); }
+    .eyebrow { margin: 0 0 6px; color: var(--gold); text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; font-weight: 900; }
+    h1 { font-family: Georgia, serif; font-size: clamp(2.4rem, 7vw, 5rem); line-height: .9; margin: 0 0 12px; }
+    .row, .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    button, a, textarea { font: inherit; border-radius: 14px; padding: 12px 14px; }
+    button, .primary { background: linear-gradient(135deg, var(--gold), #f6d99a); border: 0; color: #1a1208; font-weight: 900; text-decoration: none; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; }
+    .secondary { background: rgba(216,231,239,.08); border: 1px solid rgba(57,215,240,.28); color: #fff; text-decoration: none; }
+    .secondary.is-active { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(214,181,109,.14) inset; }
     .danger { background: #8d2f35; color: #fff; }
-    .status { font-size: 1.1rem; font-weight: 800; }
-    .transcript { min-height: 180px; white-space: pre-wrap; }
-    .ptt { width: 100%; font-size: 1.2rem; padding: 18px; }
-    @media (max-width: 640px) { .wrap { padding: 12px; } .row button { flex: 1 1 44%; } }
+    .status { color: var(--cyan); font-size: 1.1rem; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
+    .call-error { margin-top: 10px; padding: 12px; border: 1px solid rgba(239,68,68,.45); border-radius: 14px; background: rgba(127,29,29,.25); color: #fecaca; }
+    .call-diag { color: var(--muted); margin-top: 10px; font-size: .9rem; }
+    .transcript { min-height: 220px; max-height: 420px; overflow:auto; white-space: pre-wrap; border: 1px solid rgba(214,181,109,.16); border-radius: 18px; padding: 10px; background: rgba(0,0,0,.18); }
+    .call-turn { margin: 0 0 10px; padding: 10px 12px; border-radius: 14px; background: rgba(216,231,239,.07); }
+    .call-turn--dante { border-left: 3px solid var(--gold); }
+    .ptt { width: 100%; font-size: 1.15rem; padding: 18px; touch-action: manipulation; }
+    textarea { width:100%; box-sizing:border-box; margin-top:10px; background:#050916; color:#fff; border:1px solid rgba(214,181,109,.28); }
+    .spinner { display:inline-block; margin-left:8px; }
+    @media (max-width: 640px) { .wrap { width: min(100% - 18px, 980px); } .row button { flex: 1 1 44%; } }
   </style>
 </head>
-<body><main class="wrap">
+<body><main class="wrap" data-call-client data-companion-id="${model.safeCompanionId}" data-calls-enabled="${model.enabled ? "true" : "false"}">
 ${renderCallPanel({ companionId: model.safeCompanionId, companionName, enabled: model.enabled })}
-<div class="card"><div>Status: <span id="status" class="status">idle</span></div><div id="error"></div><div id="diag"></div></div>
-<div class="card row"><button id="end" class="danger">End call</button><button id="mute" class="secondary">Mute mic</button><button id="pause" class="secondary">Pause listening</button></div>
-<div class="card"><div class="row"><button id="hands" class="secondary">Hands-free mode</button><button id="pttMode" class="secondary">Push-to-talk mode</button></div><button id="ptt" class="ptt">Hold / tap push-to-talk</button><textarea id="typed" rows="3" style="width:100%;box-sizing:border-box;margin-top:10px" placeholder="Typed fallback when speech recognition is unavailable"></textarea><button id="sendTyped">Send typed utterance</button></div>
-<div class="card"><h2>Transcript</h2><div id="transcript" class="transcript"></div><button id="replay" class="secondary">Replay last Dante response</button></div>
-<script>
-const companionId=${companionIdJson}, callsEnabled=${callsEnabledJson};
-let sessionId='', mode='push_to_talk', recog=null, paused=false, muted=false, lastAudio='', lastText='', silenceTimer=null;
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition, st=n=>document.getElementById('status').textContent=n, err=m=>document.getElementById('error').textContent=m||'', tr=s=>document.getElementById('transcript').textContent+=s+'\\n';
-document.getElementById('diag').textContent='calls enabled='+callsEnabled+' | STT provider=browser | browser STT available='+Boolean(SR)+' | TTS provider=kokoro_web';
-if(!callsEnabled) err('Calls are disabled on the server. Set CALLS_ENABLED=true to connect the dashboard call controls.');
-else if(!SR) err('Hands-free speech recognition is not available in this browser. Use push-to-talk typed mode or configure Whisper.');
-async function api(path, body){ const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}); return r.json(); }
-function setupRecog(){ if(!SR) return null; const r=new SR(); r.lang='en-US'; r.continuous=true; r.interimResults=true; let final=''; r.onstart=()=>st(mode==='hands_free'?'listening':'recording'); r.onerror=e=>{err('Speech recognition error: '+e.error); st('error')}; r.onresult=e=>{ st('transcribing'); for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) final+=t+' '; } if(mode==='hands_free'){ clearTimeout(silenceTimer); silenceTimer=setTimeout(()=>{ const out=final.trim(); final=''; if(out) sendUtterance(out); }, 1200); }}; r.onend=()=>{ if(mode==='hands_free'&&!paused&&!muted) setTimeout(()=>r.start(),300); }; r.takeFinal=()=>{ const out=final.trim(); final=''; return out; }; return r; }
-async function ensureSession(){ if(sessionId) return; const s=await api('/api/call/'+encodeURIComponent(companionId)+'/start',{}); sessionId=s.sessionId; }
-async function sendUtterance(text){ if(!callsEnabled||!text) return; await ensureSession(); st('thinking'); tr('You: '+text); const out=await api('/api/call/'+encodeURIComponent(companionId)+'/message',{sessionId,text}); lastText=out.replyText||''; tr('Dante: '+lastText); if(out.audio?.ok){ lastAudio='data:'+out.audio.contentType+';base64,'+out.audio.audioBase64; const a=new Audio(lastAudio); st('speaking'); a.onended=()=>st(paused?'paused':'listening'); a.play(); } else { const u=new SpeechSynthesisUtterance(lastText); u.onend=()=>st(paused?'paused':'listening'); speechSynthesis.speak(u); } }
-document.getElementById('start')?.addEventListener('click', async()=>{ await ensureSession(); st('idle'); });
-document.getElementById('end').onclick=async()=>{ if(sessionId) await api('/api/call/'+encodeURIComponent(companionId)+'/end',{sessionId}); sessionId=''; st('idle'); if(recog)recog.stop(); };
-document.getElementById('hands').onclick=()=>{ mode='hands_free'; if(!SR) return err('Hands-free speech recognition is not available in this browser. Use push-to-talk typed mode or configure Whisper.'); recog=setupRecog(); paused=false; recog.start(); };
-document.getElementById('pttMode').onclick=()=>{ mode='push_to_talk'; if(recog)recog.stop(); st('idle'); };
-document.getElementById('ptt').onclick=()=>{ if(SR){ recog=setupRecog(); recog.start(); setTimeout(()=>{try{recog.stop()}catch{}; sendUtterance(recog.takeFinal())}, 30000); } else document.getElementById('typed').focus(); };
-document.getElementById('sendTyped').onclick=()=>sendUtterance(document.getElementById('typed').value.trim());
-document.getElementById('pause').onclick=()=>{ paused=!paused; if(paused&&recog)recog.stop(); st(paused?'paused':'listening'); };
-document.getElementById('mute').onclick=()=>{ muted=!muted; if(muted&&recog)recog.stop(); };
-document.getElementById('replay').onclick=()=>{ if(lastAudio)new Audio(lastAudio).play(); else if(lastText)speechSynthesis.speak(new SpeechSynthesisUtterance(lastText)); };
-</script></main></body></html>`;
+<div class="card"><div>Status: <span id="call-status" class="status">idle</span><span id="call-spinner" class="spinner" hidden>⏳</span></div><div id="call-error" class="call-error" hidden></div><div id="call-diagnostics" class="call-diag"></div></div>
+<div class="card row"><button id="call-end" class="danger" type="button">End call</button><button id="call-mute" class="secondary" type="button">Mute mic</button><button id="call-pause" class="secondary" type="button">Pause listening</button></div>
+<div class="card"><div class="row"><button id="call-hands-free" class="secondary" type="button">Hands-free mode</button><button id="call-ptt-mode" class="secondary" type="button">Push-to-talk mode</button></div><button id="call-ptt" class="ptt" type="button">Hold / tap push-to-talk</button><textarea id="call-typed" rows="3" placeholder="Typed fallback when speech recognition is unavailable"></textarea><button id="call-send-typed" type="button">Send typed utterance</button></div>
+<div class="card"><h2>Transcript</h2><div id="call-transcript" class="transcript" aria-live="polite"></div><button id="call-replay" class="secondary" type="button" disabled>Replay last Dante response</button></div>
+<script src="/assets/call-dante.js" defer></script></main></body></html>`;
 }
 
 async function handleCallRoutes({ req, res, url, context, withAdmin }) {
@@ -147,16 +136,22 @@ async function handleCallRoutes({ req, res, url, context, withAdmin }) {
     return false;
   }
 
-  return withAdmin(async (_req, innerRes, innerContext) => {
+  const innerRes = res;
+  const innerContext = context || {};
+  const _req = req;
+  {
     const companionId = normalizeCompanionId(api[1]);
     const action = api[2];
-    const callsEnabled = readCallsEnabled(innerContext.config);
+    const callsEnabled = readCallsEnabled(innerContext.config || {});
 
     if (action === "diagnostics") {
       return json(innerRes, 200, {
         callsEnabled,
         sttProvider: process.env.STT_PROVIDER || "browser",
         ttsProvider: process.env.TTS_PROVIDER || "kokoro_web",
+        ok: true,
+        kokoroConfigured: Boolean(process.env.KOKORO_API_URL),
+        browserSttExpected: true,
         kokoroApiReachable: Boolean(process.env.KOKORO_API_URL),
         kokoroVoice: process.env.KOKORO_VOICE || "",
         lastTtsError: null,
@@ -165,14 +160,14 @@ async function handleCallRoutes({ req, res, url, context, withAdmin }) {
     }
 
     if (!callsEnabled) {
-      return json(innerRes, 503, { error: "Calls are disabled. Set CALLS_ENABLED=true and redeploy." });
+      return json(innerRes, 503, { ok: false, error: "Calls are disabled. Set CALLS_ENABLED=true and redeploy." });
     }
 
     const body = await readJson(_req);
     if (action === "start") {
       const sessionId = randomUUID();
       sessions.set(sessionId, { companionId, turns: [], startedAt: new Date().toISOString() });
-      return json(innerRes, 200, { sessionId });
+      return json(innerRes, 200, { ok: true, sessionId, status: "idle" });
     }
 
     const session = sessions.get(body.sessionId) || { companionId, turns: [] };
@@ -206,7 +201,7 @@ async function handleCallRoutes({ req, res, url, context, withAdmin }) {
       });
       session.turns.push({ userTranscript: text, danteTextReply: replyText, audioStatus: audio.ok ? "ok" : "fallback", timestamp: new Date().toISOString() });
       sessions.set(body.sessionId, session);
-      return json(innerRes, 200, { replyText, audio });
+      return json(innerRes, 200, { ok: true, userText: text, replyText, audio, audioMimeType: audio.contentType || audio.mimeType || null, usedTtsProvider: process.env.TTS_PROVIDER || "kokoro_web", fallbackUsed: !audio.ok });
     }
 
     if (action === "end") {
@@ -217,7 +212,8 @@ async function handleCallRoutes({ req, res, url, context, withAdmin }) {
     }
 
     return json(innerRes, 404, { error: "Unknown call action." });
-  })(req, res, context);
+  }
+  return true;
 }
 
 module.exports = {
