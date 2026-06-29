@@ -175,3 +175,47 @@ test("call client script wires all controls without inline JavaScript", async (t
     assert.match(script.body, new RegExp(token));
   }
 });
+
+test("GET /sl/ping returns Second Life bridge health text at root", async (t) => {
+  const logs = [];
+  const server = createHealthServer({
+    port: 0,
+    logger: { info() {}, error() {}, warn() {} },
+    appContext: {
+      ready: true,
+      config: { admin: { username: "owner", password: "secret" }, discord: {}, chat: { timezone: "UTC" }, features: {} },
+      logger: { info(message) { logs.push(message); }, error() {}, warn() {} },
+    },
+  });
+  t.after(() => server.close());
+
+  await new Promise((resolve) => server.on("listening", resolve));
+  const response = await request(server, "/sl/ping");
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["content-type"], /text\/plain/);
+  assert.equal(response.body, "secondlife bridge alive");
+  assert.ok(logs.some((message) => message.includes("GET /sl/ping")));
+});
+
+test("GET /sl/chat returns Second Life chat route method hint without changing POST", async (t) => {
+  const logs = [];
+  const server = createHealthServer({
+    port: 0,
+    logger: { info() {}, error() {}, warn() {} },
+    appContext: {
+      ready: true,
+      config: { admin: { username: "owner", password: "secret" }, discord: {}, chat: { timezone: "UTC" }, features: {} },
+      logger: { info(message) { logs.push(message); }, error() {}, warn() {} },
+    },
+  });
+  t.after(() => server.close());
+
+  await new Promise((resolve) => server.on("listening", resolve));
+  const response = await request(server, "/sl/chat");
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["content-type"], /text\/plain/);
+  assert.equal(response.body, "secondlife chat route alive - use POST");
+  assert.ok(logs.some((message) => message.includes("GET /sl/chat")));
+});
