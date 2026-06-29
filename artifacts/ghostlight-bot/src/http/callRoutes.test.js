@@ -21,6 +21,21 @@ function request(server, pathname, headers = {}) {
   });
 }
 
+function postJson(server, pathname, payload = {}) {
+  const { port } = server.address();
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const req = http.request({ hostname: "127.0.0.1", port, path: pathname, method: "POST", headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } }, (res) => {
+      let responseBody = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => { responseBody += chunk; });
+      res.on("end", () => resolve({ statusCode: res.statusCode, headers: res.headers, body: responseBody, json: JSON.parse(responseBody) }));
+    });
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
 function createTestServer(config) {
   return createHealthServer({
     port: 0,
@@ -115,7 +130,48 @@ test("/call/:companionId page contains mobile call controls and browser STT fall
   assert.match(html, /Start call/);
   assert.match(html, /Hands-free mode/);
   assert.match(html, /Push-to-talk mode/);
-  assert.match(html, /SpeechRecognition/);
-  assert.match(html, /Hands-free speech recognition is not available/);
-  assert.match(html, /kokoro_web/);
+  assert.match(html, /call-dante\.js/);
+  assert.match(html, /call-start/);
+  assert.match(html, /call-replay[^>]+disabled/);
+});
+
+
+test("call APIs return usable JSON contracts", async (t) => {
+  const server = createTestServer({ calls: { enabled: true } });
+  t.after(() => server.close());
+
+  await new Promise((resolve) => server.on("listening", resolve));
+  const start = await postJson(server, "/api/call/dante/start", {});
+  assert.equal(start.statusCode, 200);
+  assert.equal(start.json.ok, true);
+  assert.ok(start.json.sessionId);
+  assert.equal(start.json.status, "idle");
+
+  const message = await postJson(server, "/api/call/dante/message", { sessionId: start.json.sessionId, text: "hello", mode: "typed" });
+  assert.equal(message.statusCode, 200);
+  assert.equal(message.json.ok, true);
+  assert.equal(message.json.userText, "hello");
+  assert.ok(message.json.replyText);
+  assert.equal(typeof message.json.fallbackUsed, "boolean");
+
+  const end = await postJson(server, "/api/call/dante/end", { sessionId: start.json.sessionId });
+  assert.equal(end.statusCode, 200);
+  assert.equal(end.json.ok, true);
+});
+
+test("call client script wires all controls without inline JavaScript", async (t) => {
+  const server = createTestServer({ calls: { enabled: true } });
+  t.after(() => server.close());
+
+  await new Promise((resolve) => server.on("listening", resolve));
+  const page = await request(server, "/call/dante");
+  assert.match(page.body, /<script src="\/assets\/call-dante\.js" defer><\/script>/);
+  assert.doesNotMatch(page.body, /<script>\s*const companionId/);
+
+  const script = await request(server, "/assets/call-dante.js");
+  assert.equal(script.statusCode, 200);
+  assert.match(script.headers["content-type"], /application\/javascript/);
+  for (const token of ["call-start", "call-end", "call-mute", "call-pause", "call-hands-free", "call-ptt-mode", "call-ptt", "call-send-typed", "call-replay", "pointerdown", "pointerup", "speechSynthesis"]) {
+    assert.match(script.body, new RegExp(token));
+  }
 });

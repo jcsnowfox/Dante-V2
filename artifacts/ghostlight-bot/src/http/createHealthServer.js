@@ -90,6 +90,7 @@ const ASSET_CONTENT_TYPES = Object.freeze({
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
+  ".js": "application/javascript; charset=utf-8",
 });
 const THEME_COOKIE_NAME = "cadence_theme";
 

@@ -313,7 +313,6 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
             icon: "audio",
             active: innerContext.config.calls?.enabled === true,
             path: "/admin/call/dante",
-            path: "/call/dante",
             helpText: `Call Dante is ${innerContext.config.calls?.enabled === true ? "On" : "Off"}.`,
           },
           {

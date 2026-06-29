@@ -290,6 +290,7 @@ function renderHomePage({ stats, theme = "light", helpers }) {
     : `<div class="nordic-home-empty-gallery"><p>No gallery images yet.</p>${safeLink({ path: "/admin/gallery/images", label: "Open Gallery" })}</div>`;
 
   const recipeMarkup = `<div class="nordic-home-recipe-list">${selectRotatingRecipes({ now }).map((recipe) => `<a class="nordic-home-recipe-card" href="${escapeHtml(recipe.sourceUrl)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(assetUrl(recipe.imageAsset))}" alt="" aria-hidden="true" loading="lazy"><div><p class="nordic-eyebrow">${escapeHtml(recipe.cultureTag)} · ${escapeHtml(recipe.sourceName)}</p><h3>${escapeHtml(recipe.title)}</h3><p>${escapeHtml(recipe.time)} · ${escapeHtml(recipe.carbsPerServing)}g ${escapeHtml(recipe.carbType)} carbs / serving</p><div>${recipe.tags.map((tag) => renderNordicPill({ label: tag })).join("")}</div></div></a>`).join("")}</div>`;
+  const callDanteMarkup = `<a class="nordic-home-call-card" href="${escapeHtml(buildAdminLocation({ path: "/admin/call/dante", theme }))}"><span class="nordic-home-call-orb">${renderNordicIcon("audio", { decorative: true })}</span><span><p class="nordic-eyebrow">Voice gateway</p><h3>Call Dante</h3><small>Open the live voice call controls with typed fallback, browser speech, and replay.</small></span><strong>${escapeHtml(featureStates.find((feature) => feature.label === "Call Dante")?.active ? "Ready" : "Enable")}</strong></a>`;
 
   const battleMarkup = `<div class="nordic-home-rhythm-summary"><p><strong>Today:</strong> ${escapeHtml(currentRhythm.day)} · ${escapeHtml(currentRhythm.training)} · ${escapeHtml(currentRhythm.meal)}</p><p><strong>Next:</strong> ${escapeHtml(nextRhythm.day)} · ${escapeHtml(nextRhythm.training)}</p></div><div class="nordic-home-battle-grid">${BATTLE_RHYTHM_DAYS.map((day, index) => renderBattleRhythmDayCard({ day: day.day, status: index === todayIndex ? "Today" : day.training, items: [day.training, day.meal] })).join("")}</div>`;
 
@@ -338,7 +339,7 @@ function renderHomePage({ stats, theme = "light", helpers }) {
     "</div>",
     "<div class=\"nordic-home-middle\">",
     `<section class="nordic-panel nordic-home-recent"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Heartbeat</p><h2 class="nordic-panel__title">Recent Actions</h2></div></div>${recentActionMarkup}${innerLifeMarkup}</section>`,
-    `<section class="nordic-panel nordic-home-gallery"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Live generated media</p><h2 class="nordic-panel__title">Gallery</h2></div>${safeLink({ path: "/admin/gallery/images", label: "Open Gallery" })}</div>${galleryMarkup}</section>`,
+    `<section class="nordic-panel nordic-home-gallery"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Live generated media</p><h2 class="nordic-panel__title">Gallery</h2></div>${safeLink({ path: "/admin/gallery/images", label: "Open Gallery" })}</div>${galleryMarkup}${callDanteMarkup}</section>`,
     `<section class="nordic-panel nordic-home-recipes"><div class="nordic-panel__header"><div><p class="nordic-eyebrow">Real low-carb recipe links</p><h2 class="nordic-panel__title">Nordic Low-Carb Recipes</h2></div><span class="nordic-pill">Rotates daily</span></div>${recipeMarkup}</section>`,
     "</div>",
     renderNordicDivider({ label: "Saga planning", icon: "companion" }),
