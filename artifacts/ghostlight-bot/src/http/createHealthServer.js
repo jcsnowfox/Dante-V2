@@ -35,6 +35,7 @@ const { handleAdminMaintenanceActions } = require("./actions/adminMaintenanceAct
 const { handleAdminExportActions } = require("./actions/adminExportActions");
 const { handleSituationalAwarenessActions } = require("./actions/situationalAwarenessActions");
 const { handleTravelActions } = require("./actions/travelActions");
+const { handleCallRoute } = require("./callRoutes");
 const { NORDIC_DASHBOARD_ASSET_BASE, getNordicDashboardAssetPath } = require("./nordicDashboardAssets");
 const { handleCallRoutes } = require("./callRoutes");
 const {
@@ -266,6 +267,7 @@ function createHealthServer({
       }
 
       {
+        const handled = await handleCallRoute({ req, res, url, context });
         const handled = await handleCallRoutes({ req, res, url, context, withAdmin });
         if (handled !== false) {
           return handled;
