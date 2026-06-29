@@ -170,7 +170,9 @@ function buildChatRequest({
     channelType,
     privacyLevel,
   });
-  const effectiveContextSections = safeMode ? [] : [...contextSections];
+  const effectiveContextSections = safeMode
+    ? contextSections.filter((section) => String(section?.label || "") === "Immediate Conversation Continuity")
+    : [...contextSections];
   if (!safeMode) {
     const temporalContext = createTemporalAwarenessService({ config }).buildContext({
       now: input?.messageTimestamp ? new Date(input.messageTimestamp) : new Date(),
@@ -185,6 +187,7 @@ function buildChatRequest({
       effectiveContextSections.push(timeContext);
     }
   }
+  const safeModeAllowsContinuity = safeMode && effectiveContextSections.some((section) => String(section?.label || "") === "Immediate Conversation Continuity");
   const internalContext = buildInternalContextText({
     contextSections: effectiveContextSections,
     memories: safeMode ? [] : memories,
@@ -206,14 +209,14 @@ function buildChatRequest({
     instructions: [
       systemPromptPrefix ? String(systemPromptPrefix).trim() : "",
       baseInstructions,
-      safeMode ? "REPLY SAFE MODE\nUse only the core companion identity/persona, the current user message, and minimal runtime/safety rules. Ignore all history, memory, journal, dream, inner-life, emotional arc, situational awareness, tool/music/travel/web, autonomy, and context-update notes." : `Dynamic Internal Context\n${internalContext}`,
+      safeMode ? `REPLY SAFE MODE\nUse only the core companion identity/persona, the current user message, any provided Immediate Conversation Continuity block, and minimal runtime/safety rules. Ignore all other history, memory, journal, dream, inner-life, emotional arc, situational awareness, tool/music/travel/web, autonomy, and context-update notes.${safeModeAllowsContinuity ? `\n\nDynamic Internal Context\n${internalContext}` : ""}` : `Dynamic Internal Context\n${internalContext}`,
     ].filter(Boolean).join("\n\n"),
     reasoning: {
       exclude: true,
     },
     input: buildChatInput({
       input,
-      recentHistory: safeMode ? [] : recentHistory,
+      recentHistory: safeMode ? (safeModeAllowsContinuity ? recentHistory : []) : recentHistory,
       automation,
       includeTimeContext,
       includeSpeakerNames: sharedServerMode,

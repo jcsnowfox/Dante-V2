@@ -49,3 +49,70 @@ test('fallback regeneration keeps only clean core context and strips retrieved m
   });
   assert.deepEqual(clean.map((s) => s.label), ['VOICE RULES', 'TONE MODE']);
 });
+
+const { detectContinuationIntent } = require('../src/chat/continuationIntent');
+const { detectVoiceNoteRequest, isFakeVoiceNoteAction, stripFakeVoiceNoteAction, buildVoiceNoteScript } = require('../src/chat/voiceNoteIntent');
+
+test('continuation detector catches short confirmation replies', () => {
+  for (const text of ['yes', 'yesssss', 'yeah', 'yep', 'no', 'please', 'more', 'continue', 'go on', 'again', 'do it', 'okay', 'mmhmm', 'exactly', 'that', 'this', 'tell me', 'keep going']) {
+    assert.equal(detectContinuationIntent(text), true, text);
+  }
+  assert.equal(detectContinuationIntent('what are you talking about today'), false);
+});
+
+test('yes after Just say yes preserves previous assistant and adds continuity block', () => {
+  const result = sanitizePromptContext({
+    currentUserText: 'yes',
+    recentHistory: [
+      { id: 'u1', role: 'user', content: 'prompt me' },
+      { id: 'a1', role: 'assistant', content: 'Just say yes.' },
+    ],
+  });
+  assert.equal(result.continuity.continuationIntentDetected, true);
+  assert.equal(result.continuity.previousAssistantPreserved, true);
+  assert.equal(result.recentHistory.at(-1).content, 'Just say yes.');
+  assert.equal(result.contextSections.at(-1).label, 'Immediate Conversation Continuity');
+});
+
+test('yesssss after Just say yes preserves previous assistant message', () => {
+  const result = sanitizePromptContext({ currentUserText: 'yesssss', recentHistory: [{ role: 'assistant', content: 'Just say yes.' }] });
+  assert.equal(result.recentHistory[0].content, 'Just say yes.');
+});
+
+test('please after keep-going question preserves previous assistant message', () => {
+  const result = sanitizePromptContext({ currentUserText: 'please', recentHistory: [{ role: 'assistant', content: 'Do you want me to keep going?' }] });
+  assert.equal(result.recentHistory[0].content, 'Do you want me to keep going?');
+});
+
+test('safe mode continuity preserves immediate pair when explicitly requested', () => {
+  const result = sanitizePromptContext({
+    currentUserText: 'keep going',
+    preserveImmediateContinuity: true,
+    recentHistory: [{ role: 'assistant', content: 'Do you want me to keep going?' }],
+  });
+  assert.equal(result.continuity.previousAssistantPreserved, true);
+  assert.equal(result.continuity.continuityBlockAdded, true);
+});
+
+test('corrupted previous assistant message is not injected verbatim', () => {
+  const result = sanitizePromptContext({
+    currentUserText: 'yes',
+    recentHistory: [{ id: 'bad', role: 'assistant', content: 'printStatsYourAss contentassist constructor Passport js' }],
+  });
+  assert.equal(result.recentHistory[0].content, 'Previous assistant message was corrupted and should be ignored.');
+  assert.match(result.contextSections[0].content, /Previous assistant message was corrupted/);
+  assert.doesNotMatch(result.contextSections[0].content, /printStatsYourAss/);
+});
+
+test('normal standalone messages do not force continuity', () => {
+  const result = sanitizePromptContext({ currentUserText: 'tell me about the moon', recentHistory: [{ role: 'assistant', content: 'Just say yes.' }] });
+  assert.equal(result.continuity.continuationIntentDetected, false);
+  assert.equal(result.continuity.continuityBlockAdded, false);
+});
+
+test('voice note intent and fake action helpers route to audio instead of final fake text', () => {
+  assert.equal(detectVoiceNoteRequest('send me a voice note lemme hear it'), true);
+  assert.equal(isFakeVoiceNoteAction('(sends a voice note)'), true);
+  assert.equal(stripFakeVoiceNoteAction('(sends a voice note)'), '');
+  assert.notEqual(buildVoiceNoteScript({ userText: 'send me a voice note lemme hear it', replyText: '(sends a voice note)' }), '(sends a voice note)');
+});
