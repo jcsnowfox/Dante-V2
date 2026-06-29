@@ -958,6 +958,8 @@ function renderAdminWorkspacePage(params) {
             status: item.status,
             executorType: item.executorType || "",
             at: item.at || "",
+            doing: item.doing || "",
+            thinking: item.thinking || "",
             why: item.why || "",
           })),
         recentJournals: params.recentJournals || (Array.isArray(params.journalEntries) ? params.journalEntries : []).slice(0, 5).map((entry) => ({

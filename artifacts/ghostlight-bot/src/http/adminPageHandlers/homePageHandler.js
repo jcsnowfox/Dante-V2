@@ -352,6 +352,8 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
               actionType: matchedAction?.actionType || "",
               enabledTools: Array.isArray(matchedAction?.enabledTools) ? matchedAction.enabledTools : [],
               at: item.at || "",
+              doing: item.doing || "",
+              thinking: item.thinking || "",
               why: item.why || (item.status === "fired" ? "No detail recorded." : "It didn't fit the moment."),
             };
           }),

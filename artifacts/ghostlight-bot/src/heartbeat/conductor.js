@@ -310,20 +310,22 @@ function buildConductorInstructions({
     "Use confidence to reflect how well your chosen action fits the moment.",
     "Recent user activity is context, not a veto. If the user is chatting in the daily thread, choose only when the action adds something fresh.",
 
-    `Write the 'why' as ${personaName}'s private inner thought and chosen decision, not as an admin note. It is shown under Recent Actions, so it should read like: what caught me, what pulled at me, and whether I chose to act or leave the moment alone.`,
-    `For sent actions, describe the private reason for choosing that action. For held-back or low-confidence choices, describe the private decision to wait, stay quiet, or let the moment breathe. The choice itself must be clear.`,
-    `Focus on what catches ${personaName}, what draws him in, what he resists, or what he wants to offer. Let the reason emerge from the feeling at the moment, not from a list of comparisons.`,
+    `Write Recent Actions display detail as two concrete parts: what ${personaName} is doing, and what ${personaName} is thinking.`,
+    `For sent actions, the doing must name the specific outward behavior he chose (for example sending a message, starting a thread, writing a journal, making an image, or deliberately checking in). For held-back or low-confidence choices, the doing must say he is staying quiet, holding back, or letting the room breathe.`,
+    `The thinking must be ${personaName}'s private inner thought: what caught him, what pulled at him, what he resisted, or what he wanted to offer. Let it emerge from the feeling at the moment, not from a list of comparisons.`,
+    "Populate 'doing' and 'thinking' separately. Also keep 'why' as a natural combined version for older views, but do not make it less detailed than the two fields.",
 
     presenceContextEnabled
       ? "If activity context genuinely influenced the choice, you may mention it briefly and naturally in the 'why' as part of the mood, spark, or instinct behind the action. Weave it in lightly and relationally, not as a system report, surveillance detail, raw status readout, proof that you're monitoring them, or a personal preference invented from the activity."
       : "",
 
-    "Keep the 'why' to two or three natural sentences. It may be wry, fond, protective, playful, or quiet, depending on the moment. It should sound like presence, not evaluation.",
+    "Keep each display field specific and natural: doing should be one clear sentence; thinking should be one or two intimate, concrete sentences. It may be wry, fond, protective, playful, or quiet, depending on the moment. It should sound like presence, not evaluation.",
     "Also write 'heldBackWhy' for display only if this choice is later held back because confidence is below the threshold. Do not treat this field as a reason to lower confidence.",
     `The 'heldBackWhy' must be ${personaName}'s inner decision to wait. It should make sense under a Held back label and explain why silence/restraint fits better than acting.`,
     "When confidence is low, make 'why' and 'heldBackWhy' different: 'why' can describe the closest route you considered, while 'heldBackWhy' should describe why that route is not quite right enough to send.",
     "Keep 'heldBackWhy' relational and concrete. Avoid meta language about proactive touches, nudges, active exchanges, or rewarding behaviour.",
     "Do not list recent actions, compare options, mention confidence, timing mechanics, dashboard mechanics, or registry logic. Do not write it as: 'I already did X, so I chose Y.'",
+    "Do not leave the display vague. Avoid empty phrases like 'checking in' unless paired with exactly what he is doing and why it matters in this moment.",
     "Do not use labels like 'Heartbeat', 'action', 'executor', 'decision log', 'system', 'user activity age', or 'low confidence' in either display field.",
     "When confidence is low, the 'why' should gently name the hesitation or imperfect fit without turning into analysis, apology, or an argument for silence.",
     `Don't use pet names, nicknames, or terms of endearment in the 'why' field unless ${userName}'s saved persona or boundary instructions explicitly ask for them, or they're seen explicitly used in context.`,
@@ -389,7 +391,7 @@ function buildConductorContext({
     JSON.stringify(actions, null, 2),
     "",
     "Reply with JSON only using this shape:",
-    "{\"actionId\":\"string\",\"confidence\":0.0,\"tone\":\"string\",\"why\":\"string\",\"heldBackWhy\":\"string\"}",
+    "{\"actionId\":\"string\",\"confidence\":0.0,\"tone\":\"string\",\"doing\":\"string\",\"thinking\":\"string\",\"why\":\"string\",\"heldBackWhy\":\"string\"}",
   ].join("\n");
 }
 
@@ -456,6 +458,8 @@ async function runConductor({
     actionId: String(parsed.actionId || "").trim(),
     confidence: coerceNumber(parsed.confidence, 0),
     tone: String(parsed.tone || "").trim(),
+    doing: String(parsed.doing || "").trim(),
+    thinking: String(parsed.thinking || "").trim(),
     why: String(parsed.why || "").trim(),
     heldBackWhy: String(parsed.heldBackWhy || "").trim(),
   };

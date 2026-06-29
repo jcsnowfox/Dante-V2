@@ -182,6 +182,20 @@ function renderHomePage({ stats, theme = "light", helpers }) {
     return ` style="--home-image-aspect:${escapeHtml(String(width / height))}"`;
   };
 
+  const renderRecentActionDetail = (item) => {
+    const doing = String(item.doing || "").trim();
+    const thinking = String(item.thinking || "").trim();
+
+    if (doing || thinking) {
+      return [
+        doing ? `<small><b>Doing:</b> ${escapeHtml(doing)}</small>` : "",
+        thinking ? `<small><b>Thinking:</b> ${escapeHtml(thinking)}</small>` : "",
+      ].filter(Boolean).join("");
+    }
+
+    return `<small>${escapeHtml(item.why || "No detail recorded.")}</small>`;
+  };
+
   const actionIconByExecutor = {
     send_check_in: "heartbeat",
     send_message: "heartbeat",
@@ -263,7 +277,7 @@ function renderHomePage({ stats, theme = "light", helpers }) {
     : "";
 
   const recentActionMarkup = recentDecisions.length
-    ? `<div class="nordic-home-action-list">${recentDecisions.map((item) => `<a class="nordic-home-action${item.status === "skipped" ? " is-muted" : ""}" href="${escapeHtml(buildAdminLocation({ path: "/admin/heartbeat/overview", theme }))}">${renderNordicIcon(getHomeDecisionIcon(item), { decorative: true })}<span><strong>${escapeHtml(item.label || item.status || "Heartbeat")}</strong><small>${escapeHtml(item.why || "No detail recorded.")}</small><time>${escapeHtml(formatHomeDate(item.at))}</time></span></a>`).join("")}</div>`
+    ? `<div class="nordic-home-action-list">${recentDecisions.map((item) => `<a class="nordic-home-action${item.status === "skipped" ? " is-muted" : ""}" href="${escapeHtml(buildAdminLocation({ path: "/admin/heartbeat/overview", theme }))}">${renderNordicIcon(getHomeDecisionIcon(item), { decorative: true })}<span><strong>${escapeHtml(item.label || item.status || "Heartbeat")}</strong>${renderRecentActionDetail(item)}<time>${escapeHtml(formatHomeDate(item.at))}</time></span></a>`).join("")}</div>`
     : `<p class="nordic-empty">Recent Heartbeat decisions will appear here.</p>`;
 
   const galleryMarkup = recentImages.length
