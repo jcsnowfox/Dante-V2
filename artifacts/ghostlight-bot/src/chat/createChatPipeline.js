@@ -48,6 +48,18 @@ const { sanitizePromptContext, buildCleanRegenerationContext } = require("./prom
 const defaultConversationStateStore = createConversationStateStore();
 const defaultFollowUpCandidateStore = createFollowUpCandidateStore();
 
+const DEFAULT_ADULT_MODEL_OVERRIDE = "sao10k/l3.3-euryale-70b";
+
+function resolveAdultModelOverride({ adultMode = {}, config = {} } = {}) {
+  return (
+    String(adultMode?.model || "").trim()
+    || String(config.chat?.adultModelOverride || "").trim()
+    || String(process.env.ADULT_MODEL_OVERRIDE || "").trim()
+    || config.llm?.romance?.model
+    || DEFAULT_ADULT_MODEL_OVERRIDE
+  );
+}
+
 function applyConversationalCompression({ reply, input, logger, messageId, replyTrace }) {
   if (!reply?.content) return;
   const result = conversationalCompressionGate({ text: reply.content, input });
@@ -930,19 +942,30 @@ function createChatPipeline({
       let adultRoutingDecisionLogged = false;
 
       if (adultScope.active) {
+        const adultModel = resolveAdultModelOverride({ adultMode, config });
+        const normalModel = selectedMode.chatModel || config.llm?.chat?.model || config.llm?.chatModel || config.openai?.chatModel || null;
+        const routingDecision = shouldUseAdultModel({
+          adultPermission: adultScope.active,
+          messageText: input.content,
+          recentTurns: recentHistory,
+          channelMode: {
+            adultModelRoutingMode: config.chat?.adultModelRoutingMode,
+            forceDefaultChatModel: config.chat?.forceDefaultChatModel,
+          },
+        });
         const safeword = String(adultMode.safeword || "red").trim().toLowerCase();
         const messageText = String(input.content || "").trim().toLowerCase();
         const safewordTriggered = safeword && messageText === safeword;
 
         if (safewordTriggered && adultMode.aftercareEnabled && adultMode.aftercarePrompt) {
-          adultSystemPromptPrefix = String(adultMode.aftercarePrompt).trim();
-          logger.info?.("[chat] Adult private mode: safeword triggered; switching to aftercare", {
+          logger.info?.("[chat] Adult private mode: safeword triggered; aftercare prompt held until explicit adult intent", {
             messageId: message.id,
             channelId: message.channelId,
             safeword_detected: true,
-            aftercare_triggered: true,
+            aftercare_triggered: false,
+            adult_intent_detected: Boolean(routingDecision.adultIntentDetected),
           });
-        } else if (!safewordTriggered) {
+        } else if (!safewordTriggered && routingDecision.adultIntentDetected) {
           const prefixParts = [];
 
           if (adultMode.systemPrompt) {
@@ -996,53 +1019,50 @@ function createChatPipeline({
             explicit_escalation_allowed: explicitEscalationAllowed,
             discomfort_detected: discomfortDetected,
             aftercare_triggered: false,
-          });
-
-          const adultModel = adultMode.model || config.llm?.romance?.model || null;
-          const normalModel = selectedMode.chatModel || config.llm?.chat?.model || config.llm?.chatModel || config.openai?.chatModel || null;
-          const routingDecision = shouldUseAdultModel({
-            adultPermission: adultScope.active,
-            messageText: input.content,
-            recentTurns: recentHistory,
-            channelMode: {
-              adultModelRoutingMode: config.chat?.adultModelRoutingMode,
-              forceDefaultChatModel: config.chat?.forceDefaultChatModel,
-            },
-          });
-
-          if (adultModel && routingDecision.useAdultModel) {
-            effectiveMode = { ...selectedMode, chatModel: adultModel };
-          }
-
-          const selectedModel = effectiveMode.chatModel || normalModel || "unknown";
-          adultRoutingDecisionLogged = true;
-          logger.info?.("[chat] model routing decision", {
-            adult_permission: Boolean(adultScope.active),
             adult_intent_detected: Boolean(routingDecision.adultIntentDetected),
-            adult_model_routing_mode: routingDecision.routingMode,
-            selected_model: selectedModel,
-            normal_model: normalModel || "unknown",
-            adult_model: adultModel || null,
-            adult_override_used: Boolean(adultModel && routingDecision.useAdultModel),
-            selection_reason: routingDecision.reason,
           });
-
-          logger.info?.("[chat] Adult private mode active", {
-            messageId: message.id,
-            channelId: message.channelId,
-            modelOverride: adultModel && routingDecision.useAdultModel ? adultModel : null,
-            modelSource: adultModel && routingDecision.useAdultModel ? (adultMode.model ? "adult_override" : "romance_model") : "default",
-            hasSystemPromptPrefix: Boolean(adultMode.systemPrompt),
-            adult_model_override_used: Boolean(adultModel && routingDecision.useAdultModel),
+        } else {
+          logger.info?.("[adult-mode] escalation diagnostics", {
+            adult_prompt_injected: false,
+            adult_escalation_layer_injected: false,
+            aftercare_triggered: false,
             adult_intent_detected: Boolean(routingDecision.adultIntentDetected),
-            adult_model_routing_mode: routingDecision.routingMode,
             selection_reason: routingDecision.reason,
           });
         }
+
+        if (adultModel && routingDecision.useAdultModel) {
+          effectiveMode = { ...selectedMode, chatModel: adultModel };
+        }
+
+        const selectedModel = effectiveMode.chatModel || normalModel || "unknown";
+        adultRoutingDecisionLogged = true;
+        logger.info?.("[chat] model routing decision", {
+          adult_permission: Boolean(adultScope.active),
+          adult_intent_detected: Boolean(routingDecision.adultIntentDetected),
+          adult_model_routing_mode: routingDecision.routingMode,
+          selected_model: selectedModel,
+          normal_model: normalModel || "unknown",
+          adult_model: adultModel || null,
+          adult_override_used: Boolean(adultModel && routingDecision.useAdultModel),
+          selection_reason: routingDecision.reason,
+        });
+
+        logger.info?.("[chat] Adult private mode active", {
+          messageId: message.id,
+          channelId: message.channelId,
+          modelOverride: adultModel && routingDecision.useAdultModel ? adultModel : null,
+          modelSource: adultModel && routingDecision.useAdultModel ? (adultMode.model ? "adult_private_mode" : "adult_model_override") : "default",
+          hasSystemPromptPrefix: Boolean(adultSystemPromptPrefix),
+          adult_model_override_used: Boolean(adultModel && routingDecision.useAdultModel),
+          adult_intent_detected: Boolean(routingDecision.adultIntentDetected),
+          adult_model_routing_mode: routingDecision.routingMode,
+          selection_reason: routingDecision.reason,
+        });
       }
 
       if (!adultRoutingDecisionLogged) {
-        const adultModel = adultMode?.model || config.llm?.romance?.model || null;
+        const adultModel = resolveAdultModelOverride({ adultMode, config });
         const normalModel = selectedMode.chatModel || config.llm?.chat?.model || config.llm?.chatModel || config.openai?.chatModel || null;
         const routingDecision = shouldUseAdultModel({
           adultPermission: adultScope.active,
