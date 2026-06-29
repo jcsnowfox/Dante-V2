@@ -101,6 +101,61 @@ function getAdultPrivateModeScope({ adultMode, channelId, userId = "", config = 
   return { active: true, configuredChannelId, reason: "channel_user_match", adultModeEnabled, adultChannelMatch, adultUserMatch };
 }
 
+
+function normalizeAdultModelRoutingMode(value = "intent") {
+  const normalized = String(value || "intent").trim().toLowerCase();
+  return ["off", "intent", "channel"].includes(normalized) ? normalized : "intent";
+}
+
+function getTextFromTurn(turn = {}) {
+  if (typeof turn === "string") return turn;
+  return String(turn.content || turn.text || turn.message || turn.messageText || "");
+}
+
+function detectExplicitAdultIntent(text = "") {
+  const value = String(text || "").toLowerCase();
+  if (!value.trim()) return false;
+
+  const explicitPatterns = [
+    /\b(explicit|erotic|sexual|nsfw|adult)\s+(roleplay|rp|scene|request|content|chat|message|reply)\b/i,
+    /\b(roleplay|rp)\s+(an?\s+)?(explicit|erotic|sexual|nsfw|adult)\b/i,
+    /\b(graphic|explicit)\s+(sex|sexual|erotic|intimacy)\b/i,
+    /\b(sex|sexual|erotic|dirty talk|turn me on|undress|naked|orgasm|climax)\b/i,
+    /\b(make love|sleep with me|take me to bed)\b/i,
+  ];
+
+  return explicitPatterns.some((pattern) => pattern.test(value));
+}
+
+function recentAdultIntentStillActive({ messageText = "", recentTurns = [] } = {}) {
+  const currentText = String(messageText || "");
+  if (detectExplicitAdultIntent(currentText)) return true;
+
+  const normalResetPatterns = [
+    /\b(hey|hi|hello)\b/i,
+    /\b(how are you|are you okay|i love you|say something normal|something normal|what are you doing)\b/i,
+    /\b(debug|health check|normal chat|normal conversation)\b/i,
+  ];
+  if (normalResetPatterns.some((pattern) => pattern.test(currentText))) return false;
+
+  const recentText = recentTurns.slice(-2).map(getTextFromTurn).join("\n");
+  return detectExplicitAdultIntent(recentText) && detectAdultFlirt(currentText) && !detectDiscomfort(currentText);
+}
+
+function shouldUseAdultModel({ adultPermission = false, messageText = "", recentTurns = [], channelMode = {}, routingMode, forceDefaultChatModel } = {}) {
+  const configuredRoutingMode = normalizeAdultModelRoutingMode(routingMode ?? channelMode.adultModelRoutingMode ?? process.env.ADULT_MODEL_ROUTING_MODE ?? "intent");
+  const forcedDefault = boolConfig(forceDefaultChatModel ?? channelMode.forceDefaultChatModel ?? process.env.FORCE_DEFAULT_CHAT_MODEL, false);
+  const adultIntentDetected = recentAdultIntentStillActive({ messageText, recentTurns });
+
+  if (forcedDefault) return { useAdultModel: false, reason: "force_default_chat_model", confidence: 1, adultIntentDetected, routingMode: configuredRoutingMode };
+  if (!adultPermission) return { useAdultModel: false, reason: "adult_permission_false", confidence: 1, adultIntentDetected: false, routingMode: configuredRoutingMode };
+  if (configuredRoutingMode === "off") return { useAdultModel: false, reason: "routing_mode_off", confidence: 1, adultIntentDetected, routingMode: configuredRoutingMode };
+  if (configuredRoutingMode === "channel") return { useAdultModel: true, reason: "legacy_channel_routing", confidence: 1, adultIntentDetected, routingMode: configuredRoutingMode };
+  if (adultIntentDetected) return { useAdultModel: true, reason: "explicit_adult_intent", confidence: 0.9, adultIntentDetected, routingMode: configuredRoutingMode };
+
+  return { useAdultModel: false, reason: "no_explicit_adult_intent", confidence: 0.85, adultIntentDetected, routingMode: configuredRoutingMode };
+}
+
 function detectAdultFlirt(text = "") {
   return /\b(flirt|kiss|touch|desire|want you|need you|come closer|private|dirty|intimat|sexual|bed|undress|turn me on)\b/i.test(String(text || ""));
 }
@@ -872,6 +927,7 @@ function createChatPipeline({
 
       let effectiveMode = selectedMode;
       let adultSystemPromptPrefix = null;
+      let adultRoutingDecisionLogged = false;
 
       if (adultScope.active) {
         const safeword = String(adultMode.safeword || "red").trim().toLowerCase();
@@ -943,20 +999,70 @@ function createChatPipeline({
           });
 
           const adultModel = adultMode.model || config.llm?.romance?.model || null;
+          const normalModel = selectedMode.chatModel || config.llm?.chat?.model || config.llm?.chatModel || config.openai?.chatModel || null;
+          const routingDecision = shouldUseAdultModel({
+            adultPermission: adultScope.active,
+            messageText: input.content,
+            recentTurns: recentHistory,
+            channelMode: {
+              adultModelRoutingMode: config.chat?.adultModelRoutingMode,
+              forceDefaultChatModel: config.chat?.forceDefaultChatModel,
+            },
+          });
 
-          if (adultModel) {
+          if (adultModel && routingDecision.useAdultModel) {
             effectiveMode = { ...selectedMode, chatModel: adultModel };
           }
+
+          const selectedModel = effectiveMode.chatModel || normalModel || "unknown";
+          adultRoutingDecisionLogged = true;
+          logger.info?.("[chat] model routing decision", {
+            adult_permission: Boolean(adultScope.active),
+            adult_intent_detected: Boolean(routingDecision.adultIntentDetected),
+            adult_model_routing_mode: routingDecision.routingMode,
+            selected_model: selectedModel,
+            normal_model: normalModel || "unknown",
+            adult_model: adultModel || null,
+            adult_override_used: Boolean(adultModel && routingDecision.useAdultModel),
+            selection_reason: routingDecision.reason,
+          });
 
           logger.info?.("[chat] Adult private mode active", {
             messageId: message.id,
             channelId: message.channelId,
-            modelOverride: adultModel || null,
-            modelSource: adultMode.model ? "adult_override" : adultModel ? "romance_model" : "default",
+            modelOverride: adultModel && routingDecision.useAdultModel ? adultModel : null,
+            modelSource: adultModel && routingDecision.useAdultModel ? (adultMode.model ? "adult_override" : "romance_model") : "default",
             hasSystemPromptPrefix: Boolean(adultMode.systemPrompt),
-            adult_model_override_used: Boolean(adultModel),
+            adult_model_override_used: Boolean(adultModel && routingDecision.useAdultModel),
+            adult_intent_detected: Boolean(routingDecision.adultIntentDetected),
+            adult_model_routing_mode: routingDecision.routingMode,
+            selection_reason: routingDecision.reason,
           });
         }
+      }
+
+      if (!adultRoutingDecisionLogged) {
+        const adultModel = adultMode?.model || config.llm?.romance?.model || null;
+        const normalModel = selectedMode.chatModel || config.llm?.chat?.model || config.llm?.chatModel || config.openai?.chatModel || null;
+        const routingDecision = shouldUseAdultModel({
+          adultPermission: adultScope.active,
+          messageText: input.content,
+          recentTurns: recentHistory,
+          channelMode: {
+            adultModelRoutingMode: config.chat?.adultModelRoutingMode,
+            forceDefaultChatModel: config.chat?.forceDefaultChatModel,
+          },
+        });
+        logger.info?.("[chat] model routing decision", {
+          adult_permission: Boolean(adultScope.active),
+          adult_intent_detected: Boolean(routingDecision.adultIntentDetected),
+          adult_model_routing_mode: routingDecision.routingMode,
+          selected_model: effectiveMode.chatModel || normalModel || "unknown",
+          normal_model: normalModel || "unknown",
+          adult_model: adultModel || null,
+          adult_override_used: false,
+          selection_reason: routingDecision.reason,
+        });
       }
 
       // Human Simulation Foundation — injects channel awareness, micro-preferences,
@@ -1425,6 +1531,8 @@ module.exports = {
   createChatPipeline,
   getAdultPrivateModeScope,
   buildAdultModeEscalationLayer,
+  shouldUseAdultModel,
+  detectExplicitAdultIntent,
   detectAdultFlirt,
   detectDiscomfort,
   detectRefusalText,
