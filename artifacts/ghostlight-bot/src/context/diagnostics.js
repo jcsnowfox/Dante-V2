@@ -1,4 +1,5 @@
 const { buildWorldContext, formatWorldContextForPrompt } = require("./worldContext");
+const { readCallsEnabled } = require("../http/callRoutes");
 
 function buildContextDiagnostics({
   config,
@@ -39,6 +40,10 @@ function buildContextDiagnostics({
         maxVideoSeconds: config.features?.maxVideoSeconds || 600,
         lastProcessedType: lastInvocations?.attachment?.type || null,
         lastProcessedAt: lastInvocations?.attachment?.at || null,
+      },
+      calls: {
+        calls_enabled: readCallsEnabled(config),
+        call_route_mounted: true,
       },
       modelContextBuilder: {
         active: true,
@@ -110,6 +115,10 @@ function formatDiagnosticsAsHtml(diagnostics = {}) {
   lines.push(`<p>Max Attachment: ${features.attachmentProcessing.maxAttachmentMb} MB</p>`);
   lines.push(`<p>Max Video: ${features.attachmentProcessing.maxVideoSeconds} seconds</p>`);
   lines.push(`<p>Last Processed Type: ${features.attachmentProcessing.lastProcessedType || "None"}</p>`);
+
+  lines.push("<h3>Call Routes</h3>");
+  lines.push(`<p>CALLS_ENABLED: <span class="${features.calls.calls_enabled ? "enabled" : "disabled"}">${features.calls.calls_enabled ? "ENABLED" : "DISABLED"}</span></p>`);
+  lines.push(`<p>call_route_mounted: <code>${features.calls.call_route_mounted ? "true" : "false"}</code></p>`);
 
   lines.push("<h3>Model Context Builder</h3>");
   lines.push(`<p>Status: <span class="enabled">ACTIVE</span></p>`);

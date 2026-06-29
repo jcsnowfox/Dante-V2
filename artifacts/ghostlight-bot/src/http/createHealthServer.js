@@ -35,6 +35,7 @@ const { handleAdminMaintenanceActions } = require("./actions/adminMaintenanceAct
 const { handleAdminExportActions } = require("./actions/adminExportActions");
 const { handleSituationalAwarenessActions } = require("./actions/situationalAwarenessActions");
 const { handleTravelActions } = require("./actions/travelActions");
+const { handleCallRoute, readCallsEnabled, renderCallPanel } = require("./callRoutes");
 const { NORDIC_DASHBOARD_ASSET_BASE, getNordicDashboardAssetPath } = require("./nordicDashboardAssets");
 const {
   buildMemoryExportPayload,
@@ -264,6 +265,13 @@ function createHealthServer({
         return;
       }
 
+      {
+        const handled = await handleCallRoute({ req, res, url, context });
+        if (handled !== false) {
+          return handled;
+        }
+      }
+
       if (req.method === "GET" && url.pathname === "/diagnostics") {
         const { buildContextDiagnostics, formatDiagnosticsAsJson, formatDiagnosticsAsHtml } = require("../context/diagnostics");
         const format = url.searchParams.get("format") || "html";
@@ -377,6 +385,28 @@ function createHealthServer({
             innerRes.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
             innerRes.end(JSON.stringify({ error: "life status unavailable" }));
           }
+        })(req, res, context);
+      }
+
+
+      if (req.method === "GET" && url.pathname.match(/^\/admin\/call\/[^/]+\/?$/)) {
+        return withAdmin(async (_req, innerRes, innerContext) => {
+          const companionId = decodeURIComponent(url.pathname.replace(/^\/admin\/call\//, "").replace(/\/$/, ""));
+          const companionName = innerContext.config?.chat?.promptBlocks?.personaName || innerContext.config?.chat?.personaName || "Dante";
+          const theme = resolveRequestTheme({ url, req: _req });
+          const pageBody = renderCallPanel({
+            companionId,
+            companionName,
+            enabled: readCallsEnabled(innerContext.config),
+            dashboard: true,
+          });
+          innerRes.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+          innerRes.end(renderAdminShell({
+            title: `Call ${companionName}`,
+            currentSection: "call",
+            theme,
+            pageBody,
+          }));
         })(req, res, context);
       }
 
@@ -501,7 +531,8 @@ function createHealthServer({
         url.pathname.startsWith("/admin/norwegian/") ||
         url.pathname === "/admin/human-simulation" ||
         url.pathname.startsWith("/admin/human-simulation/") ||
-        url.pathname === "/admin/alive"
+        url.pathname === "/admin/alive" ||
+        url.pathname.startsWith("/admin/call/")
       )) {
         return withAdmin(async (_req, innerRes, innerContext) => {
           setThemeCookie(innerRes, resolvedTheme);

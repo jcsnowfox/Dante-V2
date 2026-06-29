@@ -23,6 +23,7 @@ const NAV_GROUPS = [
   ] },
   { label: "Systems", links: [
     { section: "alive", label: "Alive Layer", path: "/admin/alive", icon: "heartbeat" },
+    { section: "call", label: "Call Dante", path: "/admin/call/dante", icon: "audio" },
     { section: "games", label: "Games", path: "/admin/games", icon: "tools" },
     { section: "heartbeat", label: "Heartbeat", path: "/admin/heartbeat/timing", icon: "heartbeat" },
     { section: "schedules", label: "Schedules", path: "/admin/schedules", icon: "automation" },
