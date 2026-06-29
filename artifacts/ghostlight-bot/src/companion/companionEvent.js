@@ -14,7 +14,7 @@
  * defaults.
  */
 
-const INBOUND_CHANNEL_TYPES = new Set(["discord", "second_life", "telegram", "web"]);
+const INBOUND_CHANNEL_TYPES = new Set(["discord", "second_life", "telegram", "web", "dashboard_call", "web_call"]);
 const DEFAULT_CHANNEL_TYPE = "discord";
 const DEFAULT_PRIVACY_LEVEL = "public";
 const DEFAULT_EVENT_TYPE = "message";

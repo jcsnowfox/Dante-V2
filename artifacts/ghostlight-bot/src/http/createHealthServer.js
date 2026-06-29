@@ -36,6 +36,7 @@ const { handleAdminExportActions } = require("./actions/adminExportActions");
 const { handleSituationalAwarenessActions } = require("./actions/situationalAwarenessActions");
 const { handleTravelActions } = require("./actions/travelActions");
 const { NORDIC_DASHBOARD_ASSET_BASE, getNordicDashboardAssetPath } = require("./nordicDashboardAssets");
+const { handleCallRoutes } = require("./callRoutes");
 const {
   buildMemoryExportPayload,
   buildMemoryImportRecords,
@@ -262,6 +263,13 @@ function createHealthServer({
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(buildHealthPayload(context)));
         return;
+      }
+
+      {
+        const handled = await handleCallRoutes({ req, res, url, context, withAdmin });
+        if (handled !== false) {
+          return handled;
+        }
       }
 
       if (req.method === "GET" && url.pathname === "/diagnostics") {
