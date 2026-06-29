@@ -69,8 +69,16 @@ function normalizeEnumValue(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function assertAllowedValue({ label, value, allowedValues }) {
+function normalizeConversationSource(value) {
   const normalizedValue = normalizeEnumValue(value);
+
+  return normalizedValue === "ghostlight" ? "discord" : normalizedValue;
+}
+
+function assertAllowedValue({ label, value, allowedValues }) {
+  const normalizedValue = label === "source"
+    ? normalizeConversationSource(value)
+    : normalizeEnumValue(value);
 
   if (!allowedValues.includes(normalizedValue)) {
     throw new Error(`Unsupported ${label} "${value}". Expected one of: ${allowedValues.join(", ")}.`);
@@ -1158,6 +1166,7 @@ module.exports = {
   SUPPORTED_EVENT_TYPES,
   SUPPORTED_ROLES,
   SUPPORTED_SOURCES,
+  normalizeConversationSource,
   buildEventContentText,
   buildConversationSummary,
   buildConversationExportHeader,

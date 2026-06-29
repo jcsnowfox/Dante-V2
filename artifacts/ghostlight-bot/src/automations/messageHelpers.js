@@ -347,7 +347,7 @@ async function recordAutomationMessage({ conversations, message, config, automat
   await conversations.recordEvent({
     message,
     role: "assistant",
-    source: "ghostlight",
+    source: "discord",
     eventType: "message",
     contentText: chunks.join("\n\n"),
     authorName:
