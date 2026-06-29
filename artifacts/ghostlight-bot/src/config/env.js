@@ -160,6 +160,10 @@ function loadConfig() {
       includeTimeContext: readBoolean(process.env.CHAT_INCLUDE_TIME_CONTEXT, true),
       timezone: normalizeIanaTimezone(process.env.CHAT_TIMEZONE || "UTC"),
       placeholderModel: llmChatModel,
+      adultModelRoutingMode: ["off", "intent", "channel"].includes(String(process.env.ADULT_MODEL_ROUTING_MODE || "intent").trim().toLowerCase())
+        ? String(process.env.ADULT_MODEL_ROUTING_MODE || "intent").trim().toLowerCase()
+        : "intent",
+      forceDefaultChatModel: readBoolean(process.env.FORCE_DEFAULT_CHAT_MODEL, false),
       promptBlocks: {
         personaName: process.env.CHAT_PROMPT_PERSONA_NAME || "Dorian Vale",
         userName: process.env.CHAT_PROMPT_USER_NAME || process.env.MEMORY_USER_SCOPE || "the user",

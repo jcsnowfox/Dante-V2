@@ -93,7 +93,7 @@ function makeMessage({ channelId, content = "hi", id = "message-1", userId = "us
   };
 }
 
-async function runPipeline({ adultMode, channelId, content = "hi", userId = "user-1", modelText = "normal reply" }) {
+async function runPipeline({ adultMode, channelId, content = "hi", userId = "user-1", modelText = "normal reply", chatConfig = {}, recentHistory = [] }) {
   const calls = [];
   const createChatPipeline = reloadPipelineWithCallModelSpy(async (args) => {
     calls.push(args);
@@ -102,7 +102,7 @@ async function runPipeline({ adultMode, channelId, content = "hi", userId = "use
   const logger = makeLogger();
   const pipeline = createChatPipeline({
     config: {
-      chat: { defaultMode: "default", adultPrivateMode: adultMode, userId: "user-1" },
+      chat: { defaultMode: "default", adultPrivateMode: adultMode, userId: "user-1", ...chatConfig },
       memory: {},
       llm: { romance: { model: "romance-model" } },
       openai: {},
@@ -111,7 +111,7 @@ async function runPipeline({ adultMode, channelId, content = "hi", userId = "use
     tools: {},
     conversations: {
       recordEvent: async () => {},
-      listRecentHistoryByConversationId: async () => [],
+      listRecentHistoryByConversationId: async () => recentHistory,
     },
     memory: { retrieve: async () => [] },
   });
@@ -133,14 +133,14 @@ test("blank Private Channel ID does not inject adult prompt or adult model, and 
   assert.ok(logger.entries.some((entry) => String(entry[1]).includes("active=false reason=missing_private_channel")));
 });
 
-test("configured private channel injects adult prompt and adult model only in that channel", async () => {
+test("configured private channel injects adult prompt but normal model for ordinary chat", async () => {
   const { call } = await runPipeline({
     adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model", systemPrompt: "ADULT CONSENT CONFIRMATION" },
     channelId: "123456789012345678",
   });
 
   assert.equal(call.systemPromptPrefix, "ADULT CONSENT CONFIRMATION");
-  assert.equal(call.mode.chatModel, "adult-model");
+  assert.notEqual(call.mode.chatModel, "adult-model");
 });
 
 test("different channel does not inject adult prompt or adult model", async () => {
@@ -195,7 +195,7 @@ test("adult private channel injects adultModeEscalation and logs detection field
     content: "Come closer, I want you in our private room.",
   });
 
-  assert.equal(call.mode.chatModel, "adult-model");
+  assert.notEqual(call.mode.chatModel, "adult-model");
   assert.equal(call.systemPromptPrefix, "ADULT CONSENT CONFIRMATION");
   assert.ok(call.contextSections.some((section) => section.label === "ADULT MODE ESCALATION"));
   assert.ok(logger.entries.some((entry) => entry.some((item) => item && item.adult_escalation_layer_injected === true)));
@@ -235,4 +235,69 @@ test("consensual adult private-channel output is not sanitized into refusal", as
 
   assert.equal(reply.content, "Come here, darling. I want you too.");
   assert.ok(logger.entries.some((entry) => entry.some((item) => item && item.response_sanitized === false)));
+});
+
+test("adult-enabled channel + hey babe uses normal model", async () => {
+  const { call } = await runPipeline({ adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model" }, channelId: "123456789012345678", content: "hey babe" });
+  assert.notEqual(call.mode.chatModel, "adult-model");
+});
+
+test("adult-enabled channel + how are you feeling uses normal model", async () => {
+  const { call } = await runPipeline({ adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model" }, channelId: "123456789012345678", content: "how are you feeling?" });
+  assert.notEqual(call.mode.chatModel, "adult-model");
+});
+
+test("adult-enabled channel + I love you uses normal model", async () => {
+  const { call } = await runPipeline({ adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model" }, channelId: "123456789012345678", content: "I love you" });
+  assert.notEqual(call.mode.chatModel, "adult-model");
+});
+
+test("adult-enabled channel + say something normal please uses normal model", async () => {
+  const { call } = await runPipeline({ adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model" }, channelId: "123456789012345678", content: "say something normal please" });
+  assert.notEqual(call.mode.chatModel, "adult-model");
+});
+
+test("adult-enabled channel + explicit sexual request uses adult model", async () => {
+  const { call } = await runPipeline({ adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model" }, channelId: "123456789012345678", content: "I want explicit sexual content with you." });
+  assert.equal(call.mode.chatModel, "adult-model");
+});
+
+test("adult-enabled channel + explicit roleplay uses adult model", async () => {
+  const { call } = await runPipeline({ adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model" }, channelId: "123456789012345678", content: "Let's roleplay an explicit erotic scene." });
+  assert.equal(call.mode.chatModel, "adult-model");
+});
+
+test("adult-enabled channel + normal message after explicit exchange switches back to normal model", async () => {
+  const { call } = await runPipeline({
+    adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model" },
+    channelId: "123456789012345678",
+    content: "are you okay?",
+    recentHistory: [{ role: "user", content: "I want explicit sexual content with you." }],
+  });
+  assert.notEqual(call.mode.chatModel, "adult-model");
+});
+
+test("FORCE_DEFAULT_CHAT_MODEL=true always uses normal model", async () => {
+  const { call } = await runPipeline({
+    adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model" },
+    channelId: "123456789012345678",
+    content: "I want explicit sexual content with you.",
+    chatConfig: { forceDefaultChatModel: true },
+  });
+  assert.notEqual(call.mode.chatModel, "adult-model");
+});
+
+test("ADULT_MODEL_ROUTING_MODE=channel preserves old behavior only if explicitly set", async () => {
+  const { call } = await runPipeline({
+    adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model" },
+    channelId: "123456789012345678",
+    content: "hey babe",
+    chatConfig: { adultModelRoutingMode: "channel" },
+  });
+  assert.equal(call.mode.chatModel, "adult-model");
+});
+
+test("Adult permission false never uses adult model", async () => {
+  const { call } = await runPipeline({ adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model" }, channelId: "987654321098765432", content: "I want explicit sexual content with you." });
+  assert.notEqual(call.mode.chatModel, "adult-model");
 });
