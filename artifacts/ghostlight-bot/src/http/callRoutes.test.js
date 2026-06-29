@@ -5,6 +5,12 @@ const http = require("node:http");
 const test = require("node:test");
 const { createHealthServer } = require("./createHealthServer");
 const { buildContextDiagnostics } = require("../context/diagnostics");
+const { renderShell } = require("./renderAdminPages/shared");
+
+function request(server, pathname, headers = {}) {
+  const { port } = server.address();
+  return new Promise((resolve, reject) => {
+    const req = http.get({ hostname: "127.0.0.1", port, path: pathname, headers }, (res) => {
 
 function request(server, pathname) {
   const { port } = server.address();
@@ -26,6 +32,7 @@ function createTestServer(config) {
     appContext: {
       ready: true,
       config: {
+        admin: { username: "owner", password: "secret" },
         admin: {},
         discord: {},
         chat: { timezone: "UTC", promptBlocks: { personaName: "Dante" } },
@@ -63,6 +70,39 @@ test("GET /call/dante returns a disabled HTML page instead of Not found when cal
   assert.match(response.body, /Calls disabled/);
   assert.match(response.body, /CALLS_ENABLED=true/);
   assert.doesNotMatch(response.body, /Not found\./);
+});
+
+test("GET /admin/call/dante returns an authenticated dashboard page connected to the call backend", async (t) => {
+  const server = createTestServer({ calls: { enabled: true } });
+  t.after(() => server.close());
+
+  await new Promise((resolve) => server.on("listening", resolve));
+  const auth = `Basic ${Buffer.from("owner:secret").toString("base64")}`;
+  const response = await request(server, "/admin/call/dante", { authorization: auth });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["content-type"], /text\/html/);
+  assert.match(response.body, /Ghostlight AI Admin/);
+  assert.match(response.body, /<h1>Call Dante<\/h1>/);
+  assert.match(response.body, /href="\/call\/dante"/);
+  assert.match(response.body, /data-call-page="enabled"/);
+});
+
+test("dashboard sidebar exposes Call Dante inside the authenticated admin surface", () => {
+  const html = renderShell({
+    currentSection: "call",
+    pageBody: "<main>Call body</main>",
+    theme: "dark",
+    helpers: {
+      escapeHtml(value) { return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;"); },
+      buildAdminLocation({ path, theme }) { return `${path}?theme=${theme}`; },
+      renderIconImage() { return ""; },
+      renderLayout({ body }) { return body; },
+    },
+  });
+
+  assert.match(html, /Call Dante/);
+  assert.match(html, /href="\/admin\/call\/dante\?theme=dark" aria-current="page"/);
 });
 
 test("diagnostics includes call route mounted and calls enabled flags", () => {

@@ -28,6 +28,7 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function buildCallPageModel({ companionId, companionName = "Dante", enabled }) {
 function renderCallPage({ companionId, companionName = "Dante", enabled }) {
   const safeCompanionId = escapeHtml(companionId);
   const safeCompanionName = escapeHtml(companionName);
@@ -39,11 +40,31 @@ function renderCallPage({ companionId, companionName = "Dante", enabled }) {
     ? `<button type="button" class="primary" disabled>Call UI loading</button>`
     : `<a class="secondary" href="/admin">Back to dashboard</a>`;
 
+  return { safeCompanionId, title, status, action, enabled };
+}
+
+function renderCallPanel({ companionId, companionName = "Dante", enabled, dashboard = false }) {
+  const model = buildCallPageModel({ companionId, companionName, enabled });
+  const dashboardAction = dashboard ? `<a class="secondary" href="/call/${model.safeCompanionId}">Open full-screen call route</a>` : "";
+
+  return `<main class="call-dante-panel" data-call-page="${model.enabled ? "enabled" : "disabled"}" data-companion-id="${model.safeCompanionId}">
+    <p class="eyebrow">Dante voice gateway</p>
+    <h1>${model.title}</h1>
+    <p>${model.status}</p>
+    <p>Route diagnostic: <code>/call/${model.safeCompanionId}</code> is mounted and returning HTML.</p>
+    <div class="actions">${model.action}${dashboardAction}<a class="secondary" href="/admin">Dashboard</a></div>
+  </main>`;
+}
+
+function renderCallPage({ companionId, companionName = "Dante", enabled }) {
+  const model = buildCallPageModel({ companionId, companionName, enabled });
+
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${model.title}</title>
   <title>${title}</title>
   <style>
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Inter, system-ui, sans-serif; background: radial-gradient(circle at top, #27324f, #070912 70%); color: #f7f1e8; }
@@ -59,6 +80,7 @@ function renderCallPage({ companionId, companionName = "Dante", enabled }) {
   </style>
 </head>
 <body>
+  ${renderCallPanel({ companionId, companionName, enabled })}
   <main data-call-page="${enabled ? "enabled" : "disabled"}" data-companion-id="${safeCompanionId}">
     <p class="eyebrow">Dante voice gateway</p>
     <h1>${title}</h1>
@@ -98,6 +120,8 @@ module.exports = {
   handleCallRoute,
   readCallsEnabled,
   renderCallPage,
+  renderCallPanel,
+};
 };
 const { randomUUID } = require('node:crypto');
 const { generateVoiceAudio } = require('../audio/voiceAudio');
