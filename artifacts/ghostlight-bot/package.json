@@ -158,7 +158,8 @@
     "smoke:provider": "node scripts/provider-smoke-test.js",
     "context:bisect": "node scripts/context-bisect.js",
     "audit:stored-sludge": "node scripts/audit-stored-sludge.js",
-    "audit:stored-sludge:quarantine": "node scripts/audit-stored-sludge.js --quarantine"
+    "audit:stored-sludge:quarantine": "node scripts/audit-stored-sludge.js --quarantine",
+    "verify:schedule-source-normalization": "node scripts/verify-schedule-source-normalization.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

@@ -5,9 +5,9 @@
   "private": true,
   "license": "UNLICENSED",
   "devDependencies": {
-  "prettier": "^3.8.3",
-  "typescript": "~5.9.3"
-},
+    "prettier": "^3.8.3",
+    "typescript": "~5.9.3"
+  },
   "pnpm": {
     "overrides": {
       "esbuild>@esbuild/darwin-arm64": "-",
@@ -148,6 +148,7 @@
     "test": "pnpm --dir artifacts/ghostlight-bot test",
     "engineering:report": "node artifacts/ghostlight-bot/scripts/engineering-report.mjs",
     "knip": "knip --reporter json",
-    "verify:ai-diagnostics": "node artifacts/ghostlight-bot/scripts/verify-ai-diagnostics.mjs"
+    "verify:ai-diagnostics": "node artifacts/ghostlight-bot/scripts/verify-ai-diagnostics.mjs",
+    "verify:schedule-source-normalization": "pnpm --dir artifacts/ghostlight-bot run verify:schedule-source-normalization"
   }
 }
