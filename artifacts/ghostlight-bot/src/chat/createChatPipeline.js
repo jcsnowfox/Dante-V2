@@ -109,6 +109,15 @@ function detectDiscomfort(text = "") {
   return /\b(stop|slow down|no|not tonight|uncomfortable|don't|do not|pause|too much|back off)\b/i.test(String(text || ""));
 }
 
+function boolConfig(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
+function isReplySafeModeEnabled(config = {}) {
+  return boolConfig(config.chat?.replySafeMode ?? process.env.REPLY_SAFE_MODE, false);
+}
+
 function detectRefusalText(text = "") {
   return /\b(i (?:can(?:not|'t)|won(?:not|'t)) (?:continue|help|engage)|fade to black|keep it appropriate|change the subject|hitting a wall|i'?m sorry,? but)\b/i.test(String(text || ""));
 }
@@ -210,6 +219,14 @@ function createChatPipeline({
       // In dev mode the persona/roleplay system prompt is replaced with a plain
       // technical prompt, and all companion engine preludes are skipped.
       const inDevMode = isDevMode(message);
+      const replySafeMode = !inDevMode && isReplySafeModeEnabled(config);
+      if (replySafeMode) {
+        logger.warn?.("[reply-safe-mode] enabled; normal reply context reduced to core persona and current user message", {
+          messageId: message.id,
+          channelId: message.channelId,
+        });
+      }
+
       if (inDevMode) {
         logger.info?.("[dev] Developer mode active — skipping persona prompt and engine preludes", {
           messageId: message.id,
@@ -990,7 +1007,10 @@ function createChatPipeline({
 
       // Phase 4: Apply prompt budget before LLM call
       const budgetedSections = applyPromptBudget(contextSections, { logger, messageId: message.id });
-      const sanitizedPromptInputs = sanitizePromptContext({
+      const safeModePromptInputs = replySafeMode
+        ? { contextSections: [], memories: [], recentHistory: [], dropped: { contextSections: ["reply_safe_mode"], memories: ["reply_safe_mode"], recentHistory: ["reply_safe_mode"] } }
+        : null;
+      const sanitizedPromptInputs = safeModePromptInputs || sanitizePromptContext({
         contextSections: budgetedSections,
         memories,
         recentHistory,
@@ -1038,6 +1058,8 @@ function createChatPipeline({
         adultModeActive: Boolean(adultScope?.active),
         overrideSystemPrompt: inDevMode ? DEV_SYSTEM_PROMPT : null,
         systemPromptPrefix: adultSystemPromptPrefix,
+        replySafeMode,
+        toolsEnabled: !replySafeMode,
         toolContext: {
           surface: "chat",
           userScope: config.memory?.userScope,
@@ -1168,7 +1190,6 @@ function createChatPipeline({
             // prompt, and do not send a trimmed prefix.
             try {
               const cleanRegenerationContext = [
-                ...buildCleanRegenerationContext({ contextSections: llmContextSections }),
                 {
                   label: "OUTPUT REPAIR",
                   content: "Previous draft was corrupted. Reply naturally as Dante in one short conversational message. Do not mention tools, code, prompts, context, diagnostics, or internal terms.",
@@ -1177,7 +1198,9 @@ function createChatPipeline({
               const repairOutput = await callModel({
                 config, logger, tools, mode: effectiveMode, message, input,
                 recentHistory: [], memories: [],
-                contextSections: cleanRegenerationContext,
+                contextSections: [],
+                replySafeMode: true,
+                toolsEnabled: false,
                 channelType: "discord",
                 privacyLevel: adultScope?.active ? "adult_private" : "public",
                 adultModeActive: Boolean(adultScope?.active),
@@ -1211,14 +1234,14 @@ function createChatPipeline({
                   memories: [],
                 });
               } else {
-                reply.content = "I got tangled for a second. Say that again, love.";
+                reply.content = "I got tangled for a second. I’m here now.";
                 replyTrace.fallbackUsed = true;
                 replyTrace.fallbackReason = "corruption_regeneration_failed";
                 replyTrace.finalSource = "tiny_fallback";
                 logger.warn("[output-integrity] Regeneration also corrupted; using safe fallback", { messageId: message.id });
               }
             } catch (repairErr) {
-              reply.content = "I got tangled for a second. Say that again, love.";
+              reply.content = "I got tangled for a second. I’m here now.";
               replyTrace.fallbackUsed = true;
               replyTrace.fallbackReason = "corruption_repair_error";
               replyTrace.finalSource = "tiny_fallback";
@@ -1256,7 +1279,8 @@ function createChatPipeline({
           });
           const retryReply = buildReply({ mode: selectedMode, input, recentHistory: llmRecentHistory, memories: llmMemories, modelOutput: retryOutput });
           applyConversationalCompression({ reply: retryReply, input, logger, messageId: message.id, replyTrace });
-          if (!checkDuplicateReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: retryReply.content }).duplicate) {
+          const retryCorruption = detectOutputCorruption(retryReply.content || "", { intent: responseIntent?.intent, userText: input.content, expectsText: true });
+          if (retryReply.content?.trim() && retryCorruption.severity !== "block" && !checkDuplicateReply({ channelId: message.channelId, userScope: input.authorId || config.memory?.userScope, reply: retryReply.content }).duplicate) {
             reply.content = retryReply.content;
             replyTrace.finalSource = "retry";
           } else {
@@ -1404,4 +1428,5 @@ module.exports = {
   detectAdultFlirt,
   detectDiscomfort,
   detectRefusalText,
+  isReplySafeModeEnabled,
 };

@@ -616,6 +616,8 @@ async function callModel({
   channelType = "discord",
   privacyLevel = "public",
   adultModeActive = false,
+  replySafeMode = false,
+  toolsEnabled: forcedToolsEnabled = null,
 }) {
   const selectedModel = mode?.chatModel || resolveChatModel(config);
 
@@ -637,7 +639,7 @@ async function callModel({
   const startedAt = Date.now();
   const providerConfig = resolveLlmProviderConfig(config, "chat");
   const providerLabel = providerConfig.provider;
-  const initialToolDefinitions = tools.list(toolContext);
+  const initialToolDefinitions = replySafeMode ? [] : tools.list(toolContext);
   const toolSupport = initialToolDefinitions.length
     ? getCachedOpenRouterModelToolSupport({
       config,
@@ -646,9 +648,10 @@ async function callModel({
     })
     : { checked: false, supportsTools: true, reason: "no_tools" };
   const requiresPositiveToolSupport = String(providerLabel || "").toLowerCase() === "openrouter";
-  const toolsEnabled = requiresPositiveToolSupport
+  const resolvedToolsEnabled = requiresPositiveToolSupport
     ? Boolean(toolSupport.checked && toolSupport.supportsTools)
     : !(toolSupport.checked && toolSupport.supportsTools === false);
+  const toolsEnabled = typeof forcedToolsEnabled === "boolean" ? forcedToolsEnabled && resolvedToolsEnabled : resolvedToolsEnabled;
 
   if (!toolsEnabled) {
     logger.debug?.("[chat] Muting tools for selected model", {
@@ -673,6 +676,7 @@ async function callModel({
       selectedModel,
       toolContext,
       toolsEnabled: enableTools,
+      replySafeMode,
       overrideSystemPrompt,
       systemPromptPrefix,
       channelType,

@@ -44,3 +44,13 @@ test("private inner-life content is not public autonomy content", () => {
   assert.equal(result.allowed, false);
   assert.equal(result.reason, "private_inner_life_public");
 });
+
+test("AUTONOMY_POSTING_ENABLED=false suppresses raw autonomy posts", () => {
+  const previous = process.env.AUTONOMY_POSTING_ENABLED;
+  process.env.AUTONOMY_POSTING_ENABLED = "false";
+  const result = shouldPostAutonomyEvent({ title: "Between Messages", body: "source: inbound_message", sourceEventType: "conversation_update" }, { config: {}, userText: "how are you feeling babe" });
+  assert.equal(result.allowed, false);
+  assert.equal(result.reason, "disabled");
+  if (previous === undefined) delete process.env.AUTONOMY_POSTING_ENABLED;
+  else process.env.AUTONOMY_POSTING_ENABLED = previous;
+});
