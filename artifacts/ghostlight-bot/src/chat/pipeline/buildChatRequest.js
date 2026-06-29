@@ -138,6 +138,7 @@ function buildChatRequest({
   selectedModel,
   toolContext = {},
   toolsEnabled = true,
+  replySafeMode = false,
   overrideSystemPrompt = null,
   systemPromptPrefix = null,
   channelType = "discord",
@@ -150,38 +151,43 @@ function buildChatRequest({
       ? false
       : config.chat?.includeTimeContext !== false;
   const timeZone = config.chat?.timezone || "UTC";
-  const useWebSearch = typeof toolContext.allowWebSearch === "boolean"
-    ? toolContext.allowWebSearch
-    : shouldUseWebSearch({ input });
-  const toolDefinitions = toolsEnabled ? tools.list(toolContext) : [];
+  const safeMode = Boolean(replySafeMode);
+  const useWebSearch = safeMode
+    ? false
+    : typeof toolContext.allowWebSearch === "boolean"
+      ? toolContext.allowWebSearch
+      : shouldUseWebSearch({ input });
+  const toolDefinitions = toolsEnabled && !safeMode ? tools.list(toolContext) : [];
   const availableToolNames = toolDefinitions.map((tool) => String(tool?.name || "").trim()).filter(Boolean);
   const totalToolCount = toolDefinitions.length + (useWebSearch ? 1 : 0);
   const sharedServerMode = isSharedServerMode({ config, mode });
   const baseInstructions = overrideSystemPrompt || buildSystemPrompt({
     config,
     mode,
-    automation,
-    webSearchUsed: useWebSearch,
+    automation: safeMode ? null : automation,
+    webSearchUsed: safeMode ? false : useWebSearch,
     availableToolNames,
     channelType,
     privacyLevel,
   });
-  const effectiveContextSections = [...contextSections];
-  const temporalContext = createTemporalAwarenessService({ config }).buildContext({
-    now: input?.messageTimestamp ? new Date(input.messageTimestamp) : new Date(),
-    lastInteractionAt: recentHistory?.length ? (recentHistory[recentHistory.length - 1]?.createdAt || recentHistory[recentHistory.length - 1]?.createdTimestamp) : null,
-  });
-  const temporalPromptSection = buildTemporalPromptSection(temporalContext);
-  if (temporalPromptSection) {
-    effectiveContextSections.push(temporalPromptSection);
-  }
-  const timeContext = buildTimeContextSection({ input, includeTimeContext, timeZone });
-  if (timeContext) {
-    effectiveContextSections.push(timeContext);
+  const effectiveContextSections = safeMode ? [] : [...contextSections];
+  if (!safeMode) {
+    const temporalContext = createTemporalAwarenessService({ config }).buildContext({
+      now: input?.messageTimestamp ? new Date(input.messageTimestamp) : new Date(),
+      lastInteractionAt: recentHistory?.length ? (recentHistory[recentHistory.length - 1]?.createdAt || recentHistory[recentHistory.length - 1]?.createdTimestamp) : null,
+    });
+    const temporalPromptSection = buildTemporalPromptSection(temporalContext);
+    if (temporalPromptSection) {
+      effectiveContextSections.push(temporalPromptSection);
+    }
+    const timeContext = buildTimeContextSection({ input, includeTimeContext, timeZone });
+    if (timeContext) {
+      effectiveContextSections.push(timeContext);
+    }
   }
   const internalContext = buildInternalContextText({
     contextSections: effectiveContextSections,
-    memories,
+    memories: safeMode ? [] : memories,
     totalToolCount,
   });
 
@@ -200,14 +206,14 @@ function buildChatRequest({
     instructions: [
       systemPromptPrefix ? String(systemPromptPrefix).trim() : "",
       baseInstructions,
-      `Dynamic Internal Context\n${internalContext}`,
+      safeMode ? "REPLY SAFE MODE\nUse only the core companion identity/persona, the current user message, and minimal runtime/safety rules. Ignore all history, memory, journal, dream, inner-life, emotional arc, situational awareness, tool/music/travel/web, autonomy, and context-update notes." : `Dynamic Internal Context\n${internalContext}`,
     ].filter(Boolean).join("\n\n"),
     reasoning: {
       exclude: true,
     },
     input: buildChatInput({
       input,
-      recentHistory,
+      recentHistory: safeMode ? [] : recentHistory,
       automation,
       includeTimeContext,
       includeSpeakerNames: sharedServerMode,
