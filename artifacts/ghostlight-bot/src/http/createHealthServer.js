@@ -36,6 +36,7 @@ const { handleAdminExportActions } = require("./actions/adminExportActions");
 const { handleSituationalAwarenessActions } = require("./actions/situationalAwarenessActions");
 const { handleTravelActions } = require("./actions/travelActions");
 const { handleCallRoutes, readCallsEnabled, renderCallPanel } = require("./callRoutes");
+const { handleSimpleSecondLifeChat } = require("./simpleSecondLifeChat");
 const { NORDIC_DASHBOARD_ASSET_BASE, getNordicDashboardAssetPath } = require("./nordicDashboardAssets");
 const {
   buildMemoryExportPayload,
@@ -258,6 +259,13 @@ function createHealthServer({
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(body);
         return;
+      }
+
+      {
+        const handled = await handleSimpleSecondLifeChat({ req, res, url, context });
+        if (handled !== false) {
+          return handled;
+        }
       }
 
       if (req.method === "GET" && url.pathname === "/health") {

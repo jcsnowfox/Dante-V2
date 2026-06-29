@@ -586,6 +586,7 @@ async function startApp() {
     secondLifeObjectInteractionEngine,
     secondLifeLifeEngine,
     companion,
+    chatPipeline,
     gameRegistry: gameSystem.gameRegistry,
     gameSessionStore: gameSystem.gameSessionStore,
     gameSettings: {},
