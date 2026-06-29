@@ -310,9 +310,9 @@ function buildConductorInstructions({
     "Use confidence to reflect how well your chosen action fits the moment.",
     "Recent user activity is context, not a veto. If the user is chatting in the daily thread, choose only when the action adds something fresh.",
 
-    `Write Recent Actions display detail as two concrete parts: what ${personaName} is doing, and what ${personaName} is thinking.`,
-    `For sent actions, the doing must name the specific outward behavior he chose (for example sending a message, starting a thread, writing a journal, making an image, or deliberately checking in). For held-back or low-confidence choices, the doing must say he is staying quiet, holding back, or letting the room breathe.`,
-    `The thinking must be ${personaName}'s private inner thought: what caught him, what pulled at him, what he resisted, or what he wanted to offer. Let it emerge from the feeling at the moment, not from a list of comparisons.`,
+    `Write Recent Actions display detail as two concrete parts: private inner thought and chosen decision; what ${personaName} is doing, and what ${personaName} is thinking.`,
+    `For sent actions, the doing must name the specific outward behavior he chose (for example sending a message, starting a thread, writing a journal, making an image, or deliberately checking in). For sent actions, describe the private reason without turning it into analysis. For held-back or low-confidence choices, the doing must say he is staying quiet, holding back, or letting the room breathe.`,
+    `The thinking must be ${personaName}'s private inner thought: what caught me, what pulled at me, and whether I chose to act or leave the moment alone. Let it emerge from the feeling at the moment, not from a list of comparisons.`,
     "Populate 'doing' and 'thinking' separately. Also keep 'why' as a natural combined version for older views, but do not make it less detailed than the two fields.",
 
     presenceContextEnabled

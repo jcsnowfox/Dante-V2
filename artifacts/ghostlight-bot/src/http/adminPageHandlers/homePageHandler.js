@@ -309,6 +309,13 @@ async function handleHomePageRequest({ url, innerRes, innerContext, helpers, the
             helpText: `Audio generation is ${canGenerateAudio(innerContext.config) ? "On" : "Off"}.`,
           },
           {
+            label: "Call Dante",
+            icon: "audio",
+            active: innerContext.config.calls?.enabled === true,
+            path: "/call/dante",
+            helpText: `Call Dante is ${innerContext.config.calls?.enabled === true ? "On" : "Off"}.`,
+          },
+          {
             label: "Spotify",
             icon: "playlist",
             active: Boolean(

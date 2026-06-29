@@ -142,6 +142,9 @@ function loadConfig() {
     port: Number(process.env.PORT) || 3000,
     nodeEnv: process.env.NODE_ENV || "development",
     logLevel: process.env.LOG_LEVEL || "info",
+    calls: {
+      enabled: readBoolean(process.env.CALLS_ENABLED, false),
+    },
     app: {
       version: String(packageInfo.version || process.env.GHOSTLIGHT_VERSION || process.env.CADENCE_VERSION || "").trim() || "unknown",
       imageTag: String(process.env.GHOSTLIGHT_IMAGE_TAG || process.env.CADENCE_IMAGE_TAG || "").trim(),
