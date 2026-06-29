@@ -133,14 +133,15 @@ test("blank Private Channel ID does not inject adult prompt or adult model, and 
   assert.ok(logger.entries.some((entry) => String(entry[1]).includes("active=false reason=missing_private_channel")));
 });
 
-test("configured private channel injects adult prompt but normal model for ordinary chat", async () => {
+test("configured private channel does not inject adult prompt for ordinary chat", async () => {
   const { call } = await runPipeline({
     adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model", systemPrompt: "ADULT CONSENT CONFIRMATION" },
     channelId: "123456789012345678",
   });
 
-  assert.equal(call.systemPromptPrefix, "ADULT CONSENT CONFIRMATION");
+  assert.equal(call.systemPromptPrefix, null);
   assert.notEqual(call.mode.chatModel, "adult-model");
+  assert.ok(!call.contextSections.some((section) => section.label === "ADULT MODE ESCALATION"));
 });
 
 test("different channel does not inject adult prompt or adult model", async () => {
@@ -170,7 +171,7 @@ test("after safeword/aftercare, adult handling still only applies in private cha
   assert.notEqual(outside.call.mode.chatModel, "adult-model");
 
   const inside = await runPipeline({ adultMode, channelId: "123456789012345678", content: "red" });
-  assert.equal(inside.call.systemPromptPrefix, "AFTERCARE ONLY IN PRIVATE CHANNEL");
+  assert.equal(inside.call.systemPromptPrefix, null);
 });
 
 
@@ -188,14 +189,14 @@ test("wrong user does not activate Adult Private Mode even in configured channel
   assert.equal(scope.adultUserMatch, false);
 });
 
-test("adult private channel injects adultModeEscalation and logs detection fields", async () => {
+test("adult private channel injects adultModeEscalation and logs detection fields for explicit intent", async () => {
   const { call, logger } = await runPipeline({
     adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model", systemPrompt: "ADULT CONSENT CONFIRMATION" },
     channelId: "123456789012345678",
-    content: "Come closer, I want you in our private room.",
+    content: "I want explicit sexual roleplay with you in our private room.",
   });
 
-  assert.notEqual(call.mode.chatModel, "adult-model");
+  assert.equal(call.mode.chatModel, "adult-model");
   assert.equal(call.systemPromptPrefix, "ADULT CONSENT CONFIRMATION");
   assert.ok(call.contextSections.some((section) => section.label === "ADULT MODE ESCALATION"));
   assert.ok(logger.entries.some((entry) => entry.some((item) => item && item.adult_escalation_layer_injected === true)));
@@ -221,7 +222,7 @@ test("ordinary explicit adult text does not trigger aftercare; safeword does", a
   assert.ok(ordinary.call.contextSections.some((section) => section.label === "ADULT MODE ESCALATION"));
 
   const safeword = await runPipeline({ adultMode, channelId: "123456789012345678", content: "red" });
-  assert.equal(safeword.call.systemPromptPrefix, "AFTERCARE");
+  assert.equal(safeword.call.systemPromptPrefix, null);
   assert.ok(!safeword.call.contextSections.some((section) => section.label === "ADULT MODE ESCALATION"));
 });
 
@@ -300,4 +301,26 @@ test("ADULT_MODEL_ROUTING_MODE=channel preserves old behavior only if explicitly
 test("Adult permission false never uses adult model", async () => {
   const { call } = await runPipeline({ adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model" }, channelId: "987654321098765432", content: "I want explicit sexual content with you." });
   assert.notEqual(call.mode.chatModel, "adult-model");
+});
+
+test("explicit adult intent uses default Euryale override when no per-channel adult model is set", async () => {
+  const { call } = await runPipeline({
+    adultMode: { enabled: true, channelId: "123456789012345678" },
+    channelId: "123456789012345678",
+    content: "Let's roleplay an explicit erotic scene.",
+    chatConfig: { adultModelOverride: "sao10k/l3.3-euryale-70b" },
+  });
+  assert.equal(call.mode.chatModel, "sao10k/l3.3-euryale-70b");
+});
+
+test("model routing log includes selected_model and selection_reason every reply", async () => {
+  const { logger } = await runPipeline({
+    adultMode: { enabled: true, channelId: "123456789012345678", model: "adult-model" },
+    channelId: "123456789012345678",
+    content: "hey babe",
+  });
+  const routingLog = logger.entries.find((entry) => String(entry[1]).includes("model routing decision"));
+  assert.ok(routingLog, "expected model routing decision log");
+  assert.ok(routingLog[2]?.selected_model, "expected selected_model in log metadata");
+  assert.equal(routingLog[2]?.selection_reason, "no_explicit_adult_intent");
 });

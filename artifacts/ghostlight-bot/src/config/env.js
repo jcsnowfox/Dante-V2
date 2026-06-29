@@ -5,6 +5,7 @@ const { normalizeAudioGallerySavedSourceSurfaces } = require("../audio/galleryPo
 const { normalizeIanaTimezone } = require("./timezones");
 
 const LICENSE_SERVER_URL = "https://cadence-tavriko.up.railway.app";
+const DEFAULT_ADULT_MODEL_OVERRIDE = "sao10k/l3.3-euryale-70b";
 
 function readBoolean(value, defaultValue = false) {
   if (value === undefined) {
@@ -163,6 +164,7 @@ function loadConfig() {
       adultModelRoutingMode: ["off", "intent", "channel"].includes(String(process.env.ADULT_MODEL_ROUTING_MODE || "intent").trim().toLowerCase())
         ? String(process.env.ADULT_MODEL_ROUTING_MODE || "intent").trim().toLowerCase()
         : "intent",
+      adultModelOverride: String(process.env.ADULT_MODEL_OVERRIDE || DEFAULT_ADULT_MODEL_OVERRIDE).trim() || DEFAULT_ADULT_MODEL_OVERRIDE,
       forceDefaultChatModel: readBoolean(process.env.FORCE_DEFAULT_CHAT_MODEL, false),
       promptBlocks: {
         personaName: process.env.CHAT_PROMPT_PERSONA_NAME || "Dorian Vale",
