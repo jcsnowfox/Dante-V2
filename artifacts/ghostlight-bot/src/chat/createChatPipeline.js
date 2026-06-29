@@ -45,6 +45,7 @@ const { capturePromptAudit, logAuditCapture } = require("./promptAuditCapture");
 const { logReplyPromptDebug } = require("./promptDebug");
 const { sanitizePromptContext, buildCleanRegenerationContext } = require("./promptContextSanitizer");
 const { detectContinuationIntent } = require("./continuationIntent");
+const { isContinuationPhrase, isExitPhrase, getAdultScene, setAdultSceneActive, keepAdultSceneAlive, exitAdultScene, DEFAULT_TIMEOUT_MS } = require("./adultSceneState");
 
 const defaultConversationStateStore = createConversationStateStore();
 const defaultFollowUpCandidateStore = createFollowUpCandidateStore();
@@ -155,7 +156,7 @@ function recentAdultIntentStillActive({ messageText = "", recentTurns = [] } = {
   return detectExplicitAdultIntent(recentText) && detectAdultFlirt(currentText) && !detectDiscomfort(currentText);
 }
 
-function shouldUseAdultModel({ adultPermission = false, messageText = "", recentTurns = [], channelMode = {}, routingMode, forceDefaultChatModel } = {}) {
+function shouldUseAdultModel({ adultPermission = false, messageText = "", recentTurns = [], channelMode = {}, routingMode, forceDefaultChatModel, adultSceneActive = false, adultSceneContinuation = false } = {}) {
   const configuredRoutingMode = normalizeAdultModelRoutingMode(routingMode ?? channelMode.adultModelRoutingMode ?? process.env.ADULT_MODEL_ROUTING_MODE ?? "intent");
   const forcedDefault = boolConfig(forceDefaultChatModel ?? channelMode.forceDefaultChatModel ?? process.env.FORCE_DEFAULT_CHAT_MODEL, false);
   const adultIntentDetected = recentAdultIntentStillActive({ messageText, recentTurns });
@@ -164,6 +165,7 @@ function shouldUseAdultModel({ adultPermission = false, messageText = "", recent
   if (!adultPermission) return { useAdultModel: false, reason: "adult_permission_false", confidence: 1, adultIntentDetected: false, routingMode: configuredRoutingMode };
   if (configuredRoutingMode === "off") return { useAdultModel: false, reason: "routing_mode_off", confidence: 1, adultIntentDetected, routingMode: configuredRoutingMode };
   if (configuredRoutingMode === "channel") return { useAdultModel: true, reason: "legacy_channel_routing", confidence: 1, adultIntentDetected, routingMode: configuredRoutingMode };
+  if (adultSceneActive && adultSceneContinuation) return { useAdultModel: true, reason: "adult_scene_continuation", confidence: 0.9, adultIntentDetected, routingMode: configuredRoutingMode, adultSceneReused: true };
   if (adultIntentDetected) return { useAdultModel: true, reason: "explicit_adult_intent", confidence: 0.9, adultIntentDetected, routingMode: configuredRoutingMode };
 
   return { useAdultModel: false, reason: "no_explicit_adult_intent", confidence: 0.85, adultIntentDetected, routingMode: configuredRoutingMode };
@@ -965,6 +967,13 @@ function createChatPipeline({
       let effectiveMode = selectedMode;
       let adultSystemPromptPrefix = null;
       let adultRoutingDecisionLogged = false;
+      const adultSceneTimeoutMs = Number(process.env.ADULT_SCENE_TIMEOUT_MS || DEFAULT_TIMEOUT_MS);
+      let adultScene = getAdultScene({ channelId: message.channelId, conversationId, userId: input.authorId, timeoutMs: adultSceneTimeoutMs });
+      const adultSceneExitReason = adultScope.active ? isExitPhrase(input.content, adultMode?.safeword || "red") : (adultScene.active ? "channel_change_or_adult_disabled" : "");
+      if (adultSceneExitReason) {
+        adultScene = exitAdultScene({ channelId: message.channelId, conversationId, userId: input.authorId, reason: adultSceneExitReason });
+      }
+      const adultSceneContinuation = adultScope.active && adultScene.active && isContinuationPhrase(input.content);
 
       if (adultScope.active) {
         const adultModel = resolveAdultModelOverride({ adultMode, config });
@@ -977,6 +986,8 @@ function createChatPipeline({
             adultModelRoutingMode: config.chat?.adultModelRoutingMode,
             forceDefaultChatModel: config.chat?.forceDefaultChatModel,
           },
+          adultSceneActive: adultScene.active,
+          adultSceneContinuation,
         });
         const safeword = String(adultMode.safeword || "red").trim().toLowerCase();
         const messageText = String(input.content || "").trim().toLowerCase();
@@ -990,7 +1001,7 @@ function createChatPipeline({
             aftercare_triggered: false,
             adult_intent_detected: Boolean(routingDecision.adultIntentDetected),
           });
-        } else if (!safewordTriggered && routingDecision.adultIntentDetected) {
+        } else if (!safewordTriggered && (routingDecision.adultIntentDetected || routingDecision.useAdultModel)) {
           const prefixParts = [];
 
           if (adultMode.systemPrompt) {
@@ -1056,6 +1067,12 @@ function createChatPipeline({
           });
         }
 
+        if (routingDecision.useAdultModel) {
+          adultScene = routingDecision.adultSceneReused
+            ? keepAdultSceneAlive({ channelId: message.channelId, conversationId, userId: input.authorId, reason: "continuation" })
+            : setAdultSceneActive({ channelId: message.channelId, conversationId, userId: input.authorId, reason: "adult_route_selected" });
+        }
+
         if (adultModel && routingDecision.useAdultModel) {
           effectiveMode = { ...selectedMode, chatModel: adultModel };
         }
@@ -1071,6 +1088,11 @@ function createChatPipeline({
           adult_model: adultModel || null,
           adult_override_used: Boolean(adultModel && routingDecision.useAdultModel),
           selection_reason: routingDecision.reason,
+          adult_scene_active: Boolean(adultScene.active),
+          adult_scene_reused: Boolean(routingDecision.adultSceneReused),
+          adult_scene_kept_alive: Boolean(routingDecision.useAdultModel),
+          adult_scene_exit_reason: adultScene.exitReason || adultSceneExitReason || null,
+          adult_scene_last_activity: adultScene.lastActivity || null,
         });
 
         logger.info?.("[chat] Adult private mode active", {
@@ -1083,6 +1105,11 @@ function createChatPipeline({
           adult_intent_detected: Boolean(routingDecision.adultIntentDetected),
           adult_model_routing_mode: routingDecision.routingMode,
           selection_reason: routingDecision.reason,
+          adult_scene_active: Boolean(adultScene.active),
+          adult_scene_reused: Boolean(routingDecision.adultSceneReused),
+          adult_scene_kept_alive: Boolean(routingDecision.useAdultModel),
+          adult_scene_exit_reason: adultScene.exitReason || adultSceneExitReason || null,
+          adult_scene_last_activity: adultScene.lastActivity || null,
         });
       }
 
@@ -1097,6 +1124,8 @@ function createChatPipeline({
             adultModelRoutingMode: config.chat?.adultModelRoutingMode,
             forceDefaultChatModel: config.chat?.forceDefaultChatModel,
           },
+          adultSceneActive: adultScene.active,
+          adultSceneContinuation,
         });
         logger.info?.("[chat] model routing decision", {
           adult_permission: Boolean(adultScope.active),

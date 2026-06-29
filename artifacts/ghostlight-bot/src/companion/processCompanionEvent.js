@@ -41,7 +41,7 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
   }
 
   async function processDiscordEvent(event) {
-    const discord = event.metadata?.discord || {};
+    const discord = event.metadata?.discord || event.metadata?.dashboardCall || event.metadata?.webCall || {};
     const message = discord.message;
 
     if (!message) {
@@ -59,7 +59,7 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
     const outbound = normalizeOutboundResult(
       {
         companionId: event.companionId,
-        channelType: "discord",
+        channelType: event.channelType,
         responseText: extractResponseText(reply),
         privacyLevel: event.privacyLevel,
         metadata: { hasReply: reply != null },
@@ -120,7 +120,7 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
     emitCanonicalPipelineTrace("user_resolver", event, { diagnostics: "using existing channel user path" });
     emitCanonicalPipelineTrace("relationship_resolver", event, { diagnostics: "using existing relationship context path" });
 
-    if (event.channelType === "discord") {
+    if (["discord", "dashboard_call", "web_call"].includes(event.channelType)) {
       const result = await processDiscordEvent(event);
       finishCanonicalPipelineTrace(event, { diagnostics: "discord response ready" });
       return result;
