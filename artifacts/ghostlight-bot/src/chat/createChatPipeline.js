@@ -44,6 +44,7 @@ const { applyPromptBudget } = require("./promptBudget");
 const { capturePromptAudit, logAuditCapture } = require("./promptAuditCapture");
 const { logReplyPromptDebug } = require("./promptDebug");
 const { sanitizePromptContext, buildCleanRegenerationContext } = require("./promptContextSanitizer");
+const { detectContinuationIntent } = require("./continuationIntent");
 
 const defaultConversationStateStore = createConversationStateStore();
 const defaultFollowUpCandidateStore = createFollowUpCandidateStore();
@@ -1133,15 +1134,35 @@ function createChatPipeline({
 
       // Phase 4: Apply prompt budget before LLM call
       const budgetedSections = applyPromptBudget(contextSections, { logger, messageId: message.id });
+      const continuationIntentDetected = detectContinuationIntent(input.content);
+      const emergencyCoreOnly = boolConfig(process.env.EMERGENCY_CORE_ONLY, false);
+      const safeModeContinuityHistory = replySafeMode && continuationIntentDetected && !emergencyCoreOnly
+        ? recentHistory.slice(-3)
+        : [];
       const safeModePromptInputs = replySafeMode
-        ? { contextSections: [], memories: [], recentHistory: [], dropped: { contextSections: ["reply_safe_mode"], memories: ["reply_safe_mode"], recentHistory: ["reply_safe_mode"] } }
+        ? sanitizePromptContext({
+          contextSections: [],
+          memories: [],
+          recentHistory: safeModeContinuityHistory,
+          logger,
+          messageId: message.id,
+          currentUserText: input.content,
+          preserveImmediateContinuity: continuationIntentDetected && !emergencyCoreOnly,
+        })
         : null;
+      if (safeModePromptInputs) {
+        safeModePromptInputs.dropped.contextSections.push("reply_safe_mode");
+        safeModePromptInputs.dropped.memories.push("reply_safe_mode");
+        if (!safeModeContinuityHistory.length) safeModePromptInputs.dropped.recentHistory.push("reply_safe_mode");
+      }
       const sanitizedPromptInputs = safeModePromptInputs || sanitizePromptContext({
         contextSections: budgetedSections,
         memories,
         recentHistory,
         logger,
         messageId: message.id,
+        currentUserText: input.content,
+        preserveImmediateContinuity: continuationIntentDetected,
       });
       const llmContextSections = sanitizedPromptInputs.contextSections;
       const llmMemories = sanitizedPromptInputs.memories;

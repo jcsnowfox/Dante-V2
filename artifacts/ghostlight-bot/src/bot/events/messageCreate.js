@@ -16,6 +16,8 @@ const {
   buildOversizeFallbackContent,
 } = require("../../discord/oversizeFallback");
 const { cacheLatestReadableReply } = require("../../audio/latestReplyCache");
+const { createAudioGenerationService, resolveTtsProvider } = require("../../audio/generateAudio");
+const { detectVoiceNoteRequest, isFakeVoiceNoteAction, stripFakeVoiceNoteAction, buildVoiceNoteScript } = require("../../chat/voiceNoteIntent");
 const { replaceCustomEmojiLabelsForDiscord } = require("../../reactions/customEmojiPalette");
 const { isDevMode, isLogRequest } = require("../../developer/devUtils");
 const { getLogsForDevReport, formatLogsForDiscord } = require("../../developer/railwayLogs");
@@ -287,6 +289,69 @@ async function sendTypingIndicatorSafely({
 // event replay on reconnect). The Postgres-backed cache/recordEvent checks
 // handle cross-process dedup; this handles within-process dedup at zero cost.
 const IN_FLIGHT_MESSAGE_IDS = new Set();
+
+async function fulfillVoiceNoteRequest({ replyPayload, message, config, logger, generatedAudio, conversationId }) {
+  const requestedBefore = detectVoiceNoteRequest(message.content || "");
+  const fakeActionOnly = isFakeVoiceNoteAction(replyPayload.content || "");
+  const requestedAfter = detectVoiceNoteRequest(replyPayload.content || "") || fakeActionOnly;
+  const voiceNoteRequested = requestedBefore || requestedAfter;
+  logger.info?.("[voice-note] routing diagnostics", { voice_note_requested: Boolean(voiceNoteRequested) });
+  if (!voiceNoteRequested || replyPayload.generatedAudioIds.length || replyPayload.files.length) return replyPayload;
+
+  const script = buildVoiceNoteScript({ userText: message.content || "", replyText: replyPayload.content || "" });
+  const provider = resolveTtsProvider?.(config) || String(config.audio?.ttsProvider || "unknown");
+  logger.info?.("[voice-note] audio generation requested", {
+    voice_note_requested: true,
+    voice_note_script_length: script.length,
+    audio_provider: provider,
+    audio_generation_started: true,
+  });
+
+  try {
+    const audioGeneration = createAudioGenerationService({ config, logger, generatedAudio });
+    const result = await audioGeneration.generate({
+      text: script,
+      prompt: script,
+      caption: "",
+      title: "Voice Note",
+      kind: "Voice Note",
+      model: config.audio?.generatedAudioModel || config.audio?.readAloudModel || "eleven_multilingual_v2",
+      context: {
+        userScope: config.memory?.userScope,
+        sourceSurface: "chat_voice_note",
+        conversationId,
+        channelId: message.channelId,
+        sourceMessageId: message.id,
+      },
+    });
+    logger.info?.("[voice-note] audio generation succeeded", {
+      voice_note_requested: true,
+      voice_note_script_length: script.length,
+      audio_provider: provider,
+      audio_generation_success: true,
+    });
+    return {
+      ...replyPayload,
+      content: stripFakeVoiceNoteAction(replyPayload.content || ""),
+      files: [...replyPayload.files, result.file],
+      generatedAudioIds: result.record?.audioId ? [...replyPayload.generatedAudioIds, result.record.audioId] : replyPayload.generatedAudioIds,
+    };
+  } catch (error) {
+    logger.warn?.("[voice-note] audio generation failed", {
+      voice_note_requested: true,
+      voice_note_script_length: script.length,
+      audio_provider: provider,
+      audio_generation_success: false,
+      provider_error: error.message,
+    });
+    return {
+      ...replyPayload,
+      content: "I tried to send that as a voice note, but the audio failed to generate. I can try again in a moment.",
+      files: [],
+      generatedAudioIds: [],
+    };
+  }
+}
 
 function createMessageCreateHandler({ config, logger, chatPipeline, companion, conversations, channelModes, generatedImages, generatedAudio, cache, reactionContext, settingsStore = null, norwegianLearning = null, conversationFollowupStore = null, timedNotesStore = null }) {
   return async (message) => {
@@ -664,6 +729,8 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           imageWarnings: Array.isArray(reply.imageWarnings) ? reply.imageWarnings : [],
           internalThought: typeof reply.internalThought === "string" ? reply.internalThought.trim() : "",
         };
+      const routedReplyPayload = await fulfillVoiceNoteRequest({ replyPayload, message, config, logger, generatedAudio, conversationId });
+      Object.assign(replyPayload, routedReplyPayload);
       const outgoingContentWithUrls = replaceCustomEmojiLabelsForDiscord(
         replyPayload.content,
         config.chat?.customReactionEmojis || [],
@@ -708,6 +775,7 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
             logger.info("[audio] discord attachment sent", {
               audioIds: replyPayload.generatedAudioIds,
               discordMessageId: sentReply.id,
+              discord_audio_attachment_sent: true,
             });
           }
         } catch (error) {
@@ -771,6 +839,7 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
             logger.info("[audio] discord attachment sent", {
               audioIds: replyPayload.generatedAudioIds,
               discordMessageId: sentReply.id,
+              discord_audio_attachment_sent: true,
             });
           }
         } catch (error) {
@@ -823,6 +892,7 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
             logger.info("[audio] discord attachment sent", {
               audioIds: replyPayload.generatedAudioIds,
               discordMessageId: sentReply.id,
+              discord_audio_attachment_sent: true,
             });
           }
         } catch (error) {
