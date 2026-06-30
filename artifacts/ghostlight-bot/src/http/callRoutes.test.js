@@ -304,7 +304,86 @@ test("POST /sl/chat is mounted beside GET /sl/chat at root and returns plain tex
   assert.ok(logs.some((message) => message.includes("[sl-bridge] POST /sl/chat hit")));
   assert.ok(logs.some((message) => message.includes("[sl-bridge] auth accepted")));
   assert.equal(handledEvents[0].event.messageText, "hello");
+  assert.equal(handledEvents[0].event.eventType, "local_chat");
   assert.equal(handledEvents[0].event.avatarName, "Tester");
+  assert.equal(handledEvents[0].event.source, "secondlife");
+  assert.equal(handledEvents[0].event.platform, "secondlife");
+  assert.equal(handledEvents[0].event.slAvatarUsername, "Dante0Solvane");
+});
+
+test("POST /sl/chat resolves Dante companion id aliases and caps plain text reply", async (t) => {
+  const handledEvents = [];
+  const previousBridgeKey = process.env.SL_BRIDGE_KEY;
+  process.env.SL_BRIDGE_KEY = "alias-bridge-key";
+  t.after(() => {
+    if (previousBridgeKey === undefined) {
+      delete process.env.SL_BRIDGE_KEY;
+    } else {
+      process.env.SL_BRIDGE_KEY = previousBridgeKey;
+    }
+  });
+
+  const server = createHealthServer({
+    port: 0,
+    logger: { info() {}, error() {}, warn() {} },
+    appContext: {
+      ready: true,
+      config: { admin: { username: "owner", password: "secret" }, discord: {}, chat: { timezone: "UTC" }, features: {} },
+      logger: { info() {}, error() {}, warn() {} },
+      secondLife: { available: true },
+      secondLifeAdapter: {
+        async handleEvent(payload) {
+          handledEvents.push(payload);
+          return { responseText: "x".repeat(950) };
+        },
+      },
+    },
+  });
+  t.after(() => server.close());
+
+  await new Promise((resolve) => server.on("listening", resolve));
+  const response = await postRaw(
+    server,
+    "/sl/chat",
+    JSON.stringify({
+      companionId: "dante",
+      message: "actual user message",
+      avatarName: "Tester Resident",
+      avatarKey: "avatar-key-123",
+      region: "Ravenhurst",
+      channel: "666",
+      bridgeKey: "alias-bridge-key",
+    }),
+    { "Content-Type": "application/json" },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.length, 900);
+  assert.equal(handledEvents[0].companionId, "dante_sølvane");
+  assert.equal(handledEvents[0].event.messageText, "actual user message");
+  assert.equal(handledEvents[0].event.avatarName, "Tester Resident");
+  assert.equal(handledEvents[0].event.avatarKey, "avatar-key-123");
+  assert.equal(handledEvents[0].event.region, "Ravenhurst");
+  assert.equal(handledEvents[0].event.channel, "666");
+
+  const directResponse = await postRaw(
+    server,
+    "/sl/chat",
+    JSON.stringify({ companionId: "dante_sølvane", message: "direct", bridgeKey: "alias-bridge-key" }),
+    { "Content-Type": "application/json" },
+  );
+  assert.equal(directResponse.statusCode, 200);
+  assert.equal(handledEvents[1].companionId, "dante_sølvane");
+
+  const usernameResponse = await postRaw(
+    server,
+    "/sl/chat",
+    JSON.stringify({ companionId: "Dante0Solvane", message: "username is context only", bridgeKey: "alias-bridge-key" }),
+    { "Content-Type": "application/json" },
+  );
+  assert.equal(usernameResponse.statusCode, 200);
+  assert.equal(handledEvents[2].companionId, "dante_sølvane");
+  assert.equal(handledEvents[2].event.slAvatarUsername, "Dante0Solvane");
 });
 
 test("POST /sl/chat accepts token from query string and rejects bad secrets as plain text", async (t) => {

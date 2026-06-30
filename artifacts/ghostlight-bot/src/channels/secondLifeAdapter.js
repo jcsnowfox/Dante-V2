@@ -1074,7 +1074,16 @@ function createSecondLifeAdapter({
         worldContext: worldState,
         locationContext: event.locationContext || null,
         timestamp: event.timestamp,
-        metadata: { secondLife: { contextSections, publicChat } },
+        metadata: {
+          source: event.source || "secondlife",
+          platform: event.platform || "secondlife",
+          slAvatarUsername: event.slAvatarUsername || "",
+          avatarName: event.avatarName || event.userDisplayName || "",
+          avatarKey: event.avatarKey || event.externalUserId || event.avatarUuid || "",
+          region: event.region || "",
+          channel: event.channel || "",
+          secondLife: { contextSections, publicChat },
+        },
       });
     } catch (error) {
       logger?.error?.("[second-life] Brain failed to process event.", { error: error.message });
