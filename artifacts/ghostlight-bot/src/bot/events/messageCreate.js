@@ -17,7 +17,9 @@ const {
 } = require("../../discord/oversizeFallback");
 const { cacheLatestReadableReply } = require("../../audio/latestReplyCache");
 const { createAudioGenerationService, resolveTtsProvider } = require("../../audio/generateAudio");
-const { detectVoiceNoteRequest, isFakeVoiceNoteAction, stripFakeVoiceNoteAction, buildVoiceNoteScript } = require("../../chat/voiceNoteIntent");
+const { createImageGenerationService, resolveImageGenerationModel } = require("../../images/generateImage");
+const { buildImageIntentRequest } = require("../../chat/imageIntent");
+const { getVoiceNoteTriggerPhrase, isFakeVoiceNoteAction, stripFakeVoiceNoteAction, buildVoiceNoteScriptDetails } = require("../../chat/voiceNoteIntent");
 const { replaceCustomEmojiLabelsForDiscord } = require("../../reactions/customEmojiPalette");
 const { isDevMode, isLogRequest } = require("../../developer/devUtils");
 const { getLogsForDevReport, formatLogsForDiscord } = require("../../developer/railwayLogs");
@@ -290,25 +292,140 @@ async function sendTypingIndicatorSafely({
 // handle cross-process dedup; this handles within-process dedup at zero cost.
 const IN_FLIGHT_MESSAGE_IDS = new Set();
 
-async function fulfillVoiceNoteRequest({ replyPayload, message, config, logger, generatedAudio, conversationId }) {
-  const requestedBefore = detectVoiceNoteRequest(message.content || "");
+async function fulfillImageIntentRequest({ replyPayload, message, config, logger, generatedImages, conversationId, imageGenerationServiceFactory = createImageGenerationService }) {
+  const mediaRequest = replyPayload.mediaRequest || buildImageIntentRequest({
+    text: replyPayload.content || "",
+    userText: message.content || "",
+  });
+  const imageIntentDetected = Boolean(mediaRequest?.detected);
+  const prompt = String(mediaRequest?.prompt || "").trim();
+  const provider = String(config.imageGeneration?.provider || "getimg").trim() || "getimg";
+  const model = resolveImageGenerationModel(config);
+
+  logger.info?.("[image-intent] routing diagnostics", {
+    image_intent_detected: imageIntentDetected,
+    image_trigger_source: mediaRequest?.triggerSource || null,
+    extracted_prompt_length: prompt.length,
+    image_provider: provider,
+    image_model: model,
+    image_generation_started: false,
+    image_generation_success: false,
+    image_url_or_bytes_present: false,
+    discord_image_attachment_sent: false,
+    gallery_saved: false,
+    failure_reason: null,
+  });
+
+  if (!imageIntentDetected || replyPayload.generatedImageIds.length || replyPayload.files.length) {
+    return {
+      ...replyPayload,
+      content: mediaRequest?.cleanedText ?? replyPayload.content,
+    };
+  }
+
+  if (!prompt) {
+    logger.warn?.("[image-intent] image intent had no usable prompt", {
+      image_intent_detected: true,
+      image_trigger_source: mediaRequest?.triggerSource || null,
+      failure_reason: "empty_prompt",
+    });
+    return {
+      ...replyPayload,
+      content: "I tried to make the image, but the image generator failed.",
+    };
+  }
+
+  logger.info?.("[image-intent] image generation requested", {
+    image_intent_detected: true,
+    image_trigger_source: mediaRequest?.triggerSource || null,
+    extracted_prompt_length: prompt.length,
+    image_provider: provider,
+    image_model: model,
+    image_generation_started: true,
+  });
+
+  try {
+    const imageGeneration = imageGenerationServiceFactory({ config, logger, generatedImages });
+    const result = await imageGeneration.generate({
+      prompt,
+      context: {
+        userScope: config.memory?.userScope,
+        sourceSurface: "chat",
+        conversationId,
+        channelId: message.channelId,
+        sourceMessageId: message.id,
+      },
+    });
+    const imageId = result.record?.imageId || result.image?.imageId;
+    const file = result.file;
+    logger.info?.("[image-intent] image generation succeeded", {
+      image_intent_detected: true,
+      image_trigger_source: mediaRequest?.triggerSource || null,
+      extracted_prompt_length: prompt.length,
+      image_provider: provider,
+      image_model: result.record?.model || result.image?.model || model,
+      image_generation_success: true,
+      image_url_or_bytes_present: Boolean(file?.attachment || result.url || result.image?.url),
+      discord_image_attachment_sent: true,
+      gallery_saved: Boolean(result.record),
+      failure_reason: null,
+    });
+    return {
+      ...replyPayload,
+      content: mediaRequest.cleanedText || "",
+      files: file ? [...replyPayload.files, file] : replyPayload.files,
+      generatedImageIds: imageId ? [...replyPayload.generatedImageIds, imageId] : replyPayload.generatedImageIds,
+    };
+  } catch (error) {
+    logger.warn?.("[image-intent] image generation failed", {
+      image_intent_detected: true,
+      image_trigger_source: mediaRequest?.triggerSource || null,
+      extracted_prompt_length: prompt.length,
+      image_provider: provider,
+      image_model: model,
+      image_generation_success: false,
+      image_url_or_bytes_present: false,
+      discord_image_attachment_sent: false,
+      gallery_saved: false,
+      failure_reason: error.message,
+    });
+    return {
+      ...replyPayload,
+      content: "I tried to make the image, but the image generator failed.",
+      files: [],
+      generatedImageIds: [],
+    };
+  }
+}
+
+async function fulfillVoiceNoteRequest({ replyPayload, message, config, logger, generatedAudio, conversationId, audioGenerationServiceFactory = createAudioGenerationService }) {
+  const beforeTrigger = getVoiceNoteTriggerPhrase(message.content || "");
+  const afterTrigger = getVoiceNoteTriggerPhrase(replyPayload.content || "");
   const fakeActionOnly = isFakeVoiceNoteAction(replyPayload.content || "");
-  const requestedAfter = detectVoiceNoteRequest(replyPayload.content || "") || fakeActionOnly;
-  const voiceNoteRequested = requestedBefore || requestedAfter;
-  logger.info?.("[voice-note] routing diagnostics", { voice_note_requested: Boolean(voiceNoteRequested) });
+  const voiceNoteRequested = Boolean(beforeTrigger || afterTrigger || fakeActionOnly);
+  const triggerPhrase = beforeTrigger || afterTrigger || (fakeActionOnly ? "fake voice note action" : null);
+  logger.info?.("[voice-note] routing diagnostics", {
+    voice_note_requested: voiceNoteRequested,
+    voice_note_trigger_phrase: triggerPhrase,
+    raw_reply_length: String(replyPayload.content || "").length,
+    discord_audio_attachment_sent: false,
+  });
   if (!voiceNoteRequested || replyPayload.generatedAudioIds.length || replyPayload.files.length) return replyPayload;
 
-  const script = buildVoiceNoteScript({ userText: message.content || "", replyText: replyPayload.content || "" });
+  const { spokenScript: script, strippedStageDirections } = buildVoiceNoteScriptDetails({ userText: message.content || "", replyText: replyPayload.content || "" });
   const provider = resolveTtsProvider?.(config) || String(config.audio?.ttsProvider || "unknown");
   logger.info?.("[voice-note] audio generation requested", {
     voice_note_requested: true,
-    voice_note_script_length: script.length,
+    voice_note_trigger_phrase: triggerPhrase,
+    spoken_script_length: script.length,
+    raw_reply_length: String(replyPayload.content || "").length,
+    stripped_stage_directions: strippedStageDirections,
     audio_provider: provider,
     audio_generation_started: true,
   });
 
   try {
-    const audioGeneration = createAudioGenerationService({ config, logger, generatedAudio });
+    const audioGeneration = audioGenerationServiceFactory({ config, logger, generatedAudio });
     const result = await audioGeneration.generate({
       text: script,
       prompt: script,
@@ -326,9 +443,13 @@ async function fulfillVoiceNoteRequest({ replyPayload, message, config, logger, 
     });
     logger.info?.("[voice-note] audio generation succeeded", {
       voice_note_requested: true,
-      voice_note_script_length: script.length,
+      voice_note_trigger_phrase: triggerPhrase,
+      spoken_script_length: script.length,
+      raw_reply_length: String(replyPayload.content || "").length,
+      stripped_stage_directions: strippedStageDirections,
       audio_provider: provider,
       audio_generation_success: true,
+      discord_audio_attachment_sent: true,
     });
     return {
       ...replyPayload,
@@ -339,9 +460,13 @@ async function fulfillVoiceNoteRequest({ replyPayload, message, config, logger, 
   } catch (error) {
     logger.warn?.("[voice-note] audio generation failed", {
       voice_note_requested: true,
-      voice_note_script_length: script.length,
+      voice_note_trigger_phrase: triggerPhrase,
+      spoken_script_length: script.length,
+      raw_reply_length: String(replyPayload.content || "").length,
+      stripped_stage_directions: strippedStageDirections,
       audio_provider: provider,
       audio_generation_success: false,
+      discord_audio_attachment_sent: false,
       provider_error: error.message,
     });
     return {
@@ -729,6 +854,8 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           imageWarnings: Array.isArray(reply.imageWarnings) ? reply.imageWarnings : [],
           internalThought: typeof reply.internalThought === "string" ? reply.internalThought.trim() : "",
         };
+      const imageRoutedReplyPayload = await fulfillImageIntentRequest({ replyPayload, message, config, logger, generatedImages, conversationId });
+      Object.assign(replyPayload, imageRoutedReplyPayload);
       const routedReplyPayload = await fulfillVoiceNoteRequest({ replyPayload, message, config, logger, generatedAudio, conversationId });
       Object.assign(replyPayload, routedReplyPayload);
       const outgoingContentWithUrls = replaceCustomEmojiLabelsForDiscord(
@@ -1045,4 +1172,6 @@ module.exports = {
   removeUrlsFromText,
   splitAroundStandaloneUrls,
   splitTextIntoChunks,
+  fulfillImageIntentRequest,
+  fulfillVoiceNoteRequest,
 };
