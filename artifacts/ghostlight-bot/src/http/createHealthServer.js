@@ -85,6 +85,10 @@ const {
   parseHeartbeatSettingsForm,
   sortMemories,
 } = require("./adminFormParsers");
+const { listPendingActions, cancelPendingAction, updatePendingAction } = require("../orchestration/pendingActionStore");
+const { loadImageConversationState, getLatestImageConversationState } = require("../chat/imageConversationState");
+const { getLastImageRequestDiagnostics } = require("../images/imageRequestDiagnostics");
+const { getLastVoiceNoteDiagnostics } = require("../chat/voiceNoteIntent");
 const ASSET_CONTENT_TYPES = Object.freeze({
   ".svg": "image/svg+xml",
   ".png": "image/png",
@@ -444,6 +448,43 @@ function createHealthServer({
           innerRes.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
           innerRes.end(html);
         })(req, res, context);
+      }
+
+      if (req.method === "POST" && url.pathname === "/admin/executive-actions") {
+        return withAdmin(async (_req, innerRes) => {
+          const form = await parseRequestForm(_req);
+          const id = String(form.id || "").trim();
+          const action = String(form.action || "").trim();
+          if (id && action === "cancel") cancelPendingAction(id, "cancelled from dashboard");
+          if (id && action === "retry") updatePendingAction(id, { status: "queued", failureReason: null, attempts: 0 });
+          redirect(innerRes, buildAdminLocation({ path: "/admin/executive-actions", theme: resolvedTheme, extra: { message: `Action ${action || "updated"}` } }));
+        });
+      }
+
+      if (req.method === "GET" && url.pathname === "/admin/executive-actions") {
+        return withAdmin(async (_req, innerRes, innerContext) => {
+          const actions = listPendingActions({ includeExpired: true });
+          const pending = actions.filter((action) => ["queued", "running"].includes(action.status));
+          const failed = actions.filter((action) => action.status === "failed");
+          const imageDiagnostics = getLastImageRequestDiagnostics();
+          const voiceDiagnostics = getLastVoiceNoteDiagnostics();
+          const lastMedia = getLatestImageConversationState() || (innerContext.cache
+            ? await loadImageConversationState({
+              cache: innerContext.cache,
+              conversationId: innerContext.config?.discord?.allowedChannelId || "default",
+              userScope: innerContext.config?.memory?.userScope,
+            }).catch(() => null)
+            : null);
+          const renderRows = (items) => items.length ? items.map((action) => `<tr><td>${escapeHtml(action.actionType)}</td><td>${escapeHtml(action.status)}</td><td>${escapeHtml(action.channelId)}</td><td>${escapeHtml(action.dueAt || "")}</td><td>${escapeHtml(action.failureReason || "")}</td><td><form method="post" action="/admin/executive-actions" style="display:inline"><input type="hidden" name="id" value="${escapeHtml(action.id)}"><button name="action" value="retry">Retry</button><button name="action" value="cancel">Cancel</button></form></td></tr>`).join("") : `<tr><td colspan="6">None</td></tr>`;
+          innerRes.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          innerRes.end(renderAdminShell({
+            currentSection: "engineering",
+            theme: resolvedTheme,
+            themeLinks: buildThemeLinks(url),
+            config: innerContext.config,
+            pageBody: `<section class="panel"><h1>Executive Follow-Through</h1><h2>Pending Actions</h2><table><tbody>${renderRows(pending)}</tbody></table><h2>Last Media Request</h2><pre>${escapeHtml(JSON.stringify(lastMedia || {}, null, 2))}</pre><h2>Failed Media Requests</h2><pre>${escapeHtml(JSON.stringify(lastMedia?.status === "failed_image" ? lastMedia : {}, null, 2))}</pre><h2>Failed Actions</h2><table><tbody>${renderRows(failed)}</tbody></table><h2>Last image request diagnostics</h2><pre>${escapeHtml(JSON.stringify(imageDiagnostics || {}, null, 2))}</pre><h2>Last voice note diagnostics</h2><pre>${escapeHtml(JSON.stringify(voiceDiagnostics || {}, null, 2))}</pre></section>`,
+          }));
+        });
       }
 
       if (req.method === "POST" && url.pathname === "/admin/engineering/ai/clear") {

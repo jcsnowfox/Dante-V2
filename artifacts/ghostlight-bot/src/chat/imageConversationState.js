@@ -1,6 +1,7 @@
 const IMAGE_CONVERSATION_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_IMAGE_FOLLOWUP_WINDOW_MINUTES = 30;
 const DEFAULT_IMAGE_MAX_BATCH_COUNT = 4;
+let latestImageConversationState = null;
 
 const USER_IMAGE_REQUEST_PATTERNS = Object.freeze([
   /\b(?:make|create|generate|draw|paint|render|illustrate|do|send|give)\b[\s\S]{0,80}\b(?:image|pic|picture|portrait|photo|wallpaper|illustration|artwork|art|visual)\b/i,
@@ -66,7 +67,12 @@ function buildImageConversationState({
   lastModel = null,
   lastStyle = null,
   lastAppearancePreset = null,
+  lastReferenceImages = [],
   lastSuccessAt = null,
+  lastFailedPrompt = null,
+  lastFailedAt = null,
+  lastFailureReason = null,
+  createdAt = null,
   lastChannelId = null,
   lastMessageId = null,
 } = {}) {
@@ -86,7 +92,12 @@ function buildImageConversationState({
     lastModel: lastModel ? String(lastModel) : null,
     lastStyle: lastStyle ? String(lastStyle) : null,
     lastAppearancePreset: lastAppearancePreset ? String(lastAppearancePreset) : null,
+    lastReferenceImages: Array.isArray(lastReferenceImages) ? lastReferenceImages.slice(0, 8) : [],
     lastSuccessAt: lastSuccessAt ? new Date(lastSuccessAt).toISOString() : null,
+    lastFailedPrompt: lastFailedPrompt ? String(lastFailedPrompt) : null,
+    lastFailedAt: lastFailedAt ? new Date(lastFailedAt).toISOString() : null,
+    lastFailureReason: lastFailureReason ? String(lastFailureReason) : null,
+    createdAt: createdAt ? new Date(createdAt).toISOString() : updatedAt,
     lastChannelId: lastChannelId ? String(lastChannelId) : null,
     lastMessageId: lastMessageId ? String(lastMessageId) : null,
   };
@@ -124,7 +135,12 @@ async function markImageConversationActive({
   lastModel = null,
   lastStyle = null,
   lastAppearancePreset = null,
+  lastReferenceImages = [],
   lastSuccessAt = null,
+  lastFailedPrompt = null,
+  lastFailedAt = null,
+  lastFailureReason = null,
+  createdAt = null,
   lastChannelId = null,
   lastMessageId = null,
 } = {}) {
@@ -143,7 +159,12 @@ async function markImageConversationActive({
     lastModel,
     lastStyle,
     lastAppearancePreset,
+    lastReferenceImages,
     lastSuccessAt,
+    lastFailedPrompt,
+    lastFailedAt,
+    lastFailureReason,
+    createdAt,
     lastChannelId,
     lastMessageId,
   });
@@ -153,7 +174,12 @@ async function markImageConversationActive({
     expiresAt: state.expiresAt,
   });
 
+  latestImageConversationState = { ...state };
   return state;
+}
+
+function getLatestImageConversationState() {
+  return latestImageConversationState ? { ...latestImageConversationState } : null;
 }
 
 function getImageFollowupMaxBatchCount(config = {}) {
@@ -184,6 +210,14 @@ function isUsableLastImageState(state, { now = new Date(), windowMinutes = DEFAU
   if (!state || state.lastMediaType !== "image" || !state.lastPrompt) return false;
   if (channelId && state.lastChannelId && String(channelId) !== String(state.lastChannelId)) return false;
   const at = Date.parse(state.lastSuccessAt || state.lastGeneratedAt || state.updatedAt || "");
+  if (!Number.isFinite(at)) return false;
+  return now.getTime() - at <= Math.max(1, windowMinutes) * 60 * 1000;
+}
+
+function isUsableFailedImageState(state, { now = new Date(), windowMinutes = DEFAULT_IMAGE_FOLLOWUP_WINDOW_MINUTES, channelId = null } = {}) {
+  if (!state || !state.lastFailedPrompt) return false;
+  if (channelId && state.lastChannelId && String(channelId) !== String(state.lastChannelId)) return false;
+  const at = Date.parse(state.lastFailedAt || state.updatedAt || "");
   if (!Number.isFinite(at)) return false;
   return now.getTime() - at <= Math.max(1, windowMinutes) * 60 * 1000;
 }
@@ -225,8 +259,10 @@ module.exports = {
   shouldRefreshImageConversationFromAssistant,
   loadImageConversationState,
   markImageConversationActive,
+  getLatestImageConversationState,
   detectImageFollowupRequest,
   getImageFollowupMaxBatchCount,
   isUsableLastImageState,
+  isUsableFailedImageState,
   buildImageConversationContextSection,
 };

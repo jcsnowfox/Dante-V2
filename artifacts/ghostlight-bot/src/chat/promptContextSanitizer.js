@@ -5,6 +5,7 @@ const { detectContinuationIntent } = require("./continuationIntent");
 
 const ENGINEERING_AUDIT_RE = /\b(?:DEEP_SWEEP_REPORT|PROMPT_CONTEXT_BLOAT_AUDIT|PERFORMANCE_AUDIT_REPORT|CANONICAL_PIPELINE_PLAN|audit|verification script|root cause|files changed|logs showing before\/after|regression tests|outputCorruptionDetector|DEBUG_REPLY_PROMPT)\b/i;
 const MALFORMED_ASSISTANT_RE = /\b(?:printStats|contentassist|Dating\s+toolbox|NewReader|feed\s+tickets|resize\s+patterns|cartoon\s+elbows|Maritime\s+Boundaries|Passport\s+js|tool_call|function_call)\b/i;
+const CONTINUITY_STATE_LABEL_RE = /\b(?:Immediate Conversation Continuity|Image Conversation|Last Media Request|Pending Actions|Pending Action|Executive Follow-Through|Active Scene|Adult Scene|Tool Context|Unresolved Action)\b/i;
 
 function textOf(value) { return String(value?.content || value?.text || value?.summary || value || "").trim(); }
 function isPromptContaminated(text, { role = "" } = {}) {
@@ -53,6 +54,9 @@ function sanitizePromptContext({ contextSections = [], memories = [], recentHist
   let previousAssistantPreserved = false;
   let sanitizerRemovedPreviousAssistant = false;
   const cleanContextSections = contextSections.filter((section) => {
+    if (CONTINUITY_STATE_LABEL_RE.test(String(section?.label || ""))) {
+      return true;
+    }
     const bad = isPromptContaminated(section?.content || "");
     if (bad) dropped.contextSections.push(String(section?.label || "unknown"));
     return !bad;
