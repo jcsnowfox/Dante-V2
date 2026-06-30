@@ -30,6 +30,7 @@ const { resolveCompanionId } = require("../companion/resolveCompanionId");
 const API_PREFIX = "/api/second-life";
 const SL_PING_PATH = "/sl/ping";
 const SL_CHAT_PATH = "/sl/chat";
+const SL_DEBUG_PATH = "/sl/debug";
 const MAX_BODY_BYTES = 256 * 1024;
 
 function sendPlainText(res, statusCode, body) {
@@ -41,6 +42,40 @@ function sendJson(res, statusCode, payload) {
   const body = JSON.stringify(payload == null ? {} : payload);
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   res.end(body);
+}
+
+function readRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        reject(new Error("payload_too_large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", reject);
+  });
+}
+
+function parseRequestBody(raw, contentType = "") {
+  const text = String(raw || "").trim();
+  if (!text) return {};
+
+  if (String(contentType).includes("application/x-www-form-urlencoded")) {
+    return Object.fromEntries(new URLSearchParams(text));
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? parsed : { message: text };
+  } catch {
+    return { message: text, rawBody: text };
+  }
 }
 
 function readJsonBody(req) {
@@ -207,6 +242,64 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
   if (req.method === "GET" && url.pathname === SL_CHAT_PATH) {
     logger?.info?.("[second-life-api] GET /sl/chat health check hit.");
     sendPlainText(res, 200, "secondlife chat route alive - use POST");
+    return true;
+  }
+
+  if (req.method === "POST" && url.pathname === SL_DEBUG_PATH) {
+    try {
+      await readRequestBody(req);
+    } catch (error) {
+      sendPlainText(res, error.message === "payload_too_large" ? 413 : 400, error.message);
+      return true;
+    }
+    sendPlainText(res, 200, "secondlife post received");
+    return true;
+  }
+
+  if (req.method === "POST" && url.pathname === SL_CHAT_PATH) {
+    logger?.info?.("[sl-bridge] POST /sl/chat hit");
+
+    let body;
+    try {
+      const raw = await readRequestBody(req);
+      body = parseRequestBody(raw, req.headers["content-type"]);
+    } catch (error) {
+      sendPlainText(res, error.message === "payload_too_large" ? 413 : 400, error.message);
+      return true;
+    }
+
+    const secondLife = context.secondLife || null;
+    const adapter = context.secondLifeAdapter || null;
+    const config = context.config || {};
+    const companionId = (
+      body.companionId != null ? String(body.companionId)
+      : body.companion_slug != null ? String(body.companion_slug)
+      : ""
+    ).trim() || resolveCompanionId(config);
+
+    if (!secondLife || secondLife.available !== true || !adapter) {
+      sendPlainText(res, 503, "secondlife bridge unavailable");
+      return true;
+    }
+
+    const secret = extractSecret(req, body);
+    const authed = await secondLife.verifySharedSecret({ companionId, secret });
+    if (!authed) {
+      sendPlainText(res, 401, "unauthorized");
+      return true;
+    }
+
+    try {
+      const result = await adapter.handleEvent({
+        companionId,
+        event: normalizeEventFromBody({ ...body, type: body.type || body.eventType || "chat" }, "chat"),
+      });
+      const reply = result?.replyText || result?.text || result?.reply || "ok";
+      sendPlainText(res, 200, String(reply));
+    } catch (error) {
+      logger?.error?.("[sl-bridge] POST /sl/chat failed", { error: error.message });
+      sendPlainText(res, 500, "internal_error");
+    }
     return true;
   }
 
