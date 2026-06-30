@@ -1,9 +1,12 @@
-const IMAGE_CONVERSATION_TTL_MS = 15 * 60 * 1000;
+const IMAGE_CONVERSATION_TTL_MS = 30 * 60 * 1000;
+const DEFAULT_IMAGE_FOLLOWUP_WINDOW_MINUTES = 30;
+const DEFAULT_IMAGE_MAX_BATCH_COUNT = 4;
 
 const USER_IMAGE_REQUEST_PATTERNS = Object.freeze([
   /\b(?:make|create|generate|draw|paint|render|illustrate|do|send|give)\b[\s\S]{0,80}\b(?:image|pic|picture|portrait|photo|wallpaper|illustration|artwork|art|visual)\b/i,
   /\b(?:can|could|would|will)\s+you\b[\s\S]{0,80}\b(?:image|pic|picture|portrait|photo|illustration|art|visual)\b/i,
   /\b(?:another|new)\b[\s\S]{0,40}\b(?:image|pic|picture|portrait|photo|illustration|art)\b/i,
+  /\b(?:send\s+more|send\s+(?:me\s+)?(?:\d+|one|two|three|four|a\s+few)\s+more|(?:\d+|one|two|three|four)\s+more|make\s+another|do\s+another|do\s+one\s+more|one\s+more|another\s+photo|more\s+photos|give\s+me\s+a\s+few\s+more|regenerate\s+that)\b/i,
   /\bsurprise me\b/i,
 ]);
 
@@ -57,6 +60,15 @@ function buildImageConversationState({
   reason = "",
   status = "active",
   lastGeneratedAt = null,
+  lastMediaType = null,
+  lastPrompt = null,
+  lastProvider = null,
+  lastModel = null,
+  lastStyle = null,
+  lastAppearancePreset = null,
+  lastSuccessAt = null,
+  lastChannelId = null,
+  lastMessageId = null,
 } = {}) {
   const updatedAt = now.toISOString();
   const expiresAt = new Date(now.getTime() + IMAGE_CONVERSATION_TTL_MS).toISOString();
@@ -68,6 +80,15 @@ function buildImageConversationState({
     updatedAt,
     expiresAt,
     lastGeneratedAt: lastGeneratedAt ? new Date(lastGeneratedAt).toISOString() : null,
+    lastMediaType: lastMediaType ? String(lastMediaType) : null,
+    lastPrompt: lastPrompt ? String(lastPrompt) : null,
+    lastProvider: lastProvider ? String(lastProvider) : null,
+    lastModel: lastModel ? String(lastModel) : null,
+    lastStyle: lastStyle ? String(lastStyle) : null,
+    lastAppearancePreset: lastAppearancePreset ? String(lastAppearancePreset) : null,
+    lastSuccessAt: lastSuccessAt ? new Date(lastSuccessAt).toISOString() : null,
+    lastChannelId: lastChannelId ? String(lastChannelId) : null,
+    lastMessageId: lastMessageId ? String(lastMessageId) : null,
   };
 }
 
@@ -97,6 +118,15 @@ async function markImageConversationActive({
   reason = "",
   status = "active",
   lastGeneratedAt = null,
+  lastMediaType = null,
+  lastPrompt = null,
+  lastProvider = null,
+  lastModel = null,
+  lastStyle = null,
+  lastAppearancePreset = null,
+  lastSuccessAt = null,
+  lastChannelId = null,
+  lastMessageId = null,
 } = {}) {
   if (!cache?.set || !conversationId) {
     return null;
@@ -107,6 +137,15 @@ async function markImageConversationActive({
     reason,
     status,
     lastGeneratedAt,
+    lastMediaType,
+    lastPrompt,
+    lastProvider,
+    lastModel,
+    lastStyle,
+    lastAppearancePreset,
+    lastSuccessAt,
+    lastChannelId,
+    lastMessageId,
   });
 
   await cache.set(buildImageConversationCacheKey(conversationId), state, {
@@ -115,6 +154,38 @@ async function markImageConversationActive({
   });
 
   return state;
+}
+
+function getImageFollowupMaxBatchCount(config = {}) {
+  return Math.max(1, Number.parseInt(String(config.imageGeneration?.maxBatchCount || DEFAULT_IMAGE_MAX_BATCH_COUNT), 10) || DEFAULT_IMAGE_MAX_BATCH_COUNT);
+}
+
+function detectImageFollowupRequest(text = "", { maxCount = DEFAULT_IMAGE_MAX_BATCH_COUNT } = {}) {
+  const normalized = String(text || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (!normalized) return { detected: false, requestedCount: 0 };
+  const patterns = [
+    /\bsend more\b/, /\bsend (?:me )?(?:\d+|one|two|three|four|a few) more\b/, /\b(?:\d+|one|two|three|four) more\b/,
+    /\bmake another\b/, /\bdo another\b/, /\bdo one more\b/, /\bone more\b/, /\banother photo\b/, /\bmore photos\b/,
+    /\bgive me a few more\b/, /\bregenerate that\b/,
+  ];
+  const detected = patterns.some((pattern) => pattern.test(normalized));
+  if (!detected) return { detected: false, requestedCount: 0 };
+  let count = 1;
+  const digit = normalized.match(/\b([1-9][0-9]?)\s+more\b/);
+  if (digit) count = Number.parseInt(digit[1], 10);
+  else if (/\b(?:two|2)\s+more\b/.test(normalized)) count = 2;
+  else if (/\b(?:three|3)\s+more\b/.test(normalized)) count = 3;
+  else if (/\b(?:four|4)\s+more\b/.test(normalized)) count = 4;
+  else if (/\ba few more\b/.test(normalized)) count = 3;
+  return { detected: true, requestedCount: Math.min(Math.max(1, count), maxCount) };
+}
+
+function isUsableLastImageState(state, { now = new Date(), windowMinutes = DEFAULT_IMAGE_FOLLOWUP_WINDOW_MINUTES, channelId = null } = {}) {
+  if (!state || state.lastMediaType !== "image" || !state.lastPrompt) return false;
+  if (channelId && state.lastChannelId && String(channelId) !== String(state.lastChannelId)) return false;
+  const at = Date.parse(state.lastSuccessAt || state.lastGeneratedAt || state.updatedAt || "");
+  if (!Number.isFinite(at)) return false;
+  return now.getTime() - at <= Math.max(1, windowMinutes) * 60 * 1000;
 }
 
 function buildImageConversationContextSection(state) {
@@ -146,11 +217,16 @@ function buildImageConversationContextSection(state) {
 
 module.exports = {
   IMAGE_CONVERSATION_TTL_MS,
+  DEFAULT_IMAGE_FOLLOWUP_WINDOW_MINUTES,
+  DEFAULT_IMAGE_MAX_BATCH_COUNT,
   buildImageConversationCacheKey,
   buildImageConversationState,
   shouldSeedImageConversationFromUserText,
   shouldRefreshImageConversationFromAssistant,
   loadImageConversationState,
   markImageConversationActive,
+  detectImageFollowupRequest,
+  getImageFollowupMaxBatchCount,
+  isUsableLastImageState,
   buildImageConversationContextSection,
 };

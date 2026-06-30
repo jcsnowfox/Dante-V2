@@ -87,6 +87,23 @@ function inferAspectRatioFromPrompt(prompt, allowedAspectRatios = DEFAULT_ALLOWE
   return allowedAspectRatios[0] || "1:1";
 }
 
+function sanitizeImageRequestPayloadForLog(payload = {}) {
+  const images = Array.isArray(payload.images) ? payload.images : [];
+  return {
+    model: payload.model || null,
+    promptLength: String(payload.prompt || "").length,
+    aspectRatio: payload.aspect_ratio || null,
+    resolution: payload.resolution || null,
+    numberOfImages: payload.number_of_images || null,
+    outputFormat: payload.output_format || null,
+    referenceImageCount: images.length,
+    referenceImageRoles: images.map((image) => image?.role || null),
+    unsupportedOrNullFields: Object.entries(payload)
+      .filter(([, value]) => value === null || value === undefined || value === "")
+      .map(([key]) => key),
+  };
+}
+
 function buildImageRequest({ model, prompt, aspectRatio }) {
   return buildImageRequestWithReferences({
     model,
@@ -436,14 +453,7 @@ function createImageGenerationService({
         referenceImages,
       });
 
-      logger.debug?.("[images] Image request payload", {
-        model: requestPayload.model,
-        aspectRatio: requestPayload.aspect_ratio || null,
-        resolution: requestPayload.resolution || null,
-        numberOfImages: requestPayload.number_of_images,
-        outputFormat: requestPayload.output_format,
-        referenceImageCount: Array.isArray(requestPayload.images) ? requestPayload.images.length : 0,
-      });
+      logger.debug?.("[images] Image request payload", sanitizeImageRequestPayloadForLog(requestPayload));
       const requestHeaders = {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
@@ -479,14 +489,7 @@ function createImageGenerationService({
           });
           skippedReferenceImages = true;
 
-          logger.debug?.("[images] Image request payload retry", {
-            model: effectiveRequestPayload.model,
-            aspectRatio: effectiveRequestPayload.aspect_ratio || null,
-            resolution: effectiveRequestPayload.resolution || null,
-            numberOfImages: effectiveRequestPayload.number_of_images,
-            outputFormat: effectiveRequestPayload.output_format,
-            referenceImageCount: 0,
-          });
+          logger.debug?.("[images] Image request payload retry", sanitizeImageRequestPayloadForLog(effectiveRequestPayload));
 
           response = await fetchImpl(requestUrl, {
             method: "POST",
@@ -615,6 +618,7 @@ module.exports = {
   getAllowedAspectRatios,
   buildImageRequest,
   buildImageRequestWithReferences,
+  sanitizeImageRequestPayloadForLog,
   buildComposedPrompt,
   inferAspectRatioFromPrompt,
   summarizeImageResponse,

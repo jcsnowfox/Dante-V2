@@ -243,6 +243,10 @@ function buildReply({ mode, input, recentHistory, memories, modelOutput }) {
       reply.imageWarnings = imageWarnings;
     }
 
+    if (Array.isArray(modelOutput.mediaStates) && modelOutput.mediaStates.length) {
+      reply.mediaStates = modelOutput.mediaStates;
+    }
+
     return reply;
   }
 

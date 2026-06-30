@@ -592,6 +592,14 @@ function createImageGenerationTool({
           replyAttachment: {
             imageIds: [result.record.imageId],
             files: [result.file],
+            mediaState: {
+              lastMediaType: "image",
+              lastPrompt: prompt,
+              lastProvider: config.imageGeneration?.provider || "getimg",
+              lastModel: result.record.model,
+              lastStyle: stylePresets.map((preset) => preset.name).join(", "),
+              lastAppearancePreset: appearancePresets.map((preset) => preset.name).join(", "),
+            },
           },
           toolMessage: noAppearancePresetHint
             ? `The generated image is ready and will be attached automatically. Note: ${noAppearancePresetHint}`
