@@ -197,10 +197,27 @@ function summarizeImageResponse(response) {
     ...(Array.isArray(response?.data) ? response.data : []),
     ...(Array.isArray(response?.images) ? response.images : []),
   ];
+  const base64Candidate = findFirstString([
+    response?.base64,
+    response?.b64_json,
+    response?.image?.base64,
+    response?.image?.b64_json,
+    ...candidates.flatMap((item) => [item?.base64, item?.b64_json]),
+  ]);
+  const bytesCandidate = findFirstBytes([
+    response?.bytes,
+    response?.buffer,
+    response?.image?.bytes,
+    response?.image?.buffer,
+    ...candidates.flatMap((item) => [item?.bytes, item?.buffer]),
+  ]);
 
   return {
     imageCount: candidates.length,
-    hasDownloadUrl: Boolean(candidates.find((item) => typeof item?.url === "string" && item.url)),
+    hasDownloadUrl: Boolean(candidates.find((item) => typeof item?.url === "string" && item.url) || response?.url || response?.image?.url),
+    hasBase64: Boolean(base64Candidate),
+    hasBytes: Boolean(bytesCandidate),
+    topLevelKeys: response && typeof response === "object" ? Object.keys(response).slice(0, 20) : [],
   };
 }
 
@@ -248,6 +265,49 @@ function resolveSupportedResolution({ model, requestedResolution = "1K" }) {
 
 function resolveGetimgBaseUrl(config = {}) {
   return String(config.getimg?.baseURL || "https://api.getimg.ai").trim().replace(/\/+$/g, "");
+}
+
+function findFirstString(values = []) {
+  return values.find((value) => typeof value === "string" && value.trim()) || "";
+}
+
+function findFirstBytes(values = []) {
+  return values.find((value) => Buffer.isBuffer(value) || value instanceof Uint8Array || value instanceof ArrayBuffer || (Array.isArray(value) && value.every((item) => Number.isInteger(item) && item >= 0 && item <= 255))) || null;
+}
+
+function decodeBase64Image(value = "") {
+  const normalized = String(value || "").replace(/^data:image\/[a-z0-9.+-]+;base64,/i, "").trim();
+  return Buffer.from(normalized, "base64");
+}
+
+function extractGeneratedImageBytes(response) {
+  const candidates = [
+    ...(Array.isArray(response?.data) ? response.data : []),
+    ...(Array.isArray(response?.images) ? response.images : []),
+  ];
+  const bytes = findFirstBytes([
+    response?.bytes,
+    response?.buffer,
+    response?.image?.bytes,
+    response?.image?.buffer,
+    ...candidates.flatMap((item) => [item?.bytes, item?.buffer]),
+  ]);
+  if (!bytes) return null;
+  return Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+}
+
+function extractGeneratedImageBase64(response) {
+  const candidates = [
+    ...(Array.isArray(response?.data) ? response.data : []),
+    ...(Array.isArray(response?.images) ? response.images : []),
+  ];
+  return findFirstString([
+    response?.base64,
+    response?.b64_json,
+    response?.image?.base64,
+    response?.image?.b64_json,
+    ...candidates.flatMap((item) => [item?.base64, item?.b64_json]),
+  ]);
 }
 
 function extractGeneratedImageUrl(response) {
@@ -513,24 +573,54 @@ function createImageGenerationService({
       }
 
       const responsePayload = await response.json();
+      const responseSummary = summarizeImageResponse(responsePayload);
 
-      logger.debug?.("[images] Image generation response received", {
-        model,
-        ...summarizeImageResponse(responsePayload),
+      logger.info?.("[images] Image generation provider response", {
+        provider_called: true,
+        provider_status: response.status || 200,
+        provider_response_shape: responseSummary,
+        image_url_present: responseSummary.hasDownloadUrl,
+        image_base64_present: responseSummary.hasBase64,
       });
 
-      const generatedImageUrl = extractGeneratedImageUrl(responsePayload);
-      const downloadResponse = await fetchImpl(generatedImageUrl);
+      const directBytes = extractGeneratedImageBytes(responsePayload);
+      const base64Payload = extractGeneratedImageBase64(responsePayload);
+      let downloadResponse = null;
+      let imageBuffer = null;
 
-      if (!downloadResponse.ok) {
-        throw new Error(`Generated image download failed with status ${downloadResponse.status}.`);
+      if (directBytes) {
+        imageBuffer = directBytes;
+      } else if (base64Payload) {
+        imageBuffer = decodeBase64Image(base64Payload);
+      } else {
+        const generatedImageUrl = extractGeneratedImageUrl(responsePayload);
+        logger.info?.("[images] Generated image download started", {
+          image_download_started: true,
+          image_url_present: Boolean(generatedImageUrl),
+        });
+        downloadResponse = await fetchImpl(generatedImageUrl);
+
+        if (!downloadResponse.ok) {
+          throw new Error(`Generated image download failed with status ${downloadResponse.status}.`);
+        }
+
+        const arrayBuffer = await downloadResponse.arrayBuffer();
+        imageBuffer = Buffer.from(arrayBuffer);
+        logger.info?.("[images] Generated image download completed", {
+          image_download_success: true,
+          image_bytes_length: imageBuffer.length,
+        });
       }
 
-      const arrayBuffer = await downloadResponse.arrayBuffer();
       const imagePayload = {
-        buffer: Buffer.from(arrayBuffer),
+        buffer: imageBuffer,
         mimeType: resolveMimeTypeFromResponse(responsePayload, downloadResponse),
       };
+      logger.info?.("[images] Generated image bytes normalized", {
+        image_bytes_length: imagePayload.buffer.length,
+        image_base64_present: Boolean(base64Payload),
+        image_download_success: Boolean(downloadResponse?.ok),
+      });
       const imageId = context.imageId || crypto.randomUUID();
       const storageKey = buildStorageKey({
         prefix: config.imageGeneration?.bucketPrefix,
@@ -545,16 +635,29 @@ function createImageGenerationService({
         mimeType: THUMBNAIL_MIME_TYPE,
       });
 
-      await uploadBufferToBucket({
-        config,
-        key: storageKey,
-        body: imagePayload.buffer,
-        contentType: imagePayload.mimeType,
-        fetchImpl,
-      });
+      let storageSaved = false;
+      let storageError = null;
+      try {
+        await uploadBufferToBucket({
+          config,
+          key: storageKey,
+          body: imagePayload.buffer,
+          contentType: imagePayload.mimeType,
+          fetchImpl,
+        });
+        storageSaved = true;
+      } catch (error) {
+        storageError = error;
+        logger.warn?.("[images] Image storage upload failed; returning Discord attachment anyway", {
+          imageId,
+          gallery_save_success: false,
+          error: error?.message || String(error),
+        });
+      }
 
       let savedThumbnailStorageKey = null;
       try {
+        if (!storageSaved) throw storageError || new Error("Original image storage failed.");
         const thumbnailBuffer = await createThumbnail(imagePayload.buffer);
         await uploadBufferToBucket({
           config,
@@ -571,7 +674,19 @@ function createImageGenerationService({
         });
       }
 
-      const record = await generatedImages.recordImage({
+      let record = {
+        imageId,
+        model,
+        aspectRatio: selectedAspectRatio,
+        mimeType: imagePayload.mimeType,
+        fileSizeBytes: imagePayload.buffer.length,
+        storageKey: storageSaved ? storageKey : "",
+        thumbnailStorageKey: savedThumbnailStorageKey,
+        status: storageSaved ? "completed" : "attachment_only",
+      };
+      try {
+        if (!storageSaved) throw storageError || new Error("Original image storage failed.");
+        record = await generatedImages.recordImage({
         imageId,
         userScope: context.userScope,
         sourceSurface: context.sourceSurface || "chat",
@@ -591,6 +706,13 @@ function createImageGenerationService({
       }, {
         userScope: context.userScope,
       });
+      } catch (error) {
+        logger.warn?.("[images] Gallery save failed; returning Discord attachment anyway", {
+          imageId,
+          gallery_save_success: false,
+          error: error?.message || String(error),
+        });
+      }
 
       return {
         image: {
@@ -608,6 +730,7 @@ function createImageGenerationService({
         record,
         composedPrompt,
         skippedReferenceImages,
+        diagnostics: { providerResponseSummary: responseSummary, storageSaved, gallerySaveSuccess: Boolean(record?.storageKey) },
       };
     },
   };
@@ -618,6 +741,10 @@ module.exports = {
   getAllowedAspectRatios,
   buildImageRequest,
   buildImageRequestWithReferences,
+  summarizeImageResponse,
+  extractGeneratedImageUrl,
+  extractGeneratedImageBase64,
+  extractGeneratedImageBytes,
   sanitizeImageRequestPayloadForLog,
   buildComposedPrompt,
   inferAspectRatioFromPrompt,

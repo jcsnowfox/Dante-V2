@@ -285,3 +285,67 @@ test('image provider failure sends clear fallback without pretending attachment'
   assert.equal(reply.files.length, 0);
   assert.match(reply.content, /image generator failed/i);
 });
+
+test('casual pic request triggers image generation', async () => {
+  const reply = await fulfillImageIntentRequest({
+    replyPayload: { content: 'I’ll send you one.', files: [], generatedImageIds: [] },
+    message: { content: 'Mmmmm I want a pic', channelId: 'c1', id: 'm1' },
+    config: { imageGeneration: { model: 'test-image-model' }, memory: {} },
+    logger: {},
+    generatedImages: {},
+    conversationId: 'conv1',
+    imageGenerationServiceFactory: () => ({
+      generate: async ({ prompt }) => ({ file: { attachment: Buffer.from(prompt || 'img'), name: 'image.png' }, record: { imageId: 'casual-img', model: 'test-image-model' } }),
+    }),
+  });
+  assert.equal(reply.files.length, 1);
+  assert.deepEqual(reply.generatedImageIds, ['casual-img']);
+});
+
+test('literal image_generate fake tool call is consumed, parsed, and not posted', async () => {
+  let generatedArgs = null;
+  const raw = 'Here.\n[Calling image_generate tool with: prompt=cinematic photo of us in rain, aspect_ratio=9:16, appearance_presets=Dante,Jenna, style_preset=noir, image_type=photo]';
+  const request = buildImageIntentRequest({ text: raw, userText: 'send me a pic' });
+  assert.equal(request.detected, true);
+  assert.equal(request.fakeToolCallDetected, true);
+  assert.equal(request.prompt, 'cinematic photo of us in rain');
+  assert.deepEqual(request.params, { aspectRatio: '9:16', imageType: 'photo', stylePreset: 'noir', appearancePresets: ['Dante', 'Jenna'] });
+
+  const reply = await fulfillImageIntentRequest({
+    replyPayload: { content: raw, files: [], generatedImageIds: [] },
+    message: { content: 'send me a pic', channelId: 'c1', id: 'm1' },
+    config: { imageGeneration: { model: 'test-image-model' }, memory: {} },
+    logger: {},
+    generatedImages: {},
+    conversationId: 'conv1',
+    imageGenerationServiceFactory: () => ({
+      generate: async (args) => {
+        generatedArgs = args;
+        return { file: { attachment: Buffer.from('img'), name: 'image.png' }, record: { imageId: 'literal-img', model: 'test-image-model' } };
+      },
+    }),
+  });
+  assert.equal(reply.files.length, 1);
+  assert.deepEqual(reply.generatedImageIds, ['literal-img']);
+  assert.equal(generatedArgs.prompt, 'cinematic photo of us in rain');
+  assert.equal(generatedArgs.aspectRatio, '9:16');
+  assert.equal(generatedArgs.stylePreset, 'noir');
+  assert.deepEqual(generatedArgs.appearancePresets, ['Dante', 'Jenna']);
+  assert.doesNotMatch(reply.content, /Calling image_generate|prompt=|tool call|image_generate tool/i);
+});
+
+test('fake tool-call provider failure sends clean error with no raw tool text', async () => {
+  const raw = '[Calling image_generate tool with: prompt=moonlit portrait, aspect_ratio=1:1]';
+  const reply = await fulfillImageIntentRequest({
+    replyPayload: { content: raw, files: [], generatedImageIds: [] },
+    message: { content: 'send me one', channelId: 'c1', id: 'm1' },
+    config: { imageGeneration: { model: 'test-image-model' }, memory: {} },
+    logger: {},
+    generatedImages: {},
+    conversationId: 'conv1',
+    imageGenerationServiceFactory: () => ({ generate: async () => { throw new Error('provider down'); } }),
+  });
+  assert.equal(reply.files.length, 0);
+  assert.match(reply.content, /image generator failed/i);
+  assert.doesNotMatch(reply.content, /Calling image_generate|prompt=|tool call|image_generate tool/i);
+});
