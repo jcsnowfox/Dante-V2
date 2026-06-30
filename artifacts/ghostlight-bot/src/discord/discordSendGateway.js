@@ -39,10 +39,41 @@ async function sendDiscordMessage({
   content = null,
   logger = null,
   label = "discord-send-gateway",
+  autonomousSource = "",
+  actionId = null,
+  scheduleId = null,
+  actionName = "",
+  actionType = "",
+  promptSource = "",
+  toolsAllowed = false,
+  toolsUsed = [],
+  quietHours = false,
+  cooldownApplied = false,
+  idempotencyKey = "",
   throwOnError = false,
 } = {}) {
   const targetId = String(channelId || channel?.id || "").trim();
   const messagePayload = normalizePayload(content !== null ? { content } : payload);
+  const source = String(autonomousSource || label || "").trim();
+  const attribution = {
+    autonomous_source: source,
+    actionId,
+    scheduleId,
+    actionName: String(actionName || label || ""),
+    actionType: String(actionType || ""),
+    targetChannelId: targetId || null,
+    sendMethod: "discordSendGateway",
+    promptSource: String(promptSource || ""),
+    toolsAllowed: Boolean(toolsAllowed),
+    toolsUsed: Array.isArray(toolsUsed) ? toolsUsed : [],
+    quietHours: Boolean(quietHours),
+    cooldownApplied: Boolean(cooldownApplied),
+    idempotencyKey: String(idempotencyKey || ""),
+  };
+  if (!source) {
+    logger?.warn?.("[discord-send-gateway] autonomous send blocked: missing source", attribution);
+    return { skipped: true, reason: "missing_autonomous_source", channelId: targetId || null };
+  }
   if (!channel && client && targetId) {
     channel = await client.channels.fetch(targetId).catch((error) => {
       logger?.warn?.(`[${label}] channel fetch failed`, { channelId: targetId, error: sanitizeLogValue(error?.message) });
@@ -52,11 +83,13 @@ async function sendDiscordMessage({
   if (!channel || !isTextChannel(channel)) return { skipped: true, reason: "not_text_channel", channelId: targetId || null };
 
   try {
+    logger?.info?.(`[${label}] autonomous send requested`, attribution);
     const sent = await channel.send(messagePayload);
+    logger?.info?.(`[${label}] autonomous send succeeded`, { ...attribution, postedMessageId: sent?.id || null, threadId: sent?.thread?.id || null });
     return { sent: true, sentMessage: sent, messageId: sent?.id || null, channelId: sent?.channelId || targetId || null };
   } catch (error) {
     const reason = classifyDiscordSendError(error);
-    logger?.warn?.(`[${label}] send failed`, { channelId: targetId || null, reason, error: sanitizeLogValue(error?.message) });
+    logger?.warn?.(`[${label}] send failed`, { ...attribution, reason, error: sanitizeLogValue(error?.message) });
     if (throwOnError) throw error;
     return { skipped: true, reason, error: sanitizeLogValue(error?.message), channelId: targetId || null };
   }

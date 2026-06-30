@@ -14,6 +14,8 @@ const VOICE_NOTE_TRIGGERS = [
 ];
 const FAKE_VOICE_ACTION_RE = /^\s*[(*_\[]?\s*(?:sends?|sent|sending)\s+(?:a\s+)?(?:voice\s+note|voice\s+message|voice\s+memo|audio)(?:\s+file)?\s*[)*_\]]?\s*$/i;
 const IMAGE_PROMPT_RE = /(?:^|\n)\s*(?:image\s*prompt|prompt\s*for\s*image|dall[- ]?e\s*prompt|midjourney\s*prompt)\s*:[^\n]*/gi;
+const FAKE_TOOL_CALL_RE = /\[\s*Calling\s+[^:\]]+\s+tool\s+with\s*:[\s\S]*?\]|\b(?:tool_call|function_call)\b[\s\S]*$/gi;
+let lastVoiceNoteDiagnostics = null;
 
 function getVoiceNoteTriggerPhrase(text) {
   const value = String(text || "");
@@ -65,6 +67,10 @@ function buildVoiceNoteScriptDetails({ userText = "", replyText = "" } = {}) {
     strippedStageDirections = true;
     return " ";
   });
+  text = text.replace(FAKE_TOOL_CALL_RE, () => {
+    strippedStageDirections = true;
+    return " ";
+  });
   text = text.replace(/\([^)]*\b(?:leans?|runs?|smiles?|grins?|laughs?|sighs?|image prompt|prompt:)\b[^)]*\)/gi, () => { strippedStageDirections = true; return " "; });
   text = text.replace(/\[[^\]]*\b(?:leans?|runs?|smiles?|grins?|laughs?|sighs?|image prompt|prompt:)\b[^\]]*\]/gi, () => { strippedStageDirections = true; return " "; });
   text = text.replace(/(^|\s)\*[^*]*\b(?:leans?|runs?|smiles?|grins?|laughs?|sighs?|looks?|reaches?)\b[^*]*\*(?=\s|$)/gi, () => { strippedStageDirections = true; return " "; });
@@ -75,6 +81,12 @@ function buildVoiceNoteScriptDetails({ userText = "", replyText = "" } = {}) {
   text = normalizeFirstPerson(text).replace(/\s+/g, " ").trim();
   const requestOnly = VOICE_NOTE_TRIGGERS.reduce((acc, trigger) => acc.replace(trigger.re, " "), text).replace(/\s+/g, " ").trim();
   const script = (requestOnly || "I’m here. Listen close—this one is for you.").slice(0, 700);
+  lastVoiceNoteDiagnostics = {
+    spokenScriptLength: script.length,
+    strippedStageDirections,
+    rawLength: raw.length,
+    updatedAt: new Date().toISOString(),
+  };
   return { spokenScript: script, strippedStageDirections };
 }
 
@@ -82,4 +94,6 @@ function buildVoiceNoteScript(input) {
   return buildVoiceNoteScriptDetails(input).spokenScript;
 }
 
-module.exports = { detectVoiceNoteRequest, getVoiceNoteTriggerPhrase, isFakeVoiceNoteAction, stripFakeVoiceNoteAction, buildVoiceNoteScript, buildVoiceNoteScriptDetails };
+function getLastVoiceNoteDiagnostics() { return lastVoiceNoteDiagnostics ? { ...lastVoiceNoteDiagnostics } : null; }
+
+module.exports = { detectVoiceNoteRequest, getVoiceNoteTriggerPhrase, isFakeVoiceNoteAction, stripFakeVoiceNoteAction, buildVoiceNoteScript, buildVoiceNoteScriptDetails, getLastVoiceNoteDiagnostics };

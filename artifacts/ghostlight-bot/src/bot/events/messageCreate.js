@@ -23,10 +23,13 @@ const { buildImageIntentRequest } = require("../../chat/imageIntent");
 const {
   detectImageFollowupRequest,
   getImageFollowupMaxBatchCount,
+  isUsableFailedImageState,
   isUsableLastImageState,
   loadImageConversationState,
   markImageConversationActive,
 } = require("../../chat/imageConversationState");
+const { resolveUserCommand, stripFakeToolLeaks, rewriteUnsafePromises } = require("../../orchestration/commandResolver");
+const { createPendingAction } = require("../../orchestration/pendingActionStore");
 const { getVoiceNoteTriggerPhrase, isFakeVoiceNoteAction, stripFakeVoiceNoteAction, buildVoiceNoteScriptDetails } = require("../../chat/voiceNoteIntent");
 const { replaceCustomEmojiLabelsForDiscord } = require("../../reactions/customEmojiPalette");
 const { isDevMode, isLogRequest } = require("../../developer/devUtils");
@@ -309,17 +312,33 @@ function stripPrematureImageSuccessText(text = "") {
 // handle cross-process dedup; this handles within-process dedup at zero cost.
 const IN_FLIGHT_MESSAGE_IDS = new Set();
 
-async function fulfillImageIntentRequest({ replyPayload, message, config, logger, generatedImages, conversationId, cache = null, imageGenerationServiceFactory = createImageGenerationService }) {
+async function fulfillImageIntentRequest({ replyPayload, message, config, logger, generatedImages, conversationId, cache = null, preResolvedCommand = null, imageGenerationServiceFactory = createImageGenerationService }) {
   const maxBatchCount = getImageFollowupMaxBatchCount(config);
-  const followup = detectImageFollowupRequest(message.content || "", { maxCount: maxBatchCount });
-  const lastMediaState = followup.detected
+  const preIntent = preResolvedCommand?.intents?.find?.((intent) => ["image_request", "image_followup", "image_retry", "media_retry", "fake_tool_call"].includes(intent.type));
+  const followup = preIntent?.type === "image_followup"
+    ? { detected: true, requestedCount: preIntent.requestedCount || 1 }
+    : detectImageFollowupRequest(message.content || "", { maxCount: maxBatchCount });
+  const isRetry = ["image_retry", "media_retry"].includes(preIntent?.type) || /\b(?:try again|retry|regenerate|run it again)\b/i.test(message.content || "");
+  const lastMediaState = (followup.detected || isRetry)
     ? await loadImageConversationState({ cache, conversationId, userScope: config.memory?.userScope })
     : null;
   const lastMediaFound = isUsableLastImageState(lastMediaState, {
     windowMinutes: config.imageGeneration?.followupWindowMinutes || 30,
     channelId: message.channelId,
   });
-  const mediaRequest = followup.detected && lastMediaFound
+  const failedMediaFound = isUsableFailedImageState(lastMediaState, {
+    windowMinutes: config.imageGeneration?.followupWindowMinutes || 30,
+    channelId: message.channelId,
+  });
+  const mediaRequest = isRetry && failedMediaFound
+    ? {
+      detected: true,
+      prompt: lastMediaState.lastFailedPrompt,
+      cleanedText: "",
+      triggerSource: "media_retry",
+      count: 1,
+    }
+    : followup.detected && lastMediaFound
     ? {
       detected: true,
       prompt: lastMediaState.lastPrompt,
@@ -327,7 +346,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
       triggerSource: "media_followup",
       count: followup.requestedCount,
     }
-    : replyPayload.mediaRequest || buildImageIntentRequest({
+    : preIntent?.mediaRequest || replyPayload.mediaRequest || buildImageIntentRequest({
       text: replyPayload.content || "",
       userText: message.content || "",
     });
@@ -364,9 +383,11 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     parsed_tool_prompt_length: prompt.length,
     parsed_tool_params: parsedToolParams,
     media_followup_detected: followup.detected,
+    media_retry_detected: isRetry,
     requested_image_count: requestedCount,
     reused_prompt: followup.detected && lastMediaFound,
     last_media_found: lastMediaFound,
+    pending_media_found: Boolean(lastMediaFound || failedMediaFound),
     image_trigger_source: mediaRequest?.triggerSource || null,
     extracted_prompt_length: prompt.length,
     image_provider: provider,
@@ -381,6 +402,15 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     total_failed: 0,
     failure_reasons: [],
   });
+
+  if (isRetry && !failedMediaFound) {
+    return {
+      ...replyPayload,
+      content: "I don’t have a failed image request to retry yet.",
+      files: [],
+      generatedImageIds: [],
+    };
+  }
 
   if (followup.detected && !lastMediaFound) {
     return {
@@ -516,6 +546,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
       lastModel,
       lastStyle: lastMediaState?.lastStyle || null,
       lastAppearancePreset: lastMediaState?.lastAppearancePreset || null,
+      lastReferenceImages: lastMediaState?.lastReferenceImages || [],
       lastSuccessAt: new Date(),
       lastChannelId: message.channelId,
       lastMessageId: message.id,
@@ -527,6 +558,21 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
       generatedImageIds: [...replyPayload.generatedImageIds, ...imageIds],
     };
   }
+
+  await markImageConversationActive({
+    cache,
+    conversationId,
+    userScope: config.memory?.userScope,
+    reason: "failed_image",
+    status: "failed_image",
+    lastMediaType: "image",
+    lastPrompt: lastMediaState?.lastPrompt || null,
+    lastFailedPrompt: prompt,
+    lastFailedAt: new Date(),
+    lastFailureReason: failureReasons.join("; ") || "provider_failed",
+    lastChannelId: message.channelId,
+    lastMessageId: message.id,
+  });
 
   return {
     ...replyPayload,
@@ -613,6 +659,57 @@ async function fulfillVoiceNoteRequest({ replyPayload, message, config, logger, 
       generatedAudioIds: [],
     };
   }
+}
+
+async function sendResolvedReplyPayload({ message, logger, generatedImages, config, conversationId, replyPayload }) {
+  const content = replaceCustomEmojiLabelsForDiscord(
+    String(replyPayload.content || "").trim(),
+    config.chat?.customReactionEmojis || [],
+  );
+  const chunks = splitTextIntoChunks(content);
+  let sentReply = null;
+
+  try {
+    if (!chunks.length) {
+      logger.info?.("[image-intent] Discord send called", { discord_send_called_with_files_count: replyPayload.files.length, media_execution_stage: "discord_send_called" });
+      updateImageRequestDiagnostics({ media_execution_stage: "discord_send_called", discordUploadSummary: { discord_send_called_with_files_count: replyPayload.files.length }, event: "discord_send_called" });
+      sentReply = await message.channel.send({
+        files: replyPayload.files,
+        flags: replyPayload.suppressEmbeds ? ["SuppressEmbeds"] : undefined,
+      });
+    } else {
+      for (const [index, chunk] of chunks.entries()) {
+        const isLastChunk = index === chunks.length - 1;
+        logger.info?.("[image-intent] Discord send called", { discord_send_called_with_files_count: isLastChunk ? replyPayload.files.length : 0, media_execution_stage: "discord_send_called" });
+        updateImageRequestDiagnostics({ media_execution_stage: "discord_send_called", discordUploadSummary: { discord_send_called_with_files_count: isLastChunk ? replyPayload.files.length : 0 }, event: "discord_send_called" });
+        sentReply = await message.channel.send({
+          content: chunk,
+          files: isLastChunk ? replyPayload.files : undefined,
+          flags: replyPayload.suppressEmbeds ? ["SuppressEmbeds"] : undefined,
+        });
+      }
+    }
+  } catch (error) {
+    if (replyPayload.generatedImageIds?.length || replyPayload.files?.length) {
+      updateImageRequestDiagnostics({ status: "discord_send_failed", failureStage: "discord_upload", media_execution_stage: "discord_send_failed", discordUploadSummary: { discord_send_success: false, error: error.message }, event: "discord_send_failed" });
+      sentReply = await message.channel.send({ content: "The image generated, but Discord upload failed." });
+      return sentReply;
+    }
+    throw error;
+  }
+
+  if (replyPayload.generatedImageIds?.length && replyPayload.files?.length) {
+    logger.info("[image-intent] discord image attachment sent", {
+      generatedImageIds: replyPayload.generatedImageIds,
+      discordMessageId: sentReply?.id,
+      discord_image_attachment_sent: true,
+      discord_send_success: true,
+      conversationId,
+    });
+    updateImageRequestDiagnostics({ status: "discord_send_success", media_execution_stage: "discord_send_success", discordUploadSummary: { discord_send_success: true, discord_message_id: sentReply?.id, discord_send_called_with_files_count: replyPayload.files.length }, event: "discord_send_success" });
+  }
+
+  return sentReply;
 }
 
 function createMessageCreateHandler({ config, logger, chatPipeline, companion, conversations, channelModes, generatedImages, generatedAudio, cache, reactionContext, settingsStore = null, norwegianLearning = null, conversationFollowupStore = null, timedNotesStore = null }) {
@@ -943,6 +1040,67 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
         });
       }, 8000);
 
+      const preResolvedCommand = resolveUserCommand({
+        text: message.content || "",
+        maxImageCount: getImageFollowupMaxBatchCount(config),
+      });
+      logger.info?.("[orchestration] pre-LLM command resolver", {
+        detected: preResolvedCommand.detected,
+        intents: preResolvedCommand.intents.map((intent) => intent.type),
+        messageId: message.id,
+        channelId: message.channelId,
+      });
+
+      for (const intent of preResolvedCommand.intents) {
+        if (["promise_follow_through_request", "dashboard_call_action"].includes(intent.type)) {
+          const pendingAction = createPendingAction({
+            userId: message.author?.id,
+            companionId: config.chat?.promptBlocks?.personaName || "dante",
+            channelId: message.channelId,
+            sourceMessageId: message.id,
+            actionType: intent.actionType || "generic_follow_up",
+            payload: intent.payload || { text: message.content || "" },
+          });
+          logger.info?.("[orchestration] pending action created", {
+            pending_action_detected: true,
+            pending_action_type: pendingAction.actionType,
+            pending_action_created: true,
+            pending_action_status: pendingAction.status,
+            actionId: pendingAction.id,
+            failure_reason: null,
+          });
+        }
+      }
+
+      const providerCanRunBeforeLlm = config.imageGeneration?.enabled === true
+        || Boolean(config.getimg?.apiKey || config.openai?.apiKey || config.imageGeneration?.apiKey);
+      const shouldExecuteMediaBeforeLlm = providerCanRunBeforeLlm
+        && preResolvedCommand.intents.some((intent) => ["image_request", "image_followup", "image_retry", "media_retry", "fake_tool_call"].includes(intent.type));
+      if (shouldExecuteMediaBeforeLlm) {
+        const directMediaPayload = await fulfillImageIntentRequest({
+          replyPayload: {
+            content: "",
+            suppressEmbeds: false,
+            files: [],
+            generatedImageIds: [],
+            generatedAudioIds: [],
+            imageWarnings: [],
+            mediaStates: [],
+          },
+          message,
+          config,
+          logger,
+          generatedImages,
+          conversationId,
+          cache,
+          preResolvedCommand,
+        });
+        if (directMediaPayload.files.length || directMediaPayload.generatedImageIds.length || directMediaPayload.content) {
+          await sendResolvedReplyPayload({ message, logger, generatedImages, config, conversationId, replyPayload: directMediaPayload });
+          return;
+        }
+      }
+
       // Route through the shared companion brain entry point. The Discord
       // adapter carries the raw message/mode in metadata and the processor
       // returns the pipeline reply untouched, so the payload below is identical.
@@ -993,7 +1151,8 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           mediaStates: Array.isArray(reply.mediaStates) ? reply.mediaStates : [],
           internalThought: typeof reply.internalThought === "string" ? reply.internalThought.trim() : "",
         };
-      const imageRoutedReplyPayload = await fulfillImageIntentRequest({ replyPayload, message, config, logger, generatedImages, conversationId, cache });
+      replyPayload.content = rewriteUnsafePromises(stripFakeToolLeaks(replyPayload.content));
+      const imageRoutedReplyPayload = await fulfillImageIntentRequest({ replyPayload, message, config, logger, generatedImages, conversationId, cache, preResolvedCommand });
       Object.assign(replyPayload, imageRoutedReplyPayload);
       const routedReplyPayload = await fulfillVoiceNoteRequest({ replyPayload, message, config, logger, generatedAudio, conversationId });
       Object.assign(replyPayload, routedReplyPayload);
@@ -1371,4 +1530,5 @@ module.exports = {
   splitTextIntoChunks,
   fulfillImageIntentRequest,
   fulfillVoiceNoteRequest,
+  sendResolvedReplyPayload,
 };

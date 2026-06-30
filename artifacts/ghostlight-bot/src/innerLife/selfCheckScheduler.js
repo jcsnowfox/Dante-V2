@@ -163,7 +163,7 @@ async function buildDiagnosticSnapshot({ config = {}, storeWrapper = null, lifeR
     ...(repairPersistenceEngine?.getStatus ? repairPersistenceEngine.getStatus(activeConsequences) : {}),
   };
   const relationshipLearning = relationshipLearningRuntime?.getStatus
-    ? await relationshipLearningRuntime.getStatus({ companionId, customerId }).catch(() => null)
+    ? await Promise.resolve(relationshipLearningRuntime.getStatus({ companionId, customerId })).catch(() => null)
     : lifeStatus?.relationshipLearning || null;
   if (relationshipLearning && relationshipLearningRuntime?.behaviorGuidance?.getGuidance) {
     relationshipLearning.guidance = await relationshipLearningRuntime.behaviorGuidance.getGuidance({ companionId, customerId }).catch(() => []);
