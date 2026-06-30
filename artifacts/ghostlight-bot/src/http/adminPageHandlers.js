@@ -47,6 +47,15 @@ const { renderCanonicalPipelinePage, renderEngineeringPage } = require("./render
 const { renderAiDiagnosticsPage } = require("./renderAdminPages/aiDiagnosticsPage");
 const { getCanonicalPipelineSnapshot } = require("../companion/canonicalPipelineDiagnostics");
 
+function safeStoreList(callable, fallback = []) {
+  try {
+    const value = typeof callable === "function" ? callable() : fallback;
+    return Promise.resolve(value).catch(() => fallback);
+  } catch (_error) {
+    return Promise.resolve(fallback);
+  }
+}
+
 async function handleAdminPageRequest({
   req = null,
   url,
@@ -453,20 +462,20 @@ async function handleAdminPageRequest({
     const userScope = innerContext.config?.memory?.userScope || "user";
     const companionId = innerContext.config?.memory?.companionId || innerContext.config?.companion?.id || "Dante";
     const [prefs, events, followUps, channels, weatherHistory, residues, presenceList, boundaries, doNotAskRules, energyObservations, recurringThemes, memoryConfidenceProfiles, selfReflections, proactivePresenceRules] = await Promise.all([
-      innerContext.microPreferenceStore?.listPreferences?.({ user_scope: userScope, companion_id: companionId, limit: 100 }).catch(() => []) || [],
-      innerContext.personalTimelineStore?.listEvents?.({ user_scope: userScope, companion_id: companionId, limit: 100 }).catch(() => []) || [],
-      innerContext.followUpStore?.listFollowUps?.({ user_scope: userScope, companion_id: companionId, limit: 100 }).catch(() => []) || [],
-      innerContext.channelAwarenessStore?.listChannels?.({ user_scope: userScope, companion_id: companionId, limit: 200 }).catch(() => []) || [],
-      innerContext.innerWeatherStore?.listHistory?.({ user_scope: userScope, companion_id: companionId, limit: 50 }).catch(() => []) || [],
-      innerContext.attentionResidueStore?.listAll?.({ user_scope: userScope, companion_id: companionId, limit: 50 }).catch(() => []) || [],
-      innerContext.interactionPresenceStore?.listPresence?.({ user_scope: userScope, companion_id: companionId, limit: 50 }).catch(() => []) || [],
-      innerContext.boundaryConsentStore?.listBoundaries?.({ user_scope: userScope, companion_id: companionId, include_adult: true, limit: 100 }).catch(() => []) || [],
-      innerContext.doNotAskStore?.listRules?.({ user_scope: userScope, companion_id: companionId, include_adult: true, limit: 100 }).catch(() => []) || [],
-      innerContext.userEnergyStore?.listObservations?.({ user_scope: userScope, companion_id: companionId, include_adult: true, limit: 50 }).catch(() => []) || [],
-      innerContext.recurringThemeStore?.listThemes?.({ user_scope: userScope, companion_id: companionId, include_adult: true, limit: 50 }).catch(() => []) || [],
-      innerContext.memoryConfidenceStore?.listProfiles?.({ user_scope: userScope, companion_id: companionId, include_adult: true, limit: 50 }).catch(() => []) || [],
-      innerContext.selfReflectionStore?.listReflections?.({ user_scope: userScope, companion_id: companionId, include_adult: true, limit: 50 }).catch(() => []) || [],
-      innerContext.proactivePresenceStore?.listRules?.({ user_scope: userScope, companion_id: companionId, active_only: false, include_adult: true, limit: 50 }).catch(() => []) || [],
+      safeStoreList(() => innerContext.microPreferenceStore?.listPreferences?.({ user_scope: userScope, companion_id: companionId, limit: 100 })),
+      safeStoreList(() => innerContext.personalTimelineStore?.listEvents?.({ user_scope: userScope, companion_id: companionId, limit: 100 })),
+      safeStoreList(() => innerContext.followUpStore?.listFollowUps?.({ user_scope: userScope, companion_id: companionId, limit: 100 })),
+      safeStoreList(() => innerContext.channelAwarenessStore?.listChannels?.({ user_scope: userScope, companion_id: companionId, limit: 200 })),
+      safeStoreList(() => innerContext.innerWeatherStore?.listHistory?.({ user_scope: userScope, companion_id: companionId, limit: 50 })),
+      safeStoreList(() => innerContext.attentionResidueStore?.listAll?.({ user_scope: userScope, companion_id: companionId, limit: 50 })),
+      safeStoreList(() => innerContext.interactionPresenceStore?.listPresence?.({ user_scope: userScope, companion_id: companionId, limit: 50 })),
+      safeStoreList(() => innerContext.boundaryConsentStore?.listBoundaries?.({ user_scope: userScope, companion_id: companionId, include_adult: true, limit: 100 })),
+      safeStoreList(() => innerContext.doNotAskStore?.listRules?.({ user_scope: userScope, companion_id: companionId, include_adult: true, limit: 100 })),
+      safeStoreList(() => innerContext.userEnergyStore?.listObservations?.({ user_scope: userScope, companion_id: companionId, include_adult: true, limit: 50 })),
+      safeStoreList(() => innerContext.recurringThemeStore?.listThemes?.({ user_scope: userScope, companion_id: companionId, include_adult: true, limit: 50 })),
+      safeStoreList(() => innerContext.memoryConfidenceStore?.listProfiles?.({ user_scope: userScope, companion_id: companionId, include_adult: true, limit: 50 })),
+      safeStoreList(() => innerContext.selfReflectionStore?.listReflections?.({ user_scope: userScope, companion_id: companionId, include_adult: true, limit: 50 })),
+      safeStoreList(() => innerContext.proactivePresenceStore?.listRules?.({ user_scope: userScope, companion_id: companionId, active_only: false, include_adult: true, limit: 50 })),
     ]);
     const webSearchStatus = innerContext.webSearchService?.getStatus?.() || null;
     innerRes.end(helpers.renderHumanSimulationPage({ tab, prefs, events, followUps, channels, weatherHistory, residues, presenceList, boundaries, doNotAskRules, energyObservations, recurringThemes, memoryConfidenceProfiles, selfReflections, proactivePresenceRules, webSearchStatus, helpers, theme, themeLinks }));
@@ -487,4 +496,5 @@ module.exports = {
   handleGeneratedDetailRequest,
   handleNorwegianLearningPageRequest,
   handleNorwegianDashboardRequest,
+  safeStoreList,
 };

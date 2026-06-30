@@ -1180,6 +1180,9 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           channelId: message.channelId,
           conversationId,
         });
+        const fallbackContent = "I had a thought there, but it came out empty. Try me again and I’ll answer clean.";
+        sentReply = await message.channel.send({ content: fallbackContent });
+        replyPayload.content = fallbackContent;
         return;
       }
 
