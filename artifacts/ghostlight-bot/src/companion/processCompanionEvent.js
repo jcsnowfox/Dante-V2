@@ -29,15 +29,29 @@ function extractResponseText(reply) {
   if (reply == null) return "";
   if (typeof reply === "string") return reply;
   if (typeof reply !== "object") return String(reply || "");
-  return String(
-    reply.reply
+
+  const direct = reply.reply
     || reply.text
     || reply.content
     || reply.message
     || reply.output
     || reply.response
-    || "",
-  );
+    || reply.finalText
+    || reply.assistantMessage
+    || reply.assistant?.content
+    || "";
+  if (direct) return String(direct);
+
+  if (Array.isArray(reply.messages)) {
+    for (let index = reply.messages.length - 1; index >= 0; index -= 1) {
+      const message = reply.messages[index];
+      if (message?.role === "assistant" && message?.content) {
+        return String(message.content);
+      }
+    }
+  }
+
+  return "";
 }
 
 function createSyntheticPipelineMessage(event) {
@@ -126,7 +140,8 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
           avatarName: event.metadata?.avatarName || event.userDisplayName || "",
           avatarKey: event.metadata?.avatarKey || event.externalUserId || "",
           region: event.metadata?.region || "",
-          channel: event.metadata?.channel || "",
+          channel: event.metadata?.channel || "secondlife",
+          channelNumber: event.metadata?.channelNumber || "",
           contextSections,
           publicChat,
         },
@@ -135,13 +150,26 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
 
     emitCanonicalPipelineTrace("llm_provider", event, { provider: "chatPipeline.run" });
 
-    const reply = await chatPipeline.run({
+    let pipelineName = "chatPipeline.run";
+    let reply = await chatPipeline.run({
       message,
       mode: event.metadata?.mode,
       modeName: event.metadata?.modeName,
       secondLifeContext: message.secondLifeContext,
     });
-    const responseText = extractResponseText(reply);
+    let responseText = extractResponseText(reply);
+
+    if (!responseText && secondLifeReplyGenerator && typeof secondLifeReplyGenerator.generateReply === "function") {
+      emitCanonicalPipelineTrace("llm_provider", event, { provider: "secondLifeReplyGenerator.generateReply" });
+      pipelineName = "secondLifeReplyGenerator.generateReply";
+      reply = await secondLifeReplyGenerator.generateReply({
+        event,
+        contextSections,
+        privacyLevel: event.privacyLevel,
+        publicChat,
+      });
+      responseText = extractResponseText(reply);
+    }
 
     const outbound = normalizeOutboundResult(
       {
@@ -149,7 +177,7 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
         channelType: "second_life",
         responseText,
         privacyLevel: event.privacyLevel,
-        metadata: { hasReply: Boolean(responseText), pipeline: "chatPipeline.run" },
+        metadata: { hasReply: Boolean(responseText), pipeline: pipelineName },
       },
       event,
     );

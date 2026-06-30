@@ -1081,7 +1081,8 @@ function createSecondLifeAdapter({
           avatarName: event.avatarName || event.userDisplayName || "",
           avatarKey: event.avatarKey || event.externalUserId || event.avatarUuid || "",
           region: event.region || "",
-          channel: event.channel || "",
+          channel: event.channel || "secondlife",
+          channelNumber: event.channelNumber || "",
           secondLife: { contextSections, publicChat },
         },
       });
