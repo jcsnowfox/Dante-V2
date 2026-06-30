@@ -168,3 +168,13 @@ test("Discord image fallback generation uses the Discord media surface, not dash
   });
   assert.equal(capturedContext.sourceSurface, "discord");
 });
+
+test("empty model reply sends a clean no-reply fallback instead of dropping the turn", async () => {
+  const { handler, message, sent } = createHandlerHarness({
+    reply: { content: "", files: [], generatedImageIds: [] },
+  });
+  message.content = "hello there";
+  await handler(message);
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].content, /came out empty|answer clean/i);
+});
