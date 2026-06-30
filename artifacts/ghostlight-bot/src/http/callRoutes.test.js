@@ -36,6 +36,30 @@ function postJson(server, pathname, payload = {}) {
   });
 }
 
+function postRaw(server, pathname, body = "", headers = {}) {
+  const { port } = server.address();
+  return new Promise((resolve, reject) => {
+    const req = http.request({
+      hostname: "127.0.0.1",
+      port,
+      path: pathname,
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain",
+        "Content-Length": Buffer.byteLength(body),
+        ...headers,
+      },
+    }, (res) => {
+      let responseBody = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => { responseBody += chunk; });
+      res.on("end", () => resolve({ statusCode: res.statusCode, headers: res.headers, body: responseBody }));
+    });
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
 function createTestServer(config) {
   return createHealthServer({
     port: 0,
@@ -218,4 +242,56 @@ test("GET /sl/chat returns Second Life chat route method hint without changing P
   assert.match(response.headers["content-type"], /text\/plain/);
   assert.equal(response.body, "secondlife chat route alive - use POST");
   assert.ok(logs.some((message) => message.includes("GET /sl/chat")));
+});
+
+test("POST /sl/debug accepts any body and returns plain text at root", async (t) => {
+  const server = createTestServer({});
+  t.after(() => server.close());
+
+  await new Promise((resolve) => server.on("listening", resolve));
+  const response = await postRaw(server, "/sl/debug", "anything from lsl");
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["content-type"], /text\/plain/);
+  assert.equal(response.body, "secondlife post received");
+});
+
+test("POST /sl/chat is mounted beside GET /sl/chat at root and returns plain text", async (t) => {
+  const logs = [];
+  const handledEvents = [];
+  const server = createHealthServer({
+    port: 0,
+    logger: { info() {}, error() {}, warn() {} },
+    appContext: {
+      ready: true,
+      config: { admin: { username: "owner", password: "secret" }, discord: {}, chat: { timezone: "UTC" }, features: {} },
+      logger: { info(message) { logs.push(message); }, error() {}, warn() {} },
+      secondLife: {
+        available: true,
+        async verifySharedSecret() { return true; },
+      },
+      secondLifeAdapter: {
+        async handleEvent(payload) {
+          handledEvents.push(payload);
+          return { replyText: "hello from dante" };
+        },
+      },
+    },
+  });
+  t.after(() => server.close());
+
+  await new Promise((resolve) => server.on("listening", resolve));
+  const response = await postRaw(
+    server,
+    "/sl/chat",
+    "message=hello&speaker_name=Tester&speaker_key=avatar-1",
+    { "Content-Type": "application/x-www-form-urlencoded" },
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["content-type"], /text\/plain/);
+  assert.equal(response.body, "hello from dante");
+  assert.ok(logs.some((message) => message.includes("[sl-bridge] POST /sl/chat hit")));
+  assert.equal(handledEvents[0].event.messageText, "hello");
+  assert.equal(handledEvents[0].event.avatarName, "Tester");
 });
