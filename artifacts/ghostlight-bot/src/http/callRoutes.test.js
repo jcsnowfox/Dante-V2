@@ -280,11 +280,21 @@ test("POST /sl/chat is mounted beside GET /sl/chat at root and returns plain tex
   });
   t.after(() => server.close());
 
+  const previousBridgeKey = process.env.SL_BRIDGE_KEY;
+  process.env.SL_BRIDGE_KEY = "test-bridge-key";
+  t.after(() => {
+    if (previousBridgeKey === undefined) {
+      delete process.env.SL_BRIDGE_KEY;
+    } else {
+      process.env.SL_BRIDGE_KEY = previousBridgeKey;
+    }
+  });
+
   await new Promise((resolve) => server.on("listening", resolve));
   const response = await postRaw(
     server,
     "/sl/chat",
-    "message=hello&speaker_name=Tester&speaker_key=avatar-1",
+    "message=hello&speaker_name=Tester&speaker_key=avatar-1&bridgeKey=test-bridge-key",
     { "Content-Type": "application/x-www-form-urlencoded" },
   );
 
@@ -292,6 +302,63 @@ test("POST /sl/chat is mounted beside GET /sl/chat at root and returns plain tex
   assert.match(response.headers["content-type"], /text\/plain/);
   assert.equal(response.body, "hello from dante");
   assert.ok(logs.some((message) => message.includes("[sl-bridge] POST /sl/chat hit")));
+  assert.ok(logs.some((message) => message.includes("[sl-bridge] auth accepted")));
   assert.equal(handledEvents[0].event.messageText, "hello");
   assert.equal(handledEvents[0].event.avatarName, "Tester");
+});
+
+test("POST /sl/chat accepts token from query string and rejects bad secrets as plain text", async (t) => {
+  const logs = [];
+  const handledEvents = [];
+  const previousBridgeKey = process.env.SL_BRIDGE_KEY;
+  process.env.SL_BRIDGE_KEY = "query-bridge-key";
+  t.after(() => {
+    if (previousBridgeKey === undefined) {
+      delete process.env.SL_BRIDGE_KEY;
+    } else {
+      process.env.SL_BRIDGE_KEY = previousBridgeKey;
+    }
+  });
+
+  const server = createHealthServer({
+    port: 0,
+    logger: { info() {}, error() {}, warn() {} },
+    appContext: {
+      ready: true,
+      config: { admin: { username: "owner", password: "secret" }, discord: {}, chat: { timezone: "UTC" }, features: {} },
+      logger: { info(message) { logs.push(message); }, error() {}, warn() {} },
+      secondLife: { available: true },
+      secondLifeAdapter: {
+        async handleEvent(payload) {
+          handledEvents.push(payload);
+          return { replyText: "query ok" };
+        },
+      },
+    },
+  });
+  t.after(() => server.close());
+
+  await new Promise((resolve) => server.on("listening", resolve));
+
+  const accepted = await postRaw(
+    server,
+    "/sl/chat?token=query-bridge-key",
+    "message=query%20hello",
+    { "Content-Type": "application/x-www-form-urlencoded" },
+  );
+  assert.equal(accepted.statusCode, 200);
+  assert.equal(accepted.body, "query ok");
+
+  const denied = await postRaw(
+    server,
+    "/sl/chat?bridgeKey=wrong-key",
+    "message=bad",
+    { "Content-Type": "application/x-www-form-urlencoded" },
+  );
+  assert.equal(denied.statusCode, 401);
+  assert.match(denied.headers["content-type"], /text\/plain/);
+  assert.equal(denied.body, "unauthorized");
+  assert.equal(handledEvents.length, 1);
+  assert.ok(logs.some((message) => message.includes("[sl-bridge] auth accepted")));
+  assert.ok(logs.some((message) => message.includes("[sl-bridge] auth denied")));
 });

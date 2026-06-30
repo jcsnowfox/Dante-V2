@@ -25,6 +25,8 @@
  * path is not a Second Life API path so the caller can continue routing.
  */
 
+const crypto = require("node:crypto");
+
 const { resolveCompanionId } = require("../companion/resolveCompanionId");
 
 const API_PREFIX = "/api/second-life";
@@ -108,15 +110,56 @@ function readJsonBody(req) {
   });
 }
 
-function extractSecret(req, body) {
+function firstPresentValue(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && String(value) !== "") {
+      return String(value);
+    }
+  }
+  return "";
+}
+
+function hasPresentValue(value) {
+  return value !== undefined && value !== null && String(value) !== "";
+}
+
+function compareSecrets(received, expected) {
+  const receivedValue = String(received || "");
+  const expectedValue = String(expected || "");
+  if (!receivedValue || !expectedValue) return false;
+
+  const receivedBuffer = Buffer.from(receivedValue, "utf8");
+  const expectedBuffer = Buffer.from(expectedValue, "utf8");
+  if (receivedBuffer.length !== expectedBuffer.length) return false;
+
+  return crypto.timingSafeEqual(receivedBuffer, expectedBuffer);
+}
+
+function extractSecret(req, body, url = null) {
   const header = req.headers["x-bridge-secret"];
   if (header) return String(Array.isArray(header) ? header[0] : header);
   const auth = req.headers.authorization;
   if (auth && /^Bearer\s+/i.test(auth)) {
     return auth.replace(/^Bearer\s+/i, "").trim();
   }
-  if (body && body.secret) return String(body.secret);
-  return "";
+  return firstPresentValue(
+    body?.bridgeKey,
+    body?.token,
+    url?.searchParams?.get("bridgeKey"),
+    url?.searchParams?.get("token"),
+    body?.secret,
+  );
+}
+
+function logSlChatAuthDebug(logger, { body, url, receivedSecret, expectedSecret, accepted }) {
+  const bridgeKeyPresent = hasPresentValue(body?.bridgeKey) || hasPresentValue(url?.searchParams?.get("bridgeKey"));
+  const tokenPresent = hasPresentValue(body?.token) || hasPresentValue(url?.searchParams?.get("token"));
+  logger?.info?.("[sl-bridge] bridgeKey present", { present: bridgeKeyPresent });
+  logger?.info?.("[sl-bridge] token present", { present: tokenPresent });
+  logger?.info?.("[sl-bridge] received key length", { length: String(receivedSecret || "").length });
+  logger?.info?.("[sl-bridge] SL_BRIDGE_KEY exists", { exists: hasPresentValue(expectedSecret) });
+  logger?.info?.("[sl-bridge] SL_BRIDGE_KEY length", { length: String(expectedSecret || "").length });
+  logger?.info?.(accepted ? "[sl-bridge] auth accepted" : "[sl-bridge] auth denied");
 }
 
 /**
@@ -282,8 +325,16 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
       return true;
     }
 
-    const secret = extractSecret(req, body);
-    const authed = await secondLife.verifySharedSecret({ companionId, secret });
+    const secret = extractSecret(req, body, url);
+    const expectedSecret = process.env.SL_BRIDGE_KEY;
+    const authed = compareSecrets(secret, expectedSecret);
+    logSlChatAuthDebug(logger, {
+      body,
+      url,
+      receivedSecret: secret,
+      expectedSecret,
+      accepted: authed,
+    });
     if (!authed) {
       sendPlainText(res, 401, "unauthorized");
       return true;
@@ -322,7 +373,7 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
   if (req.method === "GET" && subPath.startsWith("/status/")) {
     const companionId = decodeURIComponent(subPath.slice("/status/".length)).trim()
       || resolveCompanionId(config);
-    const secret = extractSecret(req, {});
+    const secret = extractSecret(req, {}, url);
     const authed = await secondLife.verifySharedSecret({ companionId, secret });
     if (!authed) {
       sendJson(res, 401, { ok: false, error: "unauthorized" });
@@ -358,7 +409,7 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
     : body.companion_slug != null ? String(body.companion_slug)
     : ""
   ).trim() || resolveCompanionId(config);
-  const secret = extractSecret(req, body);
+  const secret = extractSecret(req, body, url);
 
   const authed = await secondLife.verifySharedSecret({ companionId, secret });
   if (!authed) {
