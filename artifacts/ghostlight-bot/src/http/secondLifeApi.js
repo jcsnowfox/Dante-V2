@@ -34,6 +34,9 @@ const SL_PING_PATH = "/sl/ping";
 const SL_CHAT_PATH = "/sl/chat";
 const SL_DEBUG_PATH = "/sl/debug";
 const MAX_BODY_BYTES = 256 * 1024;
+const SL_DANTE_COMPANION_ID = "dante_sølvane";
+const SL_AVATAR_USERNAME = "Dante0Solvane";
+const SL_MAX_RESPONSE_CHARS = 900;
 
 function sendPlainText(res, statusCode, body) {
   res.writeHead(statusCode, { "Content-Type": "text/plain; charset=utf-8" });
@@ -44,6 +47,27 @@ function sendJson(res, statusCode, payload) {
   const body = JSON.stringify(payload == null ? {} : payload);
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   res.end(body);
+}
+
+function resolveSecondLifeChatCompanionId(requestedCompanionId, config) {
+  const requested = String(requestedCompanionId || "").trim();
+  if (!requested) return resolveCompanionId(config);
+  if (
+    requested.toLowerCase() === "dante"
+    || requested === SL_DANTE_COMPANION_ID
+    || requested.toLowerCase() === SL_AVATAR_USERNAME.toLowerCase()
+  ) {
+    return SL_DANTE_COMPANION_ID;
+  }
+  return requested;
+}
+
+function capPlainTextReply(reply) {
+  return String(reply == null ? "" : reply).slice(0, SL_MAX_RESPONSE_CHARS);
+}
+
+function previewReply(reply) {
+  return String(reply == null ? "" : reply).replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
 function readRequestBody(req) {
@@ -314,11 +338,19 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
     const secondLife = context.secondLife || null;
     const adapter = context.secondLifeAdapter || null;
     const config = context.config || {};
-    const companionId = (
+    const requestedCompanionId = (
       body.companionId != null ? String(body.companionId)
       : body.companion_slug != null ? String(body.companion_slug)
       : ""
-    ).trim() || resolveCompanionId(config);
+    ).trim();
+    const companionId = resolveSecondLifeChatCompanionId(requestedCompanionId, config);
+    const messageText = body.message != null ? String(body.message) : "";
+
+    logger?.info?.("[sl-bridge] POST /sl/chat request", {
+      requestedCompanionId,
+      resolvedCompanionId: companionId,
+      messageLength: messageText.length,
+    });
 
     if (!secondLife || secondLife.available !== true || !adapter) {
       sendPlainText(res, 503, "secondlife bridge unavailable");
@@ -341,12 +373,26 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
     }
 
     try {
-      const result = await adapter.handleEvent({
-        companionId,
-        event: normalizeEventFromBody({ ...body, type: body.type || body.eventType || "chat" }, "chat"),
+      const event = normalizeEventFromBody({
+        ...body,
+        type: body.type || body.eventType || "local_chat",
+        message: messageText,
+      }, "local_chat");
+      event.source = "secondlife";
+      event.platform = "secondlife";
+      event.slAvatarUsername = SL_AVATAR_USERNAME;
+      event.avatarKey = body.avatarKey != null ? String(body.avatarKey) : event.avatarUuid;
+      event.channel = body.channel != null ? String(body.channel) : "";
+
+      const result = await adapter.handleEvent({ companionId, event });
+      const reply = result?.responseText ?? result?.replyText ?? result?.text ?? result?.reply ?? "";
+      logger?.info?.("[sl-bridge] POST /sl/chat reply", {
+        requestedCompanionId,
+        resolvedCompanionId: companionId,
+        messageLength: messageText.length,
+        replyPreview: previewReply(reply),
       });
-      const reply = result?.replyText || result?.text || result?.reply || "ok";
-      sendPlainText(res, 200, String(reply));
+      sendPlainText(res, 200, capPlainTextReply(reply));
     } catch (error) {
       logger?.error?.("[sl-bridge] POST /sl/chat failed", { error: error.message });
       sendPlainText(res, 500, "internal_error");
