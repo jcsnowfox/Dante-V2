@@ -26,13 +26,48 @@ const {
 } = require("./canonicalPipelineDiagnostics");
 
 function extractResponseText(reply) {
-  if (reply == null) {
-    return "";
-  }
-  if (typeof reply === "string") {
-    return reply;
-  }
-  return String(reply.content || "");
+  if (reply == null) return "";
+  if (typeof reply === "string") return reply;
+  if (typeof reply !== "object") return String(reply || "");
+  return String(
+    reply.reply
+    || reply.text
+    || reply.content
+    || reply.message
+    || reply.output
+    || reply.response
+    || "",
+  );
+}
+
+function createSyntheticPipelineMessage(event) {
+  const sl = event.metadata?.secondLifeContext || {};
+  const channelId = sl.channel || event.metadata?.channel || "secondlife";
+  const authorId = event.externalUserId || sl.avatarKey || "secondlife-avatar";
+  const authorName = event.userDisplayName || sl.avatarName || "Second Life Resident";
+  const createdAt = event.timestamp ? new Date(event.timestamp) : new Date();
+  return {
+    id: `sl-${Date.now()}`,
+    content: String(event.messageText || ""),
+    channelId,
+    guildId: null,
+    createdAt: Number.isNaN(createdAt.getTime()) ? new Date() : createdAt,
+    author: { id: authorId, username: authorName, globalName: authorName, bot: false },
+    member: { displayName: authorName },
+    client: { user: { id: "secondlife-bridge" } },
+    channel: {
+      id: channelId,
+      name: "secondlife",
+      type: 1,
+      isThread: () => false,
+      isDMBased: () => true,
+    },
+    attachments: new Map(),
+    stickers: new Map(),
+    secondLifeContext: sl,
+    metadata: event.metadata || {},
+    react: async () => {},
+  };
 }
 
 function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGenerator = null }) {
@@ -77,39 +112,53 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
   }
 
   async function processSecondLifeEvent(event) {
-    if (!secondLifeReplyGenerator || typeof secondLifeReplyGenerator.generateReply !== "function") {
-      throw new Error("[companion] Second Life companion event requires a reply generator (Stage 2).");
-    }
-
     const sl = event.metadata?.secondLife || {};
     const contextSections = Array.isArray(sl.contextSections) ? sl.contextSections : [];
     const publicChat = sl.publicChat === true;
-
-    emitCanonicalPipelineTrace("llm_provider", event, { provider: "secondLifeReplyGenerator.generateReply" });
-
-    const { text } = await secondLifeReplyGenerator.generateReply({
-      event,
-      contextSections,
-      privacyLevel: event.privacyLevel,
-      publicChat,
+    const message = createSyntheticPipelineMessage({
+      ...event,
+      metadata: {
+        ...event.metadata,
+        secondLifeContext: {
+          source: event.metadata?.source || "secondlife",
+          platform: event.metadata?.platform || "secondlife",
+          slAvatarUsername: event.metadata?.slAvatarUsername || "",
+          avatarName: event.metadata?.avatarName || event.userDisplayName || "",
+          avatarKey: event.metadata?.avatarKey || event.externalUserId || "",
+          region: event.metadata?.region || "",
+          channel: event.metadata?.channel || "",
+          contextSections,
+          publicChat,
+        },
+      },
     });
+
+    emitCanonicalPipelineTrace("llm_provider", event, { provider: "chatPipeline.run" });
+
+    const reply = await chatPipeline.run({
+      message,
+      mode: event.metadata?.mode,
+      modeName: event.metadata?.modeName,
+      secondLifeContext: message.secondLifeContext,
+    });
+    const responseText = extractResponseText(reply);
 
     const outbound = normalizeOutboundResult(
       {
         companionId: event.companionId,
         channelType: "second_life",
-        responseText: text,
+        responseText,
         privacyLevel: event.privacyLevel,
-        metadata: { hasReply: Boolean(text) },
+        metadata: { hasReply: Boolean(responseText), pipeline: "chatPipeline.run" },
       },
       event,
     );
 
-    emitCanonicalPipelineTrace("post_processing", event, { diagnostics: "second life reply normalized" });
-    emitCanonicalPipelineTrace("memory_writer", event, { diagnostics: "delegated to existing second life pipeline" });
-    emitCanonicalPipelineTrace("diagnostics", event, { diagnostics: "second life canonical pass-through complete" });
+    emitCanonicalPipelineTrace("post_processing", event, { diagnostics: "second life chat pipeline reply normalized" });
+    emitCanonicalPipelineTrace("memory_writer", event, { diagnostics: "delegated to shared chat pipeline" });
+    emitCanonicalPipelineTrace("diagnostics", event, { diagnostics: "second life canonical chat pipeline complete" });
 
-    return { event, outbound, reply: text ? { content: text } : null };
+    return { event, outbound, reply };
   }
 
   async function processCompanionEvent(rawEvent) {
