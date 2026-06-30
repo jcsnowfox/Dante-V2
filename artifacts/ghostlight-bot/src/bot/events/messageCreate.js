@@ -18,6 +18,7 @@ const {
 const { cacheLatestReadableReply } = require("../../audio/latestReplyCache");
 const { createAudioGenerationService, resolveTtsProvider } = require("../../audio/generateAudio");
 const { createImageGenerationService, resolveImageGenerationModel } = require("../../images/generateImage");
+const { startImageRequestDiagnostics, updateImageRequestDiagnostics } = require("../../images/imageRequestDiagnostics");
 const { buildImageIntentRequest } = require("../../chat/imageIntent");
 const {
   detectImageFollowupRequest,
@@ -293,6 +294,15 @@ async function sendTypingIndicatorSafely({
   }
 }
 
+function stripPrematureImageSuccessText(text = "") {
+  const normalized = String(text || "").trim();
+  if (!normalized) return "";
+  if (/^(?:here(?: it is| you go)?[.!…]*)$/i.test(normalized)) return "";
+  if (/\b(?:sent|sending|attached|here(?:'s| is)|made you|generated)\b/i.test(normalized) && /\b(?:photo|pic|picture|image|attachment)\b/i.test(normalized)) {
+    return "";
+  }
+  return normalized;
+}
 // Module-level in-process guard: prevents the same Node.js process from
 // handling the same Discord message ID twice simultaneously (e.g. Discord.js
 // event replay on reconnect). The Postgres-backed cache/recordEvent checks
@@ -324,11 +334,35 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
   const imageIntentDetected = Boolean(mediaRequest?.detected);
   const requestedCount = followup.detected ? followup.requestedCount : Math.min(Number(mediaRequest?.count || 1) || 1, maxBatchCount);
   const prompt = String(mediaRequest?.prompt || "").trim();
+  const parsedToolParams = mediaRequest?.params && typeof mediaRequest.params === "object" ? mediaRequest.params : {};
   const provider = String(config.imageGeneration?.provider || "getimg").trim() || "getimg";
   const model = resolveImageGenerationModel(config);
 
+  if (imageIntentDetected) {
+    startImageRequestDiagnostics({
+      prompt,
+      provider,
+      model,
+      status: "structured_request_created",
+      structured_image_request_created: true,
+      image_prompt_final: prompt,
+      image_intent_detected: true,
+      dashboard_media_path_used: false,
+      discord_media_path_used: true,
+      media_execution_stage: "structured_image_request_created",
+    });
+  }
+
   logger.info?.("[image-intent] routing diagnostics", {
     image_intent_detected: imageIntentDetected,
+    structured_image_request_created: imageIntentDetected,
+    image_prompt_final: prompt,
+    media_execution_stage: imageIntentDetected ? "structured_image_request_created" : "intent_not_detected",
+    dashboard_media_path_used: false,
+    discord_media_path_used: true,
+    fake_tool_call_detected: Boolean(mediaRequest?.fakeToolCallDetected),
+    parsed_tool_prompt_length: prompt.length,
+    parsed_tool_params: parsedToolParams,
     media_followup_detected: followup.detected,
     requested_image_count: requestedCount,
     reused_prompt: followup.detected && lastMediaFound,
@@ -369,14 +403,18 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
       image_intent_detected: true,
       media_followup_detected: followup.detected,
       last_media_found: lastMediaFound,
+      fake_tool_call_detected: Boolean(mediaRequest?.fakeToolCallDetected),
+      parsed_tool_prompt_length: prompt.length,
+      parsed_tool_params: parsedToolParams,
       failure_reasons: ["empty_prompt"],
     });
     return {
       ...replyPayload,
-      content: followup.detected ? "What image do you want me to make more of?" : "I tried to make the image, but the image generator failed.",
+      content: followup.detected ? "What image do you want me to make more of?" : stripPrematureImageSuccessText(mediaRequest?.cleanedText || ""),
     };
   }
 
+  updateImageRequestDiagnostics({ status: "provider_call_started", provider_called: true, media_execution_stage: "provider_called", event: "provider_called" });
   const imageGeneration = imageGenerationServiceFactory({ config, logger, generatedImages });
   const files = [];
   const imageIds = [];
@@ -395,25 +433,51 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
       image_provider: provider,
       image_model: model,
       image_generation_started: true,
+      provider_called: true,
+      media_execution_stage: "provider_called",
+      fake_tool_call_detected: Boolean(mediaRequest?.fakeToolCallDetected),
+      parsed_tool_prompt_length: prompt.length,
+      parsed_tool_params: parsedToolParams,
     });
 
     try {
       const result = await imageGeneration.generate({
         prompt,
+        aspectRatio: parsedToolParams.aspectRatio,
+        stylePreset: parsedToolParams.stylePreset,
+        appearancePresets: parsedToolParams.appearancePresets,
+        imageType: parsedToolParams.imageType,
         context: {
           userScope: config.memory?.userScope,
-          sourceSurface: "chat",
+          sourceSurface: "discord",
           conversationId,
           channelId: message.channelId,
           sourceMessageId: message.id,
         },
       });
+      updateImageRequestDiagnostics({
+        status: "provider_succeeded",
+        provider_status: "success",
+        providerResponseSummary: result.diagnostics?.providerResponseSummary || { hasFile: Boolean(result.file), hasRecord: Boolean(result.record || result.image) },
+        gallery_save_started: true,
+        gallery_save_success: result.diagnostics?.gallerySaveSuccess !== false,
+        media_execution_stage: "discord_attachment_created",
+        event: "provider_succeeded",
+      });
       const imageId = result.record?.imageId || result.image?.imageId;
-      if (result.file) files.push(result.file);
+      if (result.file) {
+        files.push(result.file);
+        logger.info?.("[image-intent] Discord attachment created", {
+          discord_attachment_created: true,
+          discord_attachment_filename: result.file.name || "image.png",
+          image_bytes_length: Buffer.isBuffer(result.file.attachment) ? result.file.attachment.length : undefined,
+        });
+      }
       if (imageId) imageIds.push(imageId);
       lastModel = result.record?.model || result.image?.model || model;
     } catch (error) {
       failureReasons.push(error.message);
+      updateImageRequestDiagnostics({ status: "provider_failed", failureStage: "provider", provider_status: "failed", media_execution_stage: "provider_failed", event: "provider_failed" });
     }
   }
 
@@ -429,6 +493,10 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     total_succeeded: totalSucceeded,
     total_failed: totalFailed,
     discord_attachments_sent: totalSucceeded,
+    discord_image_attachment_sent: false,
+    fake_tool_call_detected: Boolean(mediaRequest?.fakeToolCallDetected),
+    parsed_tool_prompt_length: prompt.length,
+    parsed_tool_params: parsedToolParams,
     gallery_saved_count: imageIds.length,
     failure_reasons: failureReasons,
     image_generation_success: totalSucceeded > 0,
@@ -454,7 +522,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     });
     return {
       ...replyPayload,
-      content: totalFailed ? `I made ${totalSucceeded} image${totalSucceeded === 1 ? "" : "s"}, but ${totalFailed} failed.` : (mediaRequest.cleanedText || ""),
+      content: totalFailed ? `I made ${totalSucceeded} image${totalSucceeded === 1 ? "" : "s"}, but ${totalFailed} failed.` : stripPrematureImageSuccessText(mediaRequest.cleanedText || ""),
       files: [...replyPayload.files, ...files],
       generatedImageIds: [...replyPayload.generatedImageIds, ...imageIds],
     };
@@ -462,7 +530,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
 
   return {
     ...replyPayload,
-    content: "I tried to make the image, but the image generator failed.",
+    content: "The image generator failed.",
     files: [],
     generatedImageIds: [],
   };
@@ -965,10 +1033,21 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           });
         }
         try {
+          logger.info?.("[image-intent] Discord send called", { discord_send_called_with_files_count: replyPayload.files.length, media_execution_stage: "discord_send_called" });
+          updateImageRequestDiagnostics({ media_execution_stage: "discord_send_called", discordUploadSummary: { discord_send_called_with_files_count: replyPayload.files.length }, event: "discord_send_called" });
           sentReply = await message.channel.send({
             files: replyPayload.files,
             flags: replyPayload.suppressEmbeds ? ["SuppressEmbeds"] : undefined,
           });
+          if (replyPayload.generatedImageIds.length > 0) {
+            logger.info("[image-intent] discord image attachment sent", {
+              generatedImageIds: replyPayload.generatedImageIds,
+              discordMessageId: sentReply.id,
+              discord_image_attachment_sent: true,
+              discord_send_success: true,
+            });
+            updateImageRequestDiagnostics({ status: "discord_send_success", media_execution_stage: "discord_send_success", discordUploadSummary: { discord_send_success: true, discord_message_id: sentReply.id, discord_send_called_with_files_count: replyPayload.files.length }, event: "discord_send_success" });
+          }
           if (_sendingAudio) {
             logger.info("[audio] discord attachment sent", {
               audioIds: replyPayload.generatedAudioIds,
@@ -977,6 +1056,14 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
             });
           }
         } catch (error) {
+          if (replyPayload.generatedImageIds.length > 0 || replyPayload.files.length > 0) {
+            updateImageRequestDiagnostics({ status: "discord_send_failed", failureStage: "discord_upload", media_execution_stage: "discord_send_failed", discordUploadSummary: { discord_send_success: false, error: error.message }, event: "discord_send_failed" });
+            sentReply = await message.channel.send({ content: "The image generated, but Discord upload failed." });
+            replyPayload.content = "The image generated, but Discord upload failed.";
+            replyPayload.files = [];
+            return;
+          }
+
           if (!isDiscordEntityTooLargeError(error)) {
             if (_sendingAudio) {
               logger.warn("[audio] fish synthesis failed", { stage: "discord_attachment_send", error: error.message });
@@ -1027,11 +1114,22 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
               files: isLastChunk ? replyPayload.files : undefined,
             });
           } else {
+            logger.info?.("[image-intent] Discord send called", { discord_send_called_with_files_count: isLastChunk ? replyPayload.files.length : 0, media_execution_stage: "discord_send_called" });
+            updateImageRequestDiagnostics({ media_execution_stage: "discord_send_called", discordUploadSummary: { discord_send_called_with_files_count: isLastChunk ? replyPayload.files.length : 0 }, event: "discord_send_called" });
             sentReply = await message.channel.send({
               content: chunk,
               files: isLastChunk ? replyPayload.files : undefined,
               flags: replyPayload.suppressEmbeds ? ["SuppressEmbeds"] : undefined,
             });
+          }
+          if (isLastChunk && replyPayload.generatedImageIds.length > 0 && replyPayload.files.length > 0) {
+            logger.info("[image-intent] discord image attachment sent", {
+              generatedImageIds: replyPayload.generatedImageIds,
+              discordMessageId: sentReply.id,
+              discord_image_attachment_sent: true,
+              discord_send_success: true,
+            });
+            updateImageRequestDiagnostics({ status: "discord_send_success", media_execution_stage: "discord_send_success", final_user_visible_text: chunk, discordUploadSummary: { discord_send_success: true, discord_message_id: sentReply.id, discord_send_called_with_files_count: replyPayload.files.length }, event: "discord_send_success" });
           }
           if (_lastChunkWithAudio) {
             logger.info("[audio] discord attachment sent", {
@@ -1041,6 +1139,13 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
             });
           }
         } catch (error) {
+          if (isLastChunk && replyPayload.generatedImageIds.length > 0 && replyPayload.files.length > 0) {
+            updateImageRequestDiagnostics({ status: "discord_send_failed", failureStage: "discord_upload", media_execution_stage: "discord_send_failed", final_user_visible_text: "The image generated, but Discord upload failed.", discordUploadSummary: { discord_send_success: false, error: error.message }, event: "discord_send_failed" });
+            sentReply = await message.channel.send({ content: "The image generated, but Discord upload failed." });
+            replyPayload.content = "The image generated, but Discord upload failed.";
+            replyPayload.files = [];
+            break;
+          }
           if (!isLastChunk || !replyPayload.files.length || !isDiscordEntityTooLargeError(error)) {
             if (_lastChunkWithAudio && !isDiscordEntityTooLargeError(error)) {
               logger.warn("[audio] fish synthesis failed", { stage: "discord_attachment_send", error: error.message });

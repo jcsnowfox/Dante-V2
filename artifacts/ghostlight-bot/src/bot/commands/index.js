@@ -7,10 +7,11 @@ const statusContextCommand = require("./statusContext");
 const readCommand = require("./read");
 const gameCommands = require("../../games/discord/gameCommands");
 const norwegianCommand = require("./norwegian");
+const imageDebugCommand = require("./imageDebug");
 
 function loadCommands(config = {}) {
   void config;
-  return [pingCommand, channelIdCommand, userIdCommand, timeContextCommand, statusContextCommand, modeCommand, readCommand, gameCommands, norwegianCommand];
+  return [pingCommand, channelIdCommand, userIdCommand, timeContextCommand, statusContextCommand, modeCommand, readCommand, gameCommands, norwegianCommand, imageDebugCommand];
 }
 
 module.exports = {
