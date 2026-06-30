@@ -364,7 +364,8 @@ test("POST /sl/chat resolves Dante companion id aliases and caps plain text repl
   assert.equal(handledEvents[0].event.avatarName, "Tester Resident");
   assert.equal(handledEvents[0].event.avatarKey, "avatar-key-123");
   assert.equal(handledEvents[0].event.region, "Ravenhurst");
-  assert.equal(handledEvents[0].event.channel, "666");
+  assert.equal(handledEvents[0].event.channel, "secondlife");
+  assert.equal(handledEvents[0].event.channelNumber, "666");
 
   const directResponse = await postRaw(
     server,

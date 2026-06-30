@@ -82,18 +82,32 @@ function getPipelineReturnKeys(result) {
 function extractSlChatReply(result) {
   if (typeof result === "string") return result;
   if (!result || typeof result !== "object") return "";
-  return String(
-    result.reply
+
+  const direct = result.reply
     || result.text
     || result.content
     || result.message
     || result.output
     || result.response
+    || result.finalText
+    || result.assistantMessage
+    || result.assistant?.content
     || result.responseText
     || result.replyText
     || result.outbound?.responseText
-    || "",
-  );
+    || "";
+  if (direct) return String(direct);
+
+  if (Array.isArray(result.messages)) {
+    for (let index = result.messages.length - 1; index >= 0; index -= 1) {
+      const message = result.messages[index];
+      if (message?.role === "assistant" && message?.content) {
+        return String(message.content);
+      }
+    }
+  }
+
+  return "";
 }
 
 function previewReply(reply) {
@@ -385,6 +399,9 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
       : "";
     const region = body.region != null ? String(body.region) : "";
 
+    logger?.info?.("[sl-bridge] requested companionId", { requestedCompanionId });
+    logger?.info?.("[sl-bridge] resolved companionId", { resolvedCompanionId: companionId });
+    logger?.info?.("[sl-bridge] user message preview", { preview: messageText.slice(0, 80), length: messageText.length });
     logger?.info?.("[sl-bridge] POST /sl/chat request", {
       requestedCompanionId,
       resolvedCompanionId: companionId,
@@ -422,16 +439,23 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
       }, "local_chat");
       event.source = "secondlife";
       event.platform = "secondlife";
+      event.channel = "secondlife";
       event.slAvatarUsername = SL_AVATAR_USERNAME;
+      event.avatarName = avatarName || event.avatarName;
       event.avatarKey = avatarKey || event.avatarUuid;
-      event.channel = body.channel != null ? String(body.channel) : "";
+      event.channelNumber = body.channel != null ? String(body.channel) : "";
 
+      logger?.info?.("[sl-bridge] pipeline function called", { functionName: "secondLifeAdapter.handleEvent" });
       const result = await adapter.handleEvent({ companionId, event });
       let reply = extractSlChatReply(result);
       if (!normalizePlainTextReply(reply)) {
-        reply = "SL bridge reached Dante, but the chat pipeline returned empty.";
+        reply = "SL bridge reached Dante, but no assistant text was produced.";
       }
       const finalReply = capPlainTextReply(reply);
+      logger?.info?.("[sl-bridge] pipeline return type", { returnType: getPipelineReturnType(result) });
+      logger?.info?.("[sl-bridge] pipeline return keys", { returnKeys: getPipelineReturnKeys(result) });
+      logger?.info?.("[sl-bridge] extracted reply length", { length: finalReply.length });
+      logger?.info?.("[sl-bridge] extracted reply preview", { preview: previewReply(finalReply) });
       logger?.info?.("[sl-bridge] POST /sl/chat reply", {
         requestedCompanionId,
         resolvedCompanionId: companionId,
