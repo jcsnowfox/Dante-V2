@@ -283,6 +283,8 @@ function loadConfig() {
         : "1K",
       allowedAspectRatios: ["1:1", "9:16", "16:9"],
       bucketPrefix: String(process.env.IMAGE_GENERATION_BUCKET_PREFIX || "generated-images").trim() || "generated-images",
+      maxBatchCount: readPositiveInt(process.env.IMAGE_MAX_BATCH_COUNT, 4, { min: 1, max: 10 }),
+      followupWindowMinutes: readPositiveInt(process.env.IMAGE_FOLLOWUP_WINDOW_MINUTES, 30, { min: 1, max: 24 * 60 }),
     },
     audio: {
       ttsEnabled: readBoolean(process.env.AUDIO_TTS_ENABLED, false),

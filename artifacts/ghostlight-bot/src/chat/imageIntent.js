@@ -60,8 +60,34 @@ function stripImageIntentFromText(text = "") {
   return output.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+function normalizeUserImagePrompt(userText = "") {
+  return String(userText || "")
+    .replace(/\b(?:make|generate|send|create|draw)\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|photo|art)\s+(?:of\s+)?/i, "")
+    .trim();
+}
+
+function chooseImagePrompt({ markerPrompt = "", userText = "" } = {}) {
+  const normalizedMarkerPrompt = String(markerPrompt || "").trim();
+  const userPrompt = normalizeUserImagePrompt(userText);
+
+  if (!normalizedMarkerPrompt) {
+    return userPrompt;
+  }
+
+  // Some Dante fallback replies emit a very terse marker prompt (for example a
+  // 29-character subject) even when the user's original request contains the
+  // full scene. Prefer the richer original request so getimg receives the same
+  // final prompt shape as companions that call generate_image directly.
+  if (userPrompt && normalizedMarkerPrompt.length < 60 && userPrompt.length >= normalizedMarkerPrompt.length * 2) {
+    return userPrompt;
+  }
+
+  return normalizedMarkerPrompt;
+}
+
 function buildImageIntentRequest({ text = "", userText = "" } = {}) {
-  const prompt = extractImagePrompt(text) || String(userText || "").replace(/\b(?:make|generate|send|create|draw)\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|photo|art)\s+(?:of\s+)?/i, "").trim();
+  const markerPrompt = extractImagePrompt(text);
+  const prompt = chooseImagePrompt({ markerPrompt, userText });
   return {
     detected: detectImageIntent(text) || /\b(?:generate|create|make|draw|send)\b.{0,40}\b(?:image|picture|photo|art)\b/i.test(String(userText || "")),
     prompt,
@@ -70,4 +96,11 @@ function buildImageIntentRequest({ text = "", userText = "" } = {}) {
   };
 }
 
-module.exports = { detectImageIntent, extractImagePrompt, stripImageIntentFromText, buildImageIntentRequest };
+module.exports = {
+  detectImageIntent,
+  extractImagePrompt,
+  stripImageIntentFromText,
+  normalizeUserImagePrompt,
+  chooseImagePrompt,
+  buildImageIntentRequest,
+};

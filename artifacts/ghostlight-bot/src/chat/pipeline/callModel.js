@@ -1038,6 +1038,7 @@ async function callModel({
     generatedAudioIds: replyDirectives.generatedAudioIds,
     audioCaptions: replyDirectives.audioCaptions,
     imageWarnings: replyDirectives.imageWarnings,
+    mediaStates: replyDirectives.mediaStates,
     usageMetrics,
     requestChars: buildRequestSizeSummary(requestShape),
     estimatedRequestTokens: buildRequestTokenEstimate(requestShape),

@@ -19,6 +19,13 @@ const { cacheLatestReadableReply } = require("../../audio/latestReplyCache");
 const { createAudioGenerationService, resolveTtsProvider } = require("../../audio/generateAudio");
 const { createImageGenerationService, resolveImageGenerationModel } = require("../../images/generateImage");
 const { buildImageIntentRequest } = require("../../chat/imageIntent");
+const {
+  detectImageFollowupRequest,
+  getImageFollowupMaxBatchCount,
+  isUsableLastImageState,
+  loadImageConversationState,
+  markImageConversationActive,
+} = require("../../chat/imageConversationState");
 const { getVoiceNoteTriggerPhrase, isFakeVoiceNoteAction, stripFakeVoiceNoteAction, buildVoiceNoteScriptDetails } = require("../../chat/voiceNoteIntent");
 const { replaceCustomEmojiLabelsForDiscord } = require("../../reactions/customEmojiPalette");
 const { isDevMode, isLogRequest } = require("../../developer/devUtils");
@@ -292,18 +299,40 @@ async function sendTypingIndicatorSafely({
 // handle cross-process dedup; this handles within-process dedup at zero cost.
 const IN_FLIGHT_MESSAGE_IDS = new Set();
 
-async function fulfillImageIntentRequest({ replyPayload, message, config, logger, generatedImages, conversationId, imageGenerationServiceFactory = createImageGenerationService }) {
-  const mediaRequest = replyPayload.mediaRequest || buildImageIntentRequest({
-    text: replyPayload.content || "",
-    userText: message.content || "",
+async function fulfillImageIntentRequest({ replyPayload, message, config, logger, generatedImages, conversationId, cache = null, imageGenerationServiceFactory = createImageGenerationService }) {
+  const maxBatchCount = getImageFollowupMaxBatchCount(config);
+  const followup = detectImageFollowupRequest(message.content || "", { maxCount: maxBatchCount });
+  const lastMediaState = followup.detected
+    ? await loadImageConversationState({ cache, conversationId, userScope: config.memory?.userScope })
+    : null;
+  const lastMediaFound = isUsableLastImageState(lastMediaState, {
+    windowMinutes: config.imageGeneration?.followupWindowMinutes || 30,
+    channelId: message.channelId,
   });
+  const mediaRequest = followup.detected && lastMediaFound
+    ? {
+      detected: true,
+      prompt: lastMediaState.lastPrompt,
+      cleanedText: "",
+      triggerSource: "media_followup",
+      count: followup.requestedCount,
+    }
+    : replyPayload.mediaRequest || buildImageIntentRequest({
+      text: replyPayload.content || "",
+      userText: message.content || "",
+    });
   const imageIntentDetected = Boolean(mediaRequest?.detected);
+  const requestedCount = followup.detected ? followup.requestedCount : Math.min(Number(mediaRequest?.count || 1) || 1, maxBatchCount);
   const prompt = String(mediaRequest?.prompt || "").trim();
   const provider = String(config.imageGeneration?.provider || "getimg").trim() || "getimg";
   const model = resolveImageGenerationModel(config);
 
   logger.info?.("[image-intent] routing diagnostics", {
     image_intent_detected: imageIntentDetected,
+    media_followup_detected: followup.detected,
+    requested_image_count: requestedCount,
+    reused_prompt: followup.detected && lastMediaFound,
+    last_media_found: lastMediaFound,
     image_trigger_source: mediaRequest?.triggerSource || null,
     extracted_prompt_length: prompt.length,
     image_provider: provider,
@@ -311,10 +340,22 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     image_generation_started: false,
     image_generation_success: false,
     image_url_or_bytes_present: false,
-    discord_image_attachment_sent: false,
-    gallery_saved: false,
-    failure_reason: null,
+    discord_attachments_sent: 0,
+    gallery_saved_count: 0,
+    total_requested: requestedCount,
+    total_succeeded: 0,
+    total_failed: 0,
+    failure_reasons: [],
   });
+
+  if (followup.detected && !lastMediaFound) {
+    return {
+      ...replyPayload,
+      content: "What image do you want me to make more of?",
+      files: [],
+      generatedImageIds: [],
+    };
+  }
 
   if (!imageIntentDetected || replyPayload.generatedImageIds.length || replyPayload.files.length) {
     return {
@@ -326,78 +367,106 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
   if (!prompt) {
     logger.warn?.("[image-intent] image intent had no usable prompt", {
       image_intent_detected: true,
-      image_trigger_source: mediaRequest?.triggerSource || null,
-      failure_reason: "empty_prompt",
+      media_followup_detected: followup.detected,
+      last_media_found: lastMediaFound,
+      failure_reasons: ["empty_prompt"],
     });
     return {
       ...replyPayload,
-      content: "I tried to make the image, but the image generator failed.",
+      content: followup.detected ? "What image do you want me to make more of?" : "I tried to make the image, but the image generator failed.",
     };
   }
 
-  logger.info?.("[image-intent] image generation requested", {
-    image_intent_detected: true,
-    image_trigger_source: mediaRequest?.triggerSource || null,
-    extracted_prompt_length: prompt.length,
-    image_provider: provider,
-    image_model: model,
-    image_generation_started: true,
-  });
+  const imageGeneration = imageGenerationServiceFactory({ config, logger, generatedImages });
+  const files = [];
+  const imageIds = [];
+  const failureReasons = [];
+  let lastModel = model;
 
-  try {
-    const imageGeneration = imageGenerationServiceFactory({ config, logger, generatedImages });
-    const result = await imageGeneration.generate({
-      prompt,
-      context: {
-        userScope: config.memory?.userScope,
-        sourceSurface: "chat",
-        conversationId,
-        channelId: message.channelId,
-        sourceMessageId: message.id,
-      },
-    });
-    const imageId = result.record?.imageId || result.image?.imageId;
-    const file = result.file;
-    logger.info?.("[image-intent] image generation succeeded", {
+  for (let index = 0; index < requestedCount; index += 1) {
+    logger.info?.("[image-intent] image generation requested", {
       image_intent_detected: true,
-      image_trigger_source: mediaRequest?.triggerSource || null,
-      extracted_prompt_length: prompt.length,
-      image_provider: provider,
-      image_model: result.record?.model || result.image?.model || model,
-      image_generation_success: true,
-      image_url_or_bytes_present: Boolean(file?.attachment || result.url || result.image?.url),
-      discord_image_attachment_sent: true,
-      gallery_saved: Boolean(result.record),
-      failure_reason: null,
-    });
-    return {
-      ...replyPayload,
-      content: mediaRequest.cleanedText || "",
-      files: file ? [...replyPayload.files, file] : replyPayload.files,
-      generatedImageIds: imageId ? [...replyPayload.generatedImageIds, imageId] : replyPayload.generatedImageIds,
-    };
-  } catch (error) {
-    logger.warn?.("[image-intent] image generation failed", {
-      image_intent_detected: true,
-      image_trigger_source: mediaRequest?.triggerSource || null,
-      extracted_prompt_length: prompt.length,
+      media_followup_detected: followup.detected,
+      requested_image_count: requestedCount,
+      reused_prompt: followup.detected && lastMediaFound,
+      last_media_found: lastMediaFound,
+      generation_index: index + 1,
+      total_requested: requestedCount,
       image_provider: provider,
       image_model: model,
-      image_generation_success: false,
-      image_url_or_bytes_present: false,
-      discord_image_attachment_sent: false,
-      gallery_saved: false,
-      failure_reason: error.message,
+      image_generation_started: true,
+    });
+
+    try {
+      const result = await imageGeneration.generate({
+        prompt,
+        context: {
+          userScope: config.memory?.userScope,
+          sourceSurface: "chat",
+          conversationId,
+          channelId: message.channelId,
+          sourceMessageId: message.id,
+        },
+      });
+      const imageId = result.record?.imageId || result.image?.imageId;
+      if (result.file) files.push(result.file);
+      if (imageId) imageIds.push(imageId);
+      lastModel = result.record?.model || result.image?.model || model;
+    } catch (error) {
+      failureReasons.push(error.message);
+    }
+  }
+
+  const totalSucceeded = files.length;
+  const totalFailed = failureReasons.length;
+  logger.info?.("[image-intent] image generation completed", {
+    image_intent_detected: true,
+    media_followup_detected: followup.detected,
+    requested_image_count: requestedCount,
+    reused_prompt: followup.detected && lastMediaFound,
+    last_media_found: lastMediaFound,
+    total_requested: requestedCount,
+    total_succeeded: totalSucceeded,
+    total_failed: totalFailed,
+    discord_attachments_sent: totalSucceeded,
+    gallery_saved_count: imageIds.length,
+    failure_reasons: failureReasons,
+    image_generation_success: totalSucceeded > 0,
+  });
+
+  if (totalSucceeded > 0) {
+    await markImageConversationActive({
+      cache,
+      conversationId,
+      userScope: config.memory?.userScope,
+      reason: "generated_image",
+      status: "generated_image",
+      lastGeneratedAt: new Date(),
+      lastMediaType: "image",
+      lastPrompt: prompt,
+      lastProvider: provider,
+      lastModel,
+      lastStyle: lastMediaState?.lastStyle || null,
+      lastAppearancePreset: lastMediaState?.lastAppearancePreset || null,
+      lastSuccessAt: new Date(),
+      lastChannelId: message.channelId,
+      lastMessageId: message.id,
     });
     return {
       ...replyPayload,
-      content: "I tried to make the image, but the image generator failed.",
-      files: [],
-      generatedImageIds: [],
+      content: totalFailed ? `I made ${totalSucceeded} image${totalSucceeded === 1 ? "" : "s"}, but ${totalFailed} failed.` : (mediaRequest.cleanedText || ""),
+      files: [...replyPayload.files, ...files],
+      generatedImageIds: [...replyPayload.generatedImageIds, ...imageIds],
     };
   }
-}
 
+  return {
+    ...replyPayload,
+    content: "I tried to make the image, but the image generator failed.",
+    files: [],
+    generatedImageIds: [],
+  };
+}
 async function fulfillVoiceNoteRequest({ replyPayload, message, config, logger, generatedAudio, conversationId, audioGenerationServiceFactory = createAudioGenerationService }) {
   const beforeTrigger = getVoiceNoteTriggerPhrase(message.content || "");
   const afterTrigger = getVoiceNoteTriggerPhrase(replyPayload.content || "");
@@ -844,6 +913,7 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           generatedImageIds: [],
           generatedAudioIds: [],
           imageWarnings: [],
+          mediaStates: [],
         }
         : {
           content: String(reply.content || "").trim(),
@@ -852,9 +922,10 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
           generatedImageIds: Array.isArray(reply.generatedImageIds) ? reply.generatedImageIds : [],
           generatedAudioIds: Array.isArray(reply.generatedAudioIds) ? reply.generatedAudioIds : [],
           imageWarnings: Array.isArray(reply.imageWarnings) ? reply.imageWarnings : [],
+          mediaStates: Array.isArray(reply.mediaStates) ? reply.mediaStates : [],
           internalThought: typeof reply.internalThought === "string" ? reply.internalThought.trim() : "",
         };
-      const imageRoutedReplyPayload = await fulfillImageIntentRequest({ replyPayload, message, config, logger, generatedImages, conversationId });
+      const imageRoutedReplyPayload = await fulfillImageIntentRequest({ replyPayload, message, config, logger, generatedImages, conversationId, cache });
       Object.assign(replyPayload, imageRoutedReplyPayload);
       const routedReplyPayload = await fulfillVoiceNoteRequest({ replyPayload, message, config, logger, generatedAudio, conversationId });
       Object.assign(replyPayload, routedReplyPayload);
@@ -1101,6 +1172,27 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
               error: error?.message,
             });
           }
+        }
+
+        if (replyPayload.generatedImageIds.length && replyPayload.mediaStates?.length) {
+          const latestMediaState = replyPayload.mediaStates[replyPayload.mediaStates.length - 1];
+          await markImageConversationActive({
+            cache,
+            conversationId,
+            userScope: config.memory?.userScope,
+            reason: "generated_image",
+            status: "generated_image",
+            lastGeneratedAt: new Date(),
+            lastMediaType: latestMediaState.lastMediaType || "image",
+            lastPrompt: latestMediaState.lastPrompt,
+            lastProvider: latestMediaState.lastProvider,
+            lastModel: latestMediaState.lastModel,
+            lastStyle: latestMediaState.lastStyle,
+            lastAppearancePreset: latestMediaState.lastAppearancePreset,
+            lastSuccessAt: new Date(),
+            lastChannelId: message.channelId,
+            lastMessageId: sentReply?.id || message.id,
+          });
         }
 
         if (generatedImages && sentReply && replyPayload.generatedImageIds.length) {

@@ -289,6 +289,7 @@ function extractReplyDirectives(toolResults = []) {
     generatedAudioIds: [],
     audioCaptions: [],
     imageWarnings: [],
+    mediaStates: [],
   };
 
   for (const result of toolResults) {
@@ -308,6 +309,10 @@ function extractReplyDirectives(toolResults = []) {
 
     if (Array.isArray(attachment.audioIds)) {
       directives.generatedAudioIds.push(...attachment.audioIds);
+    }
+
+    if (attachment.mediaState && typeof attachment.mediaState === "object") {
+      directives.mediaStates.push(attachment.mediaState);
     }
 
     if (typeof result?.result?.caption === "string" && result.result.caption.trim()) {
@@ -516,6 +521,7 @@ async function runToolLoop({
     replyDirectives.generatedAudioIds.push(...nextDirectives.generatedAudioIds);
     replyDirectives.audioCaptions.push(...nextDirectives.audioCaptions);
     replyDirectives.imageWarnings.push(...nextDirectives.imageWarnings);
+    replyDirectives.mediaStates.push(...nextDirectives.mediaStates);
   }
 
   if (toolOutputs.length) {
@@ -557,6 +563,7 @@ async function runToolLoop({
       generatedAudioIds: Array.from(new Set(replyDirectives.generatedAudioIds)),
       audioCaptions: Array.from(new Set(replyDirectives.audioCaptions)),
       imageWarnings: Array.from(new Set(replyDirectives.imageWarnings)),
+      mediaStates: replyDirectives.mediaStates,
     },
   };
 }
