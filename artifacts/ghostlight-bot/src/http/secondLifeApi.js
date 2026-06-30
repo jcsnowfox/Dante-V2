@@ -55,15 +55,45 @@ function resolveSecondLifeChatCompanionId(requestedCompanionId, config) {
   if (
     requested.toLowerCase() === "dante"
     || requested === SL_DANTE_COMPANION_ID
-    || requested.toLowerCase() === SL_AVATAR_USERNAME.toLowerCase()
   ) {
     return SL_DANTE_COMPANION_ID;
   }
   return requested;
 }
 
+function normalizePlainTextReply(reply) {
+  return String(reply == null ? "" : reply).replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
 function capPlainTextReply(reply) {
-  return String(reply == null ? "" : reply).slice(0, SL_MAX_RESPONSE_CHARS);
+  return normalizePlainTextReply(reply).slice(0, SL_MAX_RESPONSE_CHARS);
+}
+
+function getPipelineReturnType(result) {
+  if (result == null) return String(result);
+  if (Array.isArray(result)) return "array";
+  return typeof result;
+}
+
+function getPipelineReturnKeys(result) {
+  return result && typeof result === "object" && !Array.isArray(result) ? Object.keys(result) : [];
+}
+
+function extractSlChatReply(result) {
+  if (typeof result === "string") return result;
+  if (!result || typeof result !== "object") return "";
+  return String(
+    result.reply
+    || result.text
+    || result.content
+    || result.message
+    || result.output
+    || result.response
+    || result.responseText
+    || result.replyText
+    || result.outbound?.responseText
+    || "",
+  );
 }
 
 function previewReply(reply) {
@@ -346,9 +376,21 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
     const companionId = resolveSecondLifeChatCompanionId(requestedCompanionId, config);
     const messageText = body.message != null ? String(body.message) : "";
 
+    const avatarName = body.avatarName != null ? String(body.avatarName)
+      : body.speaker_name != null ? String(body.speaker_name)
+      : "";
+    const avatarKey = body.avatarKey != null ? String(body.avatarKey)
+      : body.speaker_key != null ? String(body.speaker_key)
+      : body.avatarUuid != null ? String(body.avatarUuid)
+      : "";
+    const region = body.region != null ? String(body.region) : "";
+
     logger?.info?.("[sl-bridge] POST /sl/chat request", {
       requestedCompanionId,
       resolvedCompanionId: companionId,
+      avatarName,
+      avatarKey,
+      region,
       messageLength: messageText.length,
     });
 
@@ -381,18 +423,28 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
       event.source = "secondlife";
       event.platform = "secondlife";
       event.slAvatarUsername = SL_AVATAR_USERNAME;
-      event.avatarKey = body.avatarKey != null ? String(body.avatarKey) : event.avatarUuid;
+      event.avatarKey = avatarKey || event.avatarUuid;
       event.channel = body.channel != null ? String(body.channel) : "";
 
       const result = await adapter.handleEvent({ companionId, event });
-      const reply = result?.responseText ?? result?.replyText ?? result?.text ?? result?.reply ?? "";
+      let reply = extractSlChatReply(result);
+      if (!normalizePlainTextReply(reply)) {
+        reply = "SL bridge reached Dante, but the chat pipeline returned empty.";
+      }
+      const finalReply = capPlainTextReply(reply);
       logger?.info?.("[sl-bridge] POST /sl/chat reply", {
         requestedCompanionId,
         resolvedCompanionId: companionId,
+        avatarName,
+        avatarKey,
+        region,
         messageLength: messageText.length,
-        replyPreview: previewReply(reply),
+        pipelineReturnType: getPipelineReturnType(result),
+        pipelineReturnKeys: getPipelineReturnKeys(result),
+        finalReplyLength: finalReply.length,
+        finalReplyPreview: previewReply(finalReply),
       });
-      sendPlainText(res, 200, capPlainTextReply(reply));
+      sendPlainText(res, 200, finalReply);
     } catch (error) {
       logger?.error?.("[sl-bridge] POST /sl/chat failed", { error: error.message });
       sendPlainText(res, 500, "internal_error");

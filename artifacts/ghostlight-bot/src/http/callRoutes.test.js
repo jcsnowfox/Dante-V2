@@ -382,7 +382,7 @@ test("POST /sl/chat resolves Dante companion id aliases and caps plain text repl
     { "Content-Type": "application/json" },
   );
   assert.equal(usernameResponse.statusCode, 200);
-  assert.equal(handledEvents[2].companionId, "dante_sølvane");
+  assert.equal(handledEvents[2].companionId, "Dante0Solvane");
   assert.equal(handledEvents[2].event.slAvatarUsername, "Dante0Solvane");
 });
 
