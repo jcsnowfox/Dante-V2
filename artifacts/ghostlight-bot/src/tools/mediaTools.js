@@ -72,6 +72,98 @@ function isImageGenerationRequest(value = "") {
     || (IMAGE_WORD_PATTERN.test(text) && !GIF_WORD_PATTERN.test(text));
 }
 
+const NEUTRAL_COUPLE_SETTING = "in a warm neutral cinematic setting with natural light";
+
+function resolveIdentityPreset({ availableAppearancePresets = [], names = [] }) {
+  const normalizedNames = names.map(normalizePresetName).filter(Boolean);
+  if (!normalizedNames.length) return null;
+
+  return availableAppearancePresets.find((preset) => {
+    const normalizedPreset = normalizePresetName(preset.name);
+    return normalizedNames.some((name) => normalizedPreset === name || normalizedPreset.includes(name) || name.includes(normalizedPreset));
+  }) || null;
+}
+
+function detectRequestedStyle(prompt) {
+  const text = String(prompt || "").toLowerCase();
+  const match = text.match(/\b(?:in|as)\s+(?:a\s+)?((?:watercolor|anime|oil painting|comic book|sketch|illustration|cinematic|film noir|polaroid|vintage|black and white|photo|photorealistic)[^,.]*)/i);
+  return match ? match[0].trim() : "";
+}
+
+function stripImageRequestLeadIn(prompt) {
+  return String(prompt || "")
+    .replace(/^\s*(?:please\s+)?(?:try\s+to\s+)?(?:send|show|make|create|generate|draw|paint|render|give|get)\s+(?:me\s+)?(?:a|an|some)?\s*/i, "")
+    .replace(/^\s*(?:photo|photos|pic|pics|picture|pictures|image|images|portrait|portraits|selfie|snapshot)\s+(?:of\s+)?/i, "")
+    .trim();
+}
+
+function hasExplicitSetting(prompt) {
+  return /\b(?:at|in|inside|outside|on|by|near|with|having)\s+(?:the\s+|a\s+|an\s+)?[a-z0-9]/i.test(stripImageRequestLeadIn(prompt));
+}
+
+function resolveIdentityAwareImagePrompt({ prompt, currentUserText, availableAppearancePresets = [], config = {}, initialAppearancePresets = [] }) {
+  const source = `${currentUserText || ""}\n${prompt || ""}`;
+  const compact = source.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const normalizedPrompt = String(prompt || "").trim();
+  const userName = String(config.chat?.promptBlocks?.userName || config.memory?.userScope || "Jenna").trim() || "Jenna";
+  const companionName = String(config.chat?.promptBlocks?.personaName || config.memory?.companionId || config.companion?.id || "Dante Sølvane").trim() || "Dante Sølvane";
+  const mentionsUser = /\b(me|myself)\b/i.test(source) || new RegExp(`\\b${userName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(source);
+  const mentionsCompanion = /\b(you|yourself)\b/i.test(source) || /\bdante\b/i.test(source) || new RegExp(`\\b${companionName.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(source);
+  const mentionsTogether = /\b(us|ourselves)\b/i.test(source)
+    || /\bme\s+(?:and\s+)?you\b/i.test(source)
+    || /\byou\s+(?:and\s+)?me\b/i.test(source)
+    || /\bphoto of me you\b/i.test(source)
+    || /\bme you\b/i.test(compact);
+
+  const resolvedSubjects = [];
+  if (mentionsTogether || mentionsUser) resolvedSubjects.push("user");
+  if (mentionsTogether || mentionsCompanion) resolvedSubjects.push("companion");
+  const identityResolutionDetected = resolvedSubjects.length > 0;
+
+  const userPreset = resolveIdentityPreset({ availableAppearancePresets, names: [userName, "Jenna", "user"] });
+  const companionPreset = resolveIdentityPreset({ availableAppearancePresets, names: [companionName, "Dante Sølvane", "Dante"] });
+  const presetById = new Map(initialAppearancePresets.map((preset) => [preset.presetId, preset]));
+  if (resolvedSubjects.includes("user") && userPreset) presetById.set(userPreset.presetId, userPreset);
+  if (resolvedSubjects.includes("companion") && companionPreset) presetById.set(companionPreset.presetId, companionPreset);
+
+  let finalPrompt = normalizedPrompt;
+  let fallbackSettingUsed = false;
+  if (identityResolutionDetected) {
+    const style = detectRequestedStyle(normalizedPrompt);
+    const subjectText = resolvedSubjects.includes("user") && resolvedSubjects.includes("companion")
+      ? `${userName} and ${companionName} together as a real human couple`
+      : resolvedSubjects.includes("user")
+        ? `${userName}, a real human person`
+        : `${companionName}, a real human person`;
+    const detail = stripImageRequestLeadIn(normalizedPrompt)
+      .replace(/\b(?:me\s+(?:and\s+)?you|you\s+(?:and\s+)?me|me\s+you|us|me|you|myself|yourself)\b/gi, "")
+      .replace(/\b(?:baby|babe)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const setting = hasExplicitSetting(normalizedPrompt) ? detail : NEUTRAL_COUPLE_SETTING;
+    fallbackSettingUsed = !hasExplicitSetting(normalizedPrompt);
+    finalPrompt = [
+      "photo of",
+      subjectText,
+      setting,
+      style ? `requested style: ${style}` : "photorealistic natural photo",
+      "clear faces, natural pose, cinematic lighting, grounded real-world photography",
+    ].filter(Boolean).join("; ");
+  }
+
+  return {
+    prompt: finalPrompt,
+    appearancePresets: Array.from(presetById.values()),
+    identityResolutionDetected,
+    resolvedSubjects,
+    userReferenceFound: Boolean(userPreset?.referenceImageStorageKey),
+    companionReferenceFound: Boolean(companionPreset?.referenceImageStorageKey),
+    appearancePresetsUsed: Array.from(presetById.values()).map((preset) => ({ id: preset.presetId, name: preset.name })),
+    referenceImagesCount: Array.from(presetById.values()).filter((preset) => preset.referenceImageStorageKey).length,
+    fallbackSettingUsed,
+  };
+}
+
 function createGiphySearchTool({ config, logger, fetchImpl = globalThis.fetch }) {
   const apiKey = String(config.giphy?.apiKey || "").trim();
   const gifsEnabled = config.gifs?.enabled !== false;
@@ -379,7 +471,7 @@ function createImageGenerationTool({
     },
     async execute(rawArgs, context = {}) {
       const args = typeof rawArgs === "string" ? (safeJsonParse(rawArgs) || {}) : (rawArgs || {});
-      const prompt = normalizeImagePrompt(args.prompt);
+      let prompt = normalizeImagePrompt(args.prompt);
       const allowedAspectRatios = imageGeneration.getAllowedAspectRatios();
       const selectedAspectRatio = String(args.aspectRatio || "").trim();
       const aspectRatio = selectedAspectRatio && allowedAspectRatios.includes(selectedAspectRatio)
@@ -415,6 +507,26 @@ function createImageGenerationTool({
       const resolvedAppearancePresets = resolveSelectedPresets(selectedAppearancePresetIds, availableAppearancePresets);
       let stylePresets = resolvedStylePresets.presets;
       let appearancePresets = resolvedAppearancePresets.presets;
+      const identityResolution = resolveIdentityAwareImagePrompt({
+        prompt,
+        currentUserText: context.currentUserText,
+        availableAppearancePresets,
+        config,
+        initialAppearancePresets: appearancePresets,
+      });
+      prompt = identityResolution.prompt;
+      appearancePresets = identityResolution.appearancePresets;
+
+      logger.info?.("[tools:generate_image:identity_resolution]", {
+        identity_resolution_detected: identityResolution.identityResolutionDetected,
+        resolved_subjects: identityResolution.resolvedSubjects,
+        user_reference_found: identityResolution.userReferenceFound,
+        companion_reference_found: identityResolution.companionReferenceFound,
+        final_prompt_before_provider: prompt,
+        reference_images_count: identityResolution.referenceImagesCount,
+        appearance_presets_used: identityResolution.appearancePresetsUsed,
+        fallback_setting_used: identityResolution.fallbackSettingUsed,
+      });
 
       logger.info?.("[tools:generate_image:diagnostic] Preset resolution complete", {
         companionId: config.memory?.companionId || config.companion?.id || "",
@@ -942,4 +1054,5 @@ module.exports = {
   createAddReactionTool,
   isImageGenerationRequest,
   shouldAllowAdditionalChatImageCall,
+  resolveIdentityAwareImagePrompt,
 };
