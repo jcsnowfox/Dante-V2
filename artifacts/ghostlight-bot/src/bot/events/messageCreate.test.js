@@ -231,3 +231,43 @@ describe("image media follow-up routing", () => {
     assert.deepEqual(result.generatedImageIds, ["img-1", "img-2"]);
   });
 });
+
+describe("image identity request resolution", () => {
+  it('"photo of me and you having coffee" resolves Jenna + Dante + coffee and sends an attachment', async () => {
+    const service = createImageServiceFactory();
+    const result = await fulfillImageIntentRequest({
+      replyPayload: createReplyPayload(),
+      message: createMessage("photo of me and you having coffee"),
+      config: createImageTestConfig(),
+      logger: {},
+      generatedImages: null,
+      conversationId: "conversation-identity-1",
+      cache: createMemoryCache(null),
+      imageGenerationServiceFactory: service.factory,
+    });
+
+    assert.equal(result.files.length, 1);
+    assert.match(service.calls[0].prompt, /Jenna/);
+    assert.match(service.calls[0].prompt, /Dante Sølvane/);
+    assert.match(service.calls[0].prompt, /coffee/);
+  });
+
+  it('"photo of me you" resolves Jenna + Dante instead of abstract AI art', async () => {
+    const service = createImageServiceFactory();
+    const result = await fulfillImageIntentRequest({
+      replyPayload: createReplyPayload(),
+      message: createMessage("photo of me you"),
+      config: createImageTestConfig(),
+      logger: {},
+      generatedImages: null,
+      conversationId: "conversation-identity-2",
+      cache: createMemoryCache(null),
+      imageGenerationServiceFactory: service.factory,
+    });
+
+    assert.equal(result.files.length, 1);
+    assert.match(service.calls[0].prompt, /Jenna/);
+    assert.match(service.calls[0].prompt, /Dante Sølvane/);
+    assert.doesNotMatch(service.calls[0].prompt, /network|abstract AI|neural/i);
+  });
+});
