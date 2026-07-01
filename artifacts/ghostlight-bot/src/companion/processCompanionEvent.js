@@ -189,6 +189,41 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
     return { event, outbound, reply };
   }
 
+  async function generateCompanionReplyText({
+    companionId,
+    userText,
+    userExternalId,
+    userName,
+    source,
+    channel,
+    context = {},
+  } = {}) {
+    const result = await processCompanionEvent({
+      companionId,
+      channelType: source === "secondlife" ? "second_life" : source,
+      externalUserId: userExternalId,
+      userDisplayName: userName,
+      messageText: userText,
+      eventType: source === "secondlife" ? "local_chat" : "message",
+      metadata: {
+        source,
+        platform: context.platform || source,
+        slAvatarUsername: context.slAvatarUsername || "",
+        avatarName: context.avatarName || userName || "",
+        avatarKey: context.avatarKey || userExternalId || "",
+        region: context.region || "",
+        channel: channel || context.channel || source || "",
+        channelNumber: context.channelNumber || "",
+        secondLife: {
+          contextSections: Array.isArray(context.contextSections) ? context.contextSections : [],
+          publicChat: context.publicChat === true,
+        },
+        bridgeContext: context,
+      },
+    });
+    return extractResponseText(result?.reply) || extractResponseText(result?.outbound?.responseText) || extractResponseText(result);
+  }
+
   async function processCompanionEvent(rawEvent) {
     const event = normalizeInboundEvent(rawEvent);
     startCanonicalPipelineTrace(event);
@@ -216,7 +251,7 @@ function createCompanionEventProcessor({ chatPipeline, logger, secondLifeReplyGe
     throw new Error(`[companion] channelType "${event.channelType}" has no adapter yet.`);
   }
 
-  return { processCompanionEvent };
+  return { processCompanionEvent, generateCompanionReplyText };
 }
 
 module.exports = { createCompanionEventProcessor };
