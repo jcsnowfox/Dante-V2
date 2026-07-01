@@ -30,6 +30,7 @@ const {
 } = require("../../chat/imageConversationState");
 const { resolveUserCommand, stripFakeToolLeaks, rewriteUnsafePromises } = require("../../orchestration/commandResolver");
 const { createPendingAction } = require("../../orchestration/pendingActionStore");
+const { createPendingMedia, updatePendingMedia } = require("../../orchestration/pendingMediaStore");
 const { getVoiceNoteTriggerPhrase, isFakeVoiceNoteAction, stripFakeVoiceNoteAction, buildVoiceNoteScriptDetails } = require("../../chat/voiceNoteIntent");
 const { replaceCustomEmojiLabelsForDiscord } = require("../../reactions/customEmojiPalette");
 const { isDevMode, isLogRequest } = require("../../developer/devUtils");
@@ -330,6 +331,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     windowMinutes: config.imageGeneration?.followupWindowMinutes || 30,
     channelId: message.channelId,
   });
+  const sameThingButMatch = String(message.content || "").match(/\bsame thing but\s+(.+)/i);
   const mediaRequest = isRetry && failedMediaFound
     ? {
       detected: true,
@@ -341,7 +343,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     : followup.detected && lastMediaFound
     ? {
       detected: true,
-      prompt: lastMediaState.lastPrompt,
+      prompt: sameThingButMatch ? `${lastMediaState.lastPrompt}; change: ${sameThingButMatch[1].trim()}` : lastMediaState.lastPrompt,
       cleanedText: "",
       triggerSource: "media_followup",
       count: followup.requestedCount,
@@ -357,7 +359,10 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
   const provider = String(config.imageGeneration?.provider || "getimg").trim() || "getimg";
   const model = resolveImageGenerationModel(config);
 
+  let pendingMedia = null;
   if (imageIntentDetected) {
+    pendingMedia = createPendingMedia({ userId: message.author?.id, companionId: config.memory?.companionId || config.chat?.promptBlocks?.personaName || "dante", channelId: message.channelId, mediaType: "image", prompt, provider, model, status: "queued" });
+    logger.info?.("[orchestration] pending media created", { pending_media_found: true, pending_media_id: pendingMedia.id, pending_media_status: pendingMedia.status });
     startImageRequestDiagnostics({
       prompt,
       provider,
@@ -444,6 +449,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     };
   }
 
+  updatePendingMedia(pendingMedia?.id, { status: "running" });
   updateImageRequestDiagnostics({ status: "provider_call_started", provider_called: true, media_execution_stage: "provider_called", event: "provider_called" });
   const imageGeneration = imageGenerationServiceFactory({ config, logger, generatedImages });
   const files = [];
@@ -488,6 +494,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
       updateImageRequestDiagnostics({
         status: "provider_succeeded",
         provider_status: "success",
+        provider_response_shape: result.diagnostics?.providerResponseSummary || { hasFile: Boolean(result.file), hasRecord: Boolean(result.record || result.image) },
         providerResponseSummary: result.diagnostics?.providerResponseSummary || { hasFile: Boolean(result.file), hasRecord: Boolean(result.record || result.image) },
         gallery_save_started: true,
         gallery_save_success: result.diagnostics?.gallerySaveSuccess !== false,
@@ -533,6 +540,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
   });
 
   if (totalSucceeded > 0) {
+    updatePendingMedia(pendingMedia?.id, { status: "succeeded" });
     await markImageConversationActive({
       cache,
       conversationId,
@@ -559,6 +567,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     };
   }
 
+  updatePendingMedia(pendingMedia?.id, { status: "failed", failureReason: failureReasons.join("; ") || "provider_failed" });
   await markImageConversationActive({
     cache,
     conversationId,
@@ -576,7 +585,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
 
   return {
     ...replyPayload,
-    content: "The image generator failed.",
+    content: `The image generator failed${failureReasons.length ? `: ${failureReasons.join("; ")}` : ""}.`,
     files: [],
     generatedImageIds: [],
   };
@@ -1076,6 +1085,15 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
         || Boolean(config.getimg?.apiKey || config.openai?.apiKey || config.imageGeneration?.apiKey);
       const shouldExecuteMediaBeforeLlm = providerCanRunBeforeLlm
         && preResolvedCommand.intents.some((intent) => ["image_request", "image_followup", "image_retry", "media_retry", "fake_tool_call"].includes(intent.type));
+      const shouldExecuteVoiceBeforeLlm = preResolvedCommand.intents.some((intent) => intent.type === "voice_note_request");
+      if (shouldExecuteVoiceBeforeLlm) {
+        const directVoicePayload = await fulfillVoiceNoteRequest({ replyPayload: { content: "", suppressEmbeds: false, files: [], generatedImageIds: [], generatedAudioIds: [], imageWarnings: [], mediaStates: [] }, message, config, logger, generatedAudio, conversationId });
+        if (directVoicePayload.files.length || directVoicePayload.content) {
+          await sendResolvedReplyPayload({ message, logger, generatedImages, config, conversationId, replyPayload: directVoicePayload });
+          return;
+        }
+      }
+
       if (shouldExecuteMediaBeforeLlm) {
         const directMediaPayload = await fulfillImageIntentRequest({
           replyPayload: {
@@ -1123,12 +1141,8 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
       }
 
       if (!reply) {
-        logger.warn("[chat] Message produced no reply", {
-          messageId: message.id,
-          channelId: message.channelId,
-          conversationId,
-        });
-        return;
+        logger.warn("[chat] Message produced no reply", { messageId: message.id, channelId: message.channelId, conversationId });
+        reply = "I had a thought there, but it came out empty. Try me again and I’ll answer clean.";
       }
 
       const replyPayload = typeof reply === "string"

@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { resolveUserCommand } = require("./commandResolver");
-const { fulfillImageIntentRequest, sendResolvedReplyPayload } = require("../bot/events/messageCreate");
+const { fulfillImageIntentRequest, fulfillVoiceNoteRequest, sendResolvedReplyPayload } = require("../bot/events/messageCreate");
 
 test("pre-LLM resolver detects casual image requests before chat generation", () => {
   const resolved = resolveUserCommand({ text: "send me a pic of us baby" });
@@ -193,4 +193,84 @@ test("send me a pic of us baby runs provider before LLM and sends Discord attach
   assert.equal(providerCalled, true);
   assert.equal(llmCalled, false);
   assert.equal(sent.some((payload) => Array.isArray(payload.files) && payload.files.length > 0), true);
+});
+
+test("I want a pic calls provider and Discord send has files_count greater than zero", async () => {
+  const sendCalls = [];
+  const message = { content: "I want a pic", channelId: "chan-2", id: "msg-pic", author: { id: "u" }, channel: { send: async (payload) => { sendCalls.push(payload); return { id: "sent-pic" }; } } };
+  const payload = await fulfillImageIntentRequest({
+    replyPayload: { content: "", files: [], generatedImageIds: [], generatedAudioIds: [], imageWarnings: [], mediaStates: [] },
+    message, config: { memory: { userScope: "test" }, imageGeneration: { provider: "fake" }, chat: {} }, logger: { info() {}, warn() {}, error() {}, debug() {} }, generatedImages: {}, conversationId: "chan-2", cache: { async get() { return null; }, async set() {} }, preResolvedCommand: resolveUserCommand({ text: message.content }),
+    imageGenerationServiceFactory: () => ({ generate: async () => ({ file: { attachment: Buffer.from("png"), name: "image.png" }, record: { imageId: "img-pic" } }) }),
+  });
+  await sendResolvedReplyPayload({ message, logger: { info() {}, warn() {}, error() {}, debug() {} }, generatedImages: {}, config: { chat: {} }, conversationId: "chan-2", replyPayload: payload });
+  assert.equal(sendCalls[0].files.length > 0, true);
+});
+
+test("fake image tool-call text is consumed and not posted", async () => {
+  const sent = [];
+  const message = { content: "[Calling image_generate tool with: prompt=rainy kiss]", channelId: "chan-fake", id: "msg-fake", author: { id: "u" }, channel: { send: async (payload) => { sent.push(payload); return { id: "sent-fake" }; } } };
+  const payload = await fulfillImageIntentRequest({ replyPayload: { content: message.content, files: [], generatedImageIds: [], generatedAudioIds: [], imageWarnings: [], mediaStates: [] }, message, config: { memory: { userScope: "test" }, imageGeneration: { provider: "fake" }, chat: {} }, logger: { info() {}, warn() {}, error() {}, debug() {} }, generatedImages: {}, conversationId: "chan-fake", cache: { async get() { return null; }, async set() {} }, preResolvedCommand: resolveUserCommand({ text: message.content }), imageGenerationServiceFactory: () => ({ generate: async () => ({ file: { attachment: Buffer.from("png"), name: "image.png" }, record: { imageId: "img-fake" } }) }) });
+  await sendResolvedReplyPayload({ message, logger: { info() {}, warn() {}, error() {}, debug() {} }, generatedImages: {}, config: { chat: {} }, conversationId: "chan-fake", replyPayload: payload });
+  assert.equal(sent.some((payload) => /Calling image_generate/.test(payload.content || "")), false);
+  assert.equal(sent[0].files.length, 1);
+});
+
+test("provider URL and base64 responses normalize to Discord attachments", async () => {
+  const { createImageGenerationService } = require("../images/generateImage");
+  async function generateWith(responsePayload) {
+    const fetchImpl = async (url, options) => {
+      if (options?.method === "POST") return { ok: true, status: 200, json: async () => responsePayload, headers: { get: () => "application/json" } };
+      return { ok: true, status: 200, arrayBuffer: async () => Buffer.from("url-bytes").buffer, headers: { get: () => "image/png" } };
+    };
+    const os = require("node:os"); const path = require("node:path"); const { mkdtemp } = require("node:fs/promises"); const localDir = await mkdtemp(path.join(os.tmpdir(), "dante-provider-shape-"));
+    return createImageGenerationService({ config: { memory: { userScope: "test" }, localStorage: { dir: localDir }, getimg: { apiKey: "key", baseURL: "https://getimg.test" }, imageGeneration: { enabled: true, provider: "getimg", model: "test-model" } }, logger: { info() {}, warn() {}, error() {}, debug() {} }, generatedImages: { recordImage: async (record) => record }, fetchImpl }).generate({ prompt: "x", context: { userScope: "test" } });
+  }
+  const urlResult = await generateWith({ data: [{ url: "https://cdn.test/image.png" }] });
+  const b64Result = await generateWith({ data: [{ b64_json: Buffer.from("b64").toString("base64") }] });
+  assert.equal(Buffer.isBuffer(urlResult.file.attachment), true);
+  assert.equal(Buffer.isBuffer(b64Result.file.attachment), true);
+});
+
+test("Discord upload failure after provider success sends clear upload failure", async () => {
+  const sent = [];
+  const message = { channel: { send: async (payload) => { sent.push(payload); if (payload.files?.length) throw new Error("upload boom"); return { id: "fallback" }; } } };
+  await sendResolvedReplyPayload({ message, logger: { info() {}, warn() {}, error() {}, debug() {} }, generatedImages: {}, config: { chat: {} }, conversationId: "c", replyPayload: { content: "", files: [{ attachment: Buffer.from("png"), name: "image.png" }], generatedImageIds: ["img"], generatedAudioIds: [] } });
+  assert.match(sent.at(-1).content, /Discord upload failed/i);
+});
+
+test("provider failure sends clear provider failure and saves failed prompt for retry", async () => {
+  let saved;
+  const payload = await fulfillImageIntentRequest({ replyPayload: { content: "", files: [], generatedImageIds: [], generatedAudioIds: [], imageWarnings: [], mediaStates: [] }, message: { content: "take a photo", channelId: "c", id: "m", author: { id: "u" } }, config: { memory: { userScope: "test" }, imageGeneration: { provider: "fake" }, chat: {} }, logger: { info() {}, warn() {}, error() {}, debug() {} }, generatedImages: {}, conversationId: "c", cache: { async get() { return null; }, async set(_k, v) { saved = v; } }, preResolvedCommand: resolveUserCommand({ text: "take a photo" }), imageGenerationServiceFactory: () => ({ generate: async () => { throw new Error("provider boom"); } }) });
+  assert.match(payload.content, /image generator failed: provider boom/i);
+  assert.equal(saved.lastFailedPrompt, "take a photo");
+});
+
+test("two more sends two attachments and same thing but changes reused prompt", async () => {
+  const prompts = [];
+  const cache = { async get() { return { lastMediaType: "image", lastPrompt: "warm kitchen selfie", lastSuccessAt: new Date().toISOString(), lastChannelId: "c" }; }, async set() {} };
+  const payload = await fulfillImageIntentRequest({ replyPayload: { content: "", files: [], generatedImageIds: [], generatedAudioIds: [], imageWarnings: [], mediaStates: [] }, message: { content: "two more", channelId: "c", id: "m", author: { id: "u" } }, config: { memory: { userScope: "test" }, imageGeneration: { provider: "fake" }, chat: {} }, logger: { info() {}, warn() {}, error() {}, debug() {} }, generatedImages: {}, conversationId: "c", cache, preResolvedCommand: resolveUserCommand({ text: "two more" }), imageGenerationServiceFactory: () => ({ generate: async ({ prompt }) => { prompts.push(prompt); return { file: { attachment: Buffer.from("png"), name: `${prompts.length}.png` }, record: { imageId: `img-${prompts.length}` } }; } }) });
+  assert.equal(payload.files.length, 2);
+  prompts.length = 0;
+  await fulfillImageIntentRequest({ replyPayload: { content: "", files: [], generatedImageIds: [], generatedAudioIds: [], imageWarnings: [], mediaStates: [] }, message: { content: "same thing but darker", channelId: "c", id: "m2", author: { id: "u" } }, config: { memory: { userScope: "test" }, imageGeneration: { provider: "fake" }, chat: {} }, logger: { info() {}, warn() {}, error() {}, debug() {} }, generatedImages: {}, conversationId: "c", cache, preResolvedCommand: resolveUserCommand({ text: "same thing but darker" }), imageGenerationServiceFactory: () => ({ generate: async ({ prompt }) => { prompts.push(prompt); return { file: { attachment: Buffer.from("png"), name: "changed.png" }, record: { imageId: "changed" } }; } }) });
+  assert.match(prompts[0], /warm kitchen selfie; change: darker/);
+});
+
+test("voice note sends audio attachment with cleaned spokenScript and no stage directions", async () => {
+  let ttsText = "";
+  const payload = await fulfillVoiceNoteRequest({ replyPayload: { content: "*smiles* [Calling image_generate tool with: prompt=x] https://x.test Dante: I am here", files: [], generatedImageIds: [], generatedAudioIds: [] }, message: { content: "send me a voice note", channelId: "c", id: "v" }, config: { memory: { userScope: "test" }, audio: {} }, logger: { info() {}, warn() {}, error() {}, debug() {} }, generatedAudio: {}, conversationId: "c", audioGenerationServiceFactory: () => ({ generate: async ({ text }) => { ttsText = text; return { file: { attachment: Buffer.from("mp3"), name: "voice.mp3" }, record: { audioId: "aud" } }; } }) });
+  assert.equal(payload.files.length, 1);
+  assert.doesNotMatch(ttsText, /smiles|Calling image_generate|https?:|Dante:/i);
+});
+
+test("empty model output sends fallback instead of silence and normal chat still works", async () => {
+  const { createMessageCreateHandler } = require("../bot/events/messageCreate");
+  async function runWithReply(reply) {
+    const sent = [];
+    const handler = createMessageCreateHandler({ config: { discord: {}, chat: { defaultMode: "chat" }, memory: { userScope: "u" } }, logger: { debug() {}, info() {}, warn() {}, error() {} }, chatPipeline: { run: async () => reply }, conversations: { recordEvent: async () => true }, channelModes: { resolveModeForContext: async () => ({ name: "chat" }) }, generatedImages: {}, generatedAudio: {}, cache: { async get() { return null; }, async set() {} } });
+    await handler({ id: `m-${Math.random()}`, content: "hello", channelId: "c", guildId: "g", author: { id: "u", username: "U", bot: false }, member: { displayName: "U" }, mentions: { users: { has: () => false } }, attachments: { size: 0, filter: () => ({ size: 0, first: () => null }) }, stickers: { size: 0 }, channel: { id: "c", isThread: () => false, sendTyping: async () => {}, send: async (payload) => { sent.push(payload); return { id: "sent", author: {}, member: {} }; } }, client: { user: { id: "bot" }, appContext: {} }, inGuild: () => true, system: false });
+    return sent;
+  }
+  assert.match((await runWithReply(""))[0].content, /came out empty/i);
+  assert.equal((await runWithReply("normal hello"))[0].content, "normal hello");
 });
