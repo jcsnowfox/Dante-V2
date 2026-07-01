@@ -385,6 +385,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     dashboard_media_path_used: false,
     discord_media_path_used: true,
     fake_tool_call_detected: Boolean(mediaRequest?.fakeToolCallDetected),
+    fake_tool_call_consumed: Boolean(mediaRequest?.fakeToolCallDetected),
     parsed_tool_prompt_length: prompt.length,
     parsed_tool_params: parsedToolParams,
     media_followup_detected: followup.detected,
@@ -393,6 +394,10 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     reused_prompt: followup.detected && lastMediaFound,
     last_media_found: lastMediaFound,
     pending_media_found: Boolean(lastMediaFound || failedMediaFound),
+    pending_media_id: pendingMedia?.id || null,
+    pending_media_status: pendingMedia?.status || null,
+    retry_reused_original_prompt: Boolean(isRetry && failedMediaFound),
+    current_message_used_as_prompt: Boolean(!isRetry && !followup.detected),
     image_trigger_source: mediaRequest?.triggerSource || null,
     extracted_prompt_length: prompt.length,
     image_provider: provider,
@@ -477,7 +482,16 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     });
 
     try {
-      const result = await imageGeneration.generate({
+      logger.info?.("[image-intent] generate_image tool called", {
+        command_type: "generate_image",
+        provider_called: true,
+        image_prompt_final: prompt,
+        identity_resolution_detected: Boolean(mediaRequest?.identityResolution?.detected),
+        resolved_subjects: mediaRequest?.identityResolution?.resolvedSubjects || [],
+        user_reference_found: Boolean(mediaRequest?.identityResolution?.userReferenceFound),
+        companion_reference_found: Boolean(mediaRequest?.identityResolution?.companionReferenceFound),
+      });
+      const providerResult = await imageGeneration.generate({
         prompt,
         aspectRatio: parsedToolParams.aspectRatio,
         stylePreset: parsedToolParams.stylePreset,
@@ -491,27 +505,44 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
           sourceMessageId: message.id,
         },
       });
+      const imageId = providerResult.record?.imageId || providerResult.image?.imageId;
+      const imageDescription = providerResult.image?.description || providerResult.record?.description || prompt;
+      const toolResult = {
+        ok: true,
+        imageId,
+        model: providerResult.record?.model || providerResult.image?.model || model,
+        aspectRatio: providerResult.record?.aspectRatio || parsedToolParams.aspectRatio || config.imageGeneration?.aspectRatio || "",
+        imageDescription,
+        attachmentReady: true,
+        replyAttachment: {
+          imageIds: imageId ? [imageId] : [],
+          files: providerResult.file ? [{ ...providerResult.file, name: providerResult.file.name || "generated-image.png", description: providerResult.file.description || imageDescription }] : [],
+        },
+        toolMessage: "Image generated and attachment delivery is handled automatically.",
+      };
+      const toolFiles = Array.isArray(toolResult.replyAttachment?.files) ? toolResult.replyAttachment.files : [];
       updateImageRequestDiagnostics({
         status: "provider_succeeded",
         provider_status: "success",
-        provider_response_shape: result.diagnostics?.providerResponseSummary || { hasFile: Boolean(result.file), hasRecord: Boolean(result.record || result.image) },
-        providerResponseSummary: result.diagnostics?.providerResponseSummary || { hasFile: Boolean(result.file), hasRecord: Boolean(result.record || result.image) },
+        provider_response_shape: providerResult.diagnostics?.providerResponseSummary || { hasFile: Boolean(providerResult.file), hasRecord: Boolean(providerResult.record || providerResult.image) },
+        providerResponseSummary: providerResult.diagnostics?.providerResponseSummary || { hasFile: Boolean(providerResult.file), hasRecord: Boolean(providerResult.record || providerResult.image) },
         gallery_save_started: true,
-        gallery_save_success: result.diagnostics?.gallerySaveSuccess !== false,
+        gallery_save_success: providerResult.diagnostics?.gallerySaveSuccess !== false,
         media_execution_stage: "discord_attachment_created",
         event: "provider_succeeded",
       });
-      const imageId = result.record?.imageId || result.image?.imageId;
-      if (result.file) {
-        files.push(result.file);
+      logger.info?.("[image-intent] generate_image tool result collected", { attachmentReady: toolResult.attachmentReady, files_count: toolFiles.length });
+      for (const file of toolFiles) {
+        files.push(file);
         logger.info?.("[image-intent] Discord attachment created", {
           discord_attachment_created: true,
-          discord_attachment_filename: result.file.name || "image.png",
-          image_bytes_length: Buffer.isBuffer(result.file.attachment) ? result.file.attachment.length : undefined,
+          discord_attachment_filename: file.name || "generated-image.png",
+          image_bytes_length: Buffer.isBuffer(file.attachment) ? file.attachment.length : (file.attachment?.byteLength || undefined),
+          gallery_save_success: providerResult.diagnostics?.gallerySaveSuccess !== false,
         });
       }
-      if (imageId) imageIds.push(imageId);
-      lastModel = result.record?.model || result.image?.model || model;
+      for (const id of toolResult.replyAttachment.imageIds || []) imageIds.push(id);
+      lastModel = toolResult.model || model;
     } catch (error) {
       failureReasons.push(error.message);
       updateImageRequestDiagnostics({ status: "provider_failed", failureStage: "provider", provider_status: "failed", media_execution_stage: "provider_failed", event: "provider_failed" });
@@ -532,6 +563,7 @@ async function fulfillImageIntentRequest({ replyPayload, message, config, logger
     discord_attachments_sent: totalSucceeded,
     discord_image_attachment_sent: false,
     fake_tool_call_detected: Boolean(mediaRequest?.fakeToolCallDetected),
+    fake_tool_call_consumed: Boolean(mediaRequest?.fakeToolCallDetected),
     parsed_tool_prompt_length: prompt.length,
     parsed_tool_params: parsedToolParams,
     gallery_saved_count: imageIds.length,
@@ -1054,6 +1086,8 @@ function createMessageCreateHandler({ config, logger, chatPipeline, companion, c
         maxImageCount: getImageFollowupMaxBatchCount(config),
       });
       logger.info?.("[orchestration] pre-LLM command resolver", {
+        pre_llm_command_detected: preResolvedCommand.detected,
+        command_type: preResolvedCommand.intents[0]?.actionType || preResolvedCommand.intents[0]?.type || null,
         detected: preResolvedCommand.detected,
         intents: preResolvedCommand.intents.map((intent) => intent.type),
         messageId: message.id,

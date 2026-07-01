@@ -576,22 +576,16 @@ function createImageGenerationTool({
           }
         }
 
-        const noAppearancePresetHint = appearancePresets.length === 0 && availableAppearancePresets.length > 0
-          ? `No appearance preset was applied (available: ${availableAppearancePresets.map((p) => `"${p.name}" id=${p.presetId}`).join(", ")}). For future images of yourself or a named person, include the matching preset id in appearancePresetIds.`
-          : "";
-
         return {
           ok: true,
           imageId: result.record.imageId,
           model: result.record.model,
           aspectRatio: result.record.aspectRatio,
           imageDescription,
-          selectedStylePresetNames: stylePresets.map((preset) => preset.name),
-          selectedAppearancePresetNames: appearancePresets.map((preset) => preset.name),
           attachmentReady: true,
           replyAttachment: {
             imageIds: [result.record.imageId],
-            files: [result.file],
+            files: [{ ...result.file, name: result.file.name || "generated-image.png", description: imageDescription }],
             mediaState: {
               lastMediaType: "image",
               lastPrompt: prompt,
@@ -601,9 +595,7 @@ function createImageGenerationTool({
               lastAppearancePreset: appearancePresets.map((preset) => preset.name).join(", "),
             },
           },
-          toolMessage: noAppearancePresetHint
-            ? `The generated image is ready and will be attached automatically. Note: ${noAppearancePresetHint}`
-            : "The generated image is ready and will be attached to the reply automatically.",
+          toolMessage: "Image generated and attachment delivery is handled automatically.",
         };
       } catch (error) {
         logger.warn("[tools] Image generation failed", {

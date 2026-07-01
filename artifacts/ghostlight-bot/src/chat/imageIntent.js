@@ -3,8 +3,8 @@
 const IMAGE_MARKER_RE = /(?:!\[generated image\]|\[generated image\]|generate image\s*:|image prompt\s*:|attached image\s*:|tool request\s+for\s+generate_image)/i;
 const IMAGE_LINE_RE = /^\s*(?:!\[generated image\]\s*|\[generated image\]\s*|(?:generate image|image prompt|attached image)\s*:\s*)(.*)$/i;
 const FAKE_TOOL_CALL_RE = /(?:\[\s*calling\s+image_generate\s+tool\s+with\s*:|\bimage_generate\s+tool\b|\bgenerate_image\s+tool\b|\btool\s+call\s*:|\bprompt\s*=)/i;
-const CASUAL_IMAGE_REQUEST_RE = /\b(?:i\s+want\s+a\s+pic|send\s+me\s+a\s+pic|photo\s+of\s+us|picture\s+of\s+us|take\s+a\s+picture|send\s+me\s+one)\b/i;
-const USER_IMAGE_REQUEST_RE = /\b(?:generate|create|make|draw|send|show|want|need|take)\b.{0,80}\b(?:image|picture|photo|pic|pics|portrait|selfie|art)\b/i;
+const CASUAL_IMAGE_REQUEST_RE = /\b(?:i\s+want\s+a\s+pic|send\s+me\s+a\s+(?:pic|photo)|photo\s+of\s+us|pic\s+of\s+us|picture\s+of\s+us|me\s+and\s+you|you\s+and\s+me|photo\s+of\s+me\s+you|take\s+a\s+(?:picture|photo)|send\s+me\s+one)\b/i;
+const USER_IMAGE_REQUEST_RE = /\b(?:generate|create|make|draw|send|show|want|need|take)\b.{0,80}\b(?:image|picture|photo|pic|pics|portrait|selfie|snapshot|shot|art)\b/i;
 
 function detectFakeImageToolCall(text = "") {
   return FAKE_TOOL_CALL_RE.test(String(text || ""));
@@ -115,11 +115,51 @@ function chooseImagePrompt({ markerPrompt = "", userText = "" } = {}) {
   return normalizedMarkerPrompt;
 }
 
+
+function resolveIdentitySubjects(prompt = "", userText = "") {
+  const combined = `${userText} ${prompt}`.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  const hasMeYou = /\b(?:me\s+and\s+you|you\s+and\s+me|photo\s+of\s+me\s+you|pic\s+of\s+me\s+you|me\s+you)\b/.test(combined);
+  const hasUs = /\b(?:us|photo\s+of\s+us|pic\s+of\s+us|picture\s+of\s+us)\b/.test(combined);
+  const hasMe = /\bme\b/.test(combined);
+  const hasYou = /\byou\b/.test(combined);
+  const subjects = [];
+  if (hasMeYou || hasUs || (hasMe && hasYou)) subjects.push("Jenna", "Dante Sølvane");
+  else {
+    if (hasMe) subjects.push("Jenna");
+    if (hasYou) subjects.push("Dante Sølvane");
+  }
+  return Array.from(new Set(subjects));
+}
+
+function applyIdentityResolution(prompt = "", userText = "") {
+  const basePrompt = String(prompt || userText || "").trim();
+  const subjects = resolveIdentitySubjects(basePrompt, userText);
+  if (subjects.includes("Jenna") && subjects.includes("Dante Sølvane")) {
+    const settingGiven = /\b(?:at|in|on|inside|outside|coffee|cafe|beach|kitchen|bedroom|forest|city|rain|snow|sunset|night|morning)\b/i.test(basePrompt);
+    return {
+      prompt: `realistic cinematic couple photo of Jenna and Dante Sølvane together, ${basePrompt}${settingGiven ? "" : ", intimate natural pose, warm realistic lighting"}`,
+      identityResolution: { detected: true, resolvedSubjects: subjects, userReferenceFound: true, companionReferenceFound: true },
+    };
+  }
+  if (subjects.includes("Jenna")) {
+    return { prompt: `realistic cinematic photo of Jenna, ${basePrompt}`, identityResolution: { detected: true, resolvedSubjects: subjects, userReferenceFound: true, companionReferenceFound: false } };
+  }
+  if (subjects.includes("Dante Sølvane")) {
+    return { prompt: `realistic cinematic photo of Dante Sølvane, ${basePrompt}`, identityResolution: { detected: true, resolvedSubjects: subjects, userReferenceFound: false, companionReferenceFound: true } };
+  }
+  return { prompt: basePrompt, identityResolution: { detected: false, resolvedSubjects: [], userReferenceFound: false, companionReferenceFound: false } };
+}
+
 function buildImageIntentRequest({ text = "", userText = "" } = {}) {
   const fake = parseFakeImageToolCall(text);
   const markerPrompt = fake.detected ? fake.prompt : extractImagePrompt(text);
-  const prompt = chooseImagePrompt({ markerPrompt, userText });
+  const chosenPrompt = chooseImagePrompt({ markerPrompt, userText });
   const userDetected = USER_IMAGE_REQUEST_RE.test(String(userText || "")) || CASUAL_IMAGE_REQUEST_RE.test(String(userText || ""));
+  const shouldResolveIdentity = userDetected && !fake.detected && !detectImageIntent(text);
+  const resolved = shouldResolveIdentity
+    ? applyIdentityResolution(chosenPrompt, userText)
+    : { prompt: chosenPrompt, identityResolution: { detected: false, resolvedSubjects: [], userReferenceFound: false, companionReferenceFound: false } };
+  const prompt = resolved.prompt;
   return {
     detected: detectImageIntent(text) || userDetected,
     prompt,
@@ -127,7 +167,8 @@ function buildImageIntentRequest({ text = "", userText = "" } = {}) {
     cleanedText: stripImageIntentFromText(text),
     fakeToolCallDetected: fake.detected,
     triggerSource: fake.detected ? "fake_tool_call" : (detectImageIntent(text) ? "reply_marker" : "user_request"),
+    identityResolution: resolved.identityResolution,
   };
 }
 
-module.exports = { detectImageIntent, extractImagePrompt, stripImageIntentFromText, normalizeUserImagePrompt, chooseImagePrompt, buildImageIntentRequest, detectFakeImageToolCall, parseFakeImageToolCall };
+module.exports = { detectImageIntent, extractImagePrompt, stripImageIntentFromText, normalizeUserImagePrompt, chooseImagePrompt, buildImageIntentRequest, detectFakeImageToolCall, parseFakeImageToolCall, resolveIdentitySubjects, applyIdentityResolution };
