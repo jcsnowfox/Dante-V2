@@ -380,7 +380,7 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
     }
 
     const secondLife = context.secondLife || null;
-    const adapter = context.secondLifeAdapter || null;
+    const companion = context.companion || null;
     const config = context.config || {};
     const requestedCompanionId = (
       body.companionId != null ? String(body.companionId)
@@ -401,7 +401,7 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
 
     logger?.info?.("[sl-bridge] requested companionId", { requestedCompanionId });
     logger?.info?.("[sl-bridge] resolved companionId", { resolvedCompanionId: companionId });
-    logger?.info?.("[sl-bridge] user message preview", { preview: messageText.slice(0, 80), length: messageText.length });
+    logger?.info?.("[sl-bridge] message preview", { preview: messageText.slice(0, 80), length: messageText.length });
     logger?.info?.("[sl-bridge] POST /sl/chat request", {
       requestedCompanionId,
       resolvedCompanionId: companionId,
@@ -411,7 +411,7 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
       messageLength: messageText.length,
     });
 
-    if (!secondLife || secondLife.available !== true || !adapter) {
+    if (!secondLife || secondLife.available !== true || !companion || typeof companion.generateCompanionReplyText !== "function") {
       sendPlainText(res, 503, "secondlife bridge unavailable");
       return true;
     }
@@ -432,24 +432,29 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
     }
 
     try {
-      const event = normalizeEventFromBody({
-        ...body,
-        type: body.type || body.eventType || "local_chat",
-        message: messageText,
-      }, "local_chat");
-      event.source = "secondlife";
-      event.platform = "secondlife";
-      event.channel = "secondlife";
-      event.slAvatarUsername = SL_AVATAR_USERNAME;
-      event.avatarName = avatarName || event.avatarName;
-      event.avatarKey = avatarKey || event.avatarUuid;
-      event.channelNumber = body.channel != null ? String(body.channel) : "";
-
-      logger?.info?.("[sl-bridge] pipeline function called", { functionName: "secondLifeAdapter.handleEvent" });
-      const result = await adapter.handleEvent({ companionId, event });
-      let reply = extractSlChatReply(result);
+      const channelNumber = body.channel != null ? String(body.channel) : "";
+      logger?.info?.("[sl-bridge] pipeline/helper function called", { functionName: "companion.generateCompanionReplyText" });
+      const result = await companion.generateCompanionReplyText({
+        companionId,
+        userText: messageText,
+        userExternalId: `secondlife:${avatarKey}`,
+        userName: avatarName,
+        source: "secondlife",
+        channel: "secondlife",
+        context: {
+          platform: "secondlife",
+          slAvatarUsername: SL_AVATAR_USERNAME,
+          avatarName,
+          avatarKey,
+          region,
+          channelNumber,
+        },
+      });
+      const reply = extractSlChatReply(result);
       if (!normalizePlainTextReply(reply)) {
-        reply = "SL bridge reached Dante, but no assistant text was produced.";
+        logger?.warn?.("[sl-bridge] no assistant text produced");
+        sendPlainText(res, 500, "SL bridge error: no assistant text produced");
+        return true;
       }
       const finalReply = capPlainTextReply(reply);
       logger?.info?.("[sl-bridge] pipeline return type", { returnType: getPipelineReturnType(result) });
@@ -471,7 +476,7 @@ async function handleSecondLifeApiRequest({ req, res, url, context }) {
       sendPlainText(res, 200, finalReply);
     } catch (error) {
       logger?.error?.("[sl-bridge] POST /sl/chat failed", { error: error.message });
-      sendPlainText(res, 500, "internal_error");
+      sendPlainText(res, 500, "SL bridge error: no assistant text produced");
     }
     return true;
   }

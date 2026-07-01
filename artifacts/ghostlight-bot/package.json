@@ -159,7 +159,8 @@
     "context:bisect": "node scripts/context-bisect.js",
     "audit:stored-sludge": "node scripts/audit-stored-sludge.js",
     "audit:stored-sludge:quarantine": "node scripts/audit-stored-sludge.js --quarantine",
-    "verify:schedule-source-normalization": "node scripts/verify-schedule-source-normalization.mjs"
+    "verify:schedule-source-normalization": "node scripts/verify-schedule-source-normalization.mjs",
+    "verify:sl-chat-reply": "node scripts/verify-sl-chat-reply.mjs"
   },
   "dependencies": {
     "discord.js": "^14.26.3",

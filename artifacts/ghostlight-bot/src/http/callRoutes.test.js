@@ -270,10 +270,10 @@ test("POST /sl/chat is mounted beside GET /sl/chat at root and returns plain tex
         available: true,
         async verifySharedSecret() { return true; },
       },
-      secondLifeAdapter: {
-        async handleEvent(payload) {
+      companion: {
+        async generateCompanionReplyText(payload) {
           handledEvents.push(payload);
-          return { replyText: "hello from dante" };
+          return { reply: "hello from dante" };
         },
       },
     },
@@ -303,12 +303,12 @@ test("POST /sl/chat is mounted beside GET /sl/chat at root and returns plain tex
   assert.equal(response.body, "hello from dante");
   assert.ok(logs.some((message) => message.includes("[sl-bridge] POST /sl/chat hit")));
   assert.ok(logs.some((message) => message.includes("[sl-bridge] auth accepted")));
-  assert.equal(handledEvents[0].event.messageText, "hello");
-  assert.equal(handledEvents[0].event.eventType, "local_chat");
-  assert.equal(handledEvents[0].event.avatarName, "Tester");
-  assert.equal(handledEvents[0].event.source, "secondlife");
-  assert.equal(handledEvents[0].event.platform, "secondlife");
-  assert.equal(handledEvents[0].event.slAvatarUsername, "Dante0Solvane");
+  assert.equal(handledEvents[0].userText, "hello");
+  assert.equal(handledEvents[0].userName, "Tester");
+  assert.equal(handledEvents[0].source, "secondlife");
+  assert.equal(handledEvents[0].channel, "secondlife");
+  assert.equal(handledEvents[0].context.platform, "secondlife");
+  assert.equal(handledEvents[0].context.slAvatarUsername, "Dante0Solvane");
 });
 
 test("POST /sl/chat resolves Dante companion id aliases and caps plain text reply", async (t) => {
@@ -331,10 +331,10 @@ test("POST /sl/chat resolves Dante companion id aliases and caps plain text repl
       config: { admin: { username: "owner", password: "secret" }, discord: {}, chat: { timezone: "UTC" }, features: {} },
       logger: { info() {}, error() {}, warn() {} },
       secondLife: { available: true },
-      secondLifeAdapter: {
-        async handleEvent(payload) {
+      companion: {
+        async generateCompanionReplyText(payload) {
           handledEvents.push(payload);
-          return { responseText: "x".repeat(950) };
+          return { response: "x".repeat(950) };
         },
       },
     },
@@ -360,12 +360,12 @@ test("POST /sl/chat resolves Dante companion id aliases and caps plain text repl
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.length, 900);
   assert.equal(handledEvents[0].companionId, "dante_sølvane");
-  assert.equal(handledEvents[0].event.messageText, "actual user message");
-  assert.equal(handledEvents[0].event.avatarName, "Tester Resident");
-  assert.equal(handledEvents[0].event.avatarKey, "avatar-key-123");
-  assert.equal(handledEvents[0].event.region, "Ravenhurst");
-  assert.equal(handledEvents[0].event.channel, "secondlife");
-  assert.equal(handledEvents[0].event.channelNumber, "666");
+  assert.equal(handledEvents[0].userText, "actual user message");
+  assert.equal(handledEvents[0].userName, "Tester Resident");
+  assert.equal(handledEvents[0].userExternalId, "secondlife:avatar-key-123");
+  assert.equal(handledEvents[0].context.region, "Ravenhurst");
+  assert.equal(handledEvents[0].channel, "secondlife");
+  assert.equal(handledEvents[0].context.channelNumber, "666");
 
   const directResponse = await postRaw(
     server,
@@ -384,7 +384,7 @@ test("POST /sl/chat resolves Dante companion id aliases and caps plain text repl
   );
   assert.equal(usernameResponse.statusCode, 200);
   assert.equal(handledEvents[2].companionId, "Dante0Solvane");
-  assert.equal(handledEvents[2].event.slAvatarUsername, "Dante0Solvane");
+  assert.equal(handledEvents[2].context.slAvatarUsername, "Dante0Solvane");
 });
 
 test("POST /sl/chat accepts token from query string and rejects bad secrets as plain text", async (t) => {
@@ -408,10 +408,10 @@ test("POST /sl/chat accepts token from query string and rejects bad secrets as p
       config: { admin: { username: "owner", password: "secret" }, discord: {}, chat: { timezone: "UTC" }, features: {} },
       logger: { info(message) { logs.push(message); }, error() {}, warn() {} },
       secondLife: { available: true },
-      secondLifeAdapter: {
-        async handleEvent(payload) {
+      companion: {
+        async generateCompanionReplyText(payload) {
           handledEvents.push(payload);
-          return { replyText: "query ok" };
+          return { assistantMessage: "query ok" };
         },
       },
     },
